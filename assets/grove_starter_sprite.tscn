@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://bejk4igyv1d0e"]
+
+[ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="1_5igk5"]
+
+[node name="GroveStarterSprite" type="Sprite2D"]
+modulate = Color(2.11775e-06, 0.825306, 0.436228, 1)
+scale = Vector2(0.4, 0.4)
+texture = ExtResource("1_5igk5")

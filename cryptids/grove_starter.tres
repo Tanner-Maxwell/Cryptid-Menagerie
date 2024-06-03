@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="Cryptid" load_steps=3 format=3 uid="uid://cdtvoobccjat8"]
+
+[ext_resource type="PackedScene" uid="uid://bejk4igyv1d0e" path="res://Cryptid-Menagerie/assets/grove_starter_sprite.tscn" id="1_0c3lp"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/cryptids/scripts/cryptid.gd" id="1_rxjfw"]
+
+[resource]
+script = ExtResource("1_rxjfw")
+name = "Grove Starter"
+scene = ExtResource("1_0c3lp")
+strength = 10
+knowledge = 10
+willpower = 10
+dexterity = 10
+vigor = 10
+level = 1

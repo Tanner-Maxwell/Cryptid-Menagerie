@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://dqdftw8v1sq3c"]
+
+[ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="1_raht2"]
+
+[node name="FireTurtleSprite" type="Sprite2D"]
+modulate = Color(0.803922, 0.176471, 0, 1)
+scale = Vector2(0.4, 0.4)
+texture = ExtResource("1_raht2")

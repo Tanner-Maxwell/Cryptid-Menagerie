@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="Cryptid" load_steps=3 format=3 uid="uid://boav0u128li10"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/cryptids/scripts/cryptid.gd" id="1_femvg"]
+[ext_resource type="PackedScene" uid="uid://dqdftw8v1sq3c" path="res://Cryptid-Menagerie/assets/fire_turtle_sprite.tscn" id="1_nka4s"]
+
+[resource]
+script = ExtResource("1_femvg")
+name = "Fire Turtle"
+scene = ExtResource("1_nka4s")
+strength = 10
+knowledge = 10
+willpower = 10
+dexterity = 10
+vigor = 10
+level = 1
