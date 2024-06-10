@@ -1,0 +1,35 @@
+[gd_scene load_steps=3 format=3 uid="uid://ctmbq30qmp8vs"]
+
+[ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_vk2un"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_8lacq"]
+font_size = 8
+outline_color = Color(0, 0, 0, 1)
+
+[node name="ActionOne" type="HBoxContainer"]
+size_flags_horizontal = 4
+size_flags_vertical = 6
+
+[node name="TitleLabel2" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 8
+text = "‪Attack 3"
+label_settings = SubResource("LabelSettings_8lacq")
+
+[node name="TitleLabel3" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 8
+text = "and Push"
+label_settings = SubResource("LabelSettings_8lacq")
+
+[node name="TitleLabel4" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 8
+text = "3"
+label_settings = SubResource("LabelSettings_8lacq")
+
+[node name="TextureRect" type="TextureRect" parent="."]
+layout_mode = 2
+size_flags_horizontal = 8
+texture = ExtResource("1_vk2un")
+expand_mode = 2

@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3 uid="uid://b73dx8dvac8r0"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Cards/action_slot.gd" id="1_57rv2"]
+[ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_ihg88"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_ghuw4"]
+font_size = 8
+outline_color = Color(0, 0, 0, 1)
+
+[node name="ActionSlot" type="HBoxContainer"]
+size_flags_horizontal = 4
+size_flags_vertical = 6
+script = ExtResource("1_57rv2")
+
+[node name="Action" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 8
+label_settings = SubResource("LabelSettings_ghuw4")
+
+[node name="TextureRect" type="TextureRect" parent="."]
+layout_mode = 2
+size_flags_horizontal = 8
+texture = ExtResource("1_ihg88")
+expand_mode = 2

@@ -5,6 +5,7 @@ extends Resource
 # Declare exported variables for the cryptid's name and associated scene
 @export var name: String
 @export var scene: PackedScene
+@export var icon: Texture2D
 
 # Declare main stat variables
 @export var strength: int = 10

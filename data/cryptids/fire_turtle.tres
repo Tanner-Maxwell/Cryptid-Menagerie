@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="Cryptid" load_steps=4 format=3 uid="uid://boav0u128li10"]
+
+[ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="1_wsmuk"]
+[ext_resource type="PackedScene" uid="uid://dqdftw8v1sq3c" path="res://Cryptid-Menagerie/assets/fire_turtle_sprite.tscn" id="2_6pabu"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/scripts/cryptid.gd" id="3_43o0n"]
+
+[resource]
+script = ExtResource("3_43o0n")
+name = "Fire Turtle"
+scene = ExtResource("2_6pabu")
+icon = ExtResource("1_wsmuk")
+strength = 10
+knowledge = 10
+willpower = 10
+dexterity = 10
+vigor = 10
+level = 1

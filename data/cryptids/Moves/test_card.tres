@@ -1,0 +1,54 @@
+[gd_resource type="Resource" script_class="Card" load_steps=10 format=3 uid="uid://db7xcrc0xgb8t"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_r7yq5"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_4emrf"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="3_ow4q5"]
+
+[sub_resource type="Resource" id="Resource_a4qks"]
+script = ExtResource("2_4emrf")
+action_types = Array[int]([0])
+range = 2
+amount = 2
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+
+[sub_resource type="Resource" id="Resource_xovrt"]
+script = ExtResource("2_4emrf")
+action_types = Array[int]([1])
+range = 0
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+
+[sub_resource type="Resource" id="Resource_qrr7x"]
+script = ExtResource("3_ow4q5")
+actions = Array[ExtResource("2_4emrf")]([SubResource("Resource_a4qks"), SubResource("Resource_xovrt")])
+name_prefix = "Test"
+name_suffix = "Cardio"
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_r2em4"]
+script = ExtResource("2_4emrf")
+action_types = Array[int]([1])
+range = 1
+amount = 2
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+
+[sub_resource type="Resource" id="Resource_sl3nf"]
+script = ExtResource("2_4emrf")
+action_types = Array[int]([0])
+range = 0
+amount = 2
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+
+[sub_resource type="Resource" id="Resource_n0pwa"]
+script = ExtResource("3_ow4q5")
+actions = Array[ExtResource("2_4emrf")]([SubResource("Resource_r2em4"), SubResource("Resource_sl3nf")])
+name_prefix = "Testio"
+name_suffix = "Card"
+card_side = 0
+elemental_type = Array[int]([0])
+
+[resource]
+script = ExtResource("1_r7yq5")
+top_move = SubResource("Resource_n0pwa")
+bottom_move = SubResource("Resource_qrr7x")
