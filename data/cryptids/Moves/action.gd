@@ -54,10 +54,12 @@ func perform_action(source, targets):
 # Define action-specific functions
 func move_action(source, targets):
 	# Implement move logic
+	print("move")
 	pass
 
 func attack_action(source, targets):
 	# Implement attack logic
+	print("attack")
 	pass
 
 func push_action(source, targets):

@@ -15,7 +15,7 @@ extends Resource
 @export var vigor: int = 10
 
 # Declare lesser stat variables, which are derived from the main stats
-var health: int
+var health: int = 10
 var speed: int
 var max_hand_size: int
 
@@ -63,5 +63,5 @@ func update_stats():
 	max_hand_size = stats["max_hand_size"]
 
 # Initialize derived stats on creation
-func _init():
+func _ready():
 	update_stats()

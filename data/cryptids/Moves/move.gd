@@ -34,5 +34,5 @@ func add_action(action:Action):
 func remove_action(action:Action):
 	actions.erase(action)
 
-func get_cryptids() -> Array[Action]:
+func get_actions() -> Array[Action]:
 	return actions

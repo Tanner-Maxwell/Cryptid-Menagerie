@@ -1,8 +1,9 @@
-[gd_scene load_steps=12 format=4 uid="uid://citawmf1hj211"]
+[gd_scene load_steps=13 format=4 uid="uid://citawmf1hj211"]
 
 [ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_ot6rc"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/tile_map_controller.gd" id="2_ouj6u"]
 [ext_resource type="PackedScene" uid="uid://dm35nykwqhglb" path="res://Cryptid-Menagerie/data/cryptids/fire_turtle.tscn" id="3_3mbl4"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/enemy.gd" id="3_r8k8k"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/player.gd" id="4_gk3sd"]
 [ext_resource type="Resource" uid="uid://cdtvoobccjat8" path="res://Cryptid-Menagerie/data/cryptids/grove_starter.tres" id="4_rnpdx"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/ui_root.gd" id="6_giclu"]
@@ -45,11 +46,14 @@ sources/0 = SubResource("TileSetAtlasSource_twunu")
 
 [node name="CryptidMenagerie" type="Node2D"]
 
-[node name="FireTurtle" parent="." instance=ExtResource("3_3mbl4")]
-
 [node name="Player" type="Node2D" parent="."]
 unique_name_in_owner = true
 script = ExtResource("4_gk3sd")
+
+[node name="Enemy" type="Node2D" parent="."]
+unique_name_in_owner = true
+script = ExtResource("3_r8k8k")
+cryptid_one = ExtResource("4_rnpdx")
 
 [node name="TileMapLayer" type="TileMapLayer" parent="."]
 position = Vector2(655, 287)
@@ -60,9 +64,16 @@ script = ExtResource("2_ouj6u")
 
 [node name="LineContainer" type="Node2D" parent="TileMapLayer"]
 
-[node name="Grove Starter" parent="TileMapLayer" instance=ExtResource("3_3mbl4")]
-position = Vector2(-715, -367)
+[node name="PlayerTeam" type="Node2D" parent="TileMapLayer" groups=["player"]]
+
+[node name="Grove Starter" parent="TileMapLayer/PlayerTeam" instance=ExtResource("3_3mbl4")]
+position = Vector2(-256.667, 98.8889)
 cryptid = ExtResource("4_rnpdx")
+
+[node name="EnemyTeam" type="Node2D" parent="TileMapLayer" groups=["enemy"]]
+
+[node name="Fire Starter" parent="TileMapLayer/EnemyTeam" instance=ExtResource("3_3mbl4")]
+position = Vector2(57.7778, -197.778)
 
 [node name="UIRoot" type="CanvasLayer" parent="."]
 script = ExtResource("6_giclu")
