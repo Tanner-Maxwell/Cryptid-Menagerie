@@ -11,7 +11,7 @@ const MAIN_ATLAS_ID = 0
 @onready var grove_starter = $"PlayerTeam/Grove Starter"
 @onready var enemy_cryptid = $"EnemyTeam/Fire Starter"
 @onready var walkable_hexes = []
-@onready var card_dialog = $"../UIRoot/CardDialog"
+@onready var card_dialog = $"../UIRoot/Hand/CardDialog"
 
 
 var move_action_bool = false
@@ -88,8 +88,8 @@ func handle_left_click(event):
 				print(local_to_map(enemy_cryptid.position))
 				print(pos_clicked)
 				if action.action_types == [1] and attack_range >= point_path.size() - 1 and local_to_map(enemy_cryptid.position) == pos_clicked:
+					print("attack")
 					enemy_cryptid.health -= action.amount
-					action.range = 0
 					enemy_cryptid.update_health_bar()
 		#print(move_leftover)
 		#player_pos = map_to_local(pos_clicked)

@@ -9,7 +9,6 @@
 font_size = 9
 
 [node name="CardDialog" type="PanelContainer"]
-visible = false
 custom_minimum_size = Vector2(110, 160)
 anchors_preset = -1
 anchor_right = 0.0954861

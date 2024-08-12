@@ -1,6 +1,8 @@
-[gd_scene load_steps=13 format=4 uid="uid://citawmf1hj211"]
+[gd_scene load_steps=16 format=4 uid="uid://citawmf1hj211"]
 
+[ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="1_2lacv"]
 [ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_ot6rc"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/main.gd" id="1_w6ofy"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/tile_map_controller.gd" id="2_ouj6u"]
 [ext_resource type="PackedScene" uid="uid://dm35nykwqhglb" path="res://Cryptid-Menagerie/data/cryptids/fire_turtle.tscn" id="3_3mbl4"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/enemy.gd" id="3_r8k8k"]
@@ -10,6 +12,7 @@
 [ext_resource type="PackedScene" uid="uid://dnuhdqmxrstsw" path="res://Cryptid-Menagerie/team/team_dialog.tscn" id="7_e4rc1"]
 [ext_resource type="PackedScene" uid="uid://bp6eytaj6ivbo" path="res://Cryptid-Menagerie/data/cryptids/Cards/card_dialog.tscn" id="8_hldyh"]
 [ext_resource type="Resource" uid="uid://db7xcrc0xgb8t" path="res://Cryptid-Menagerie/data/cryptids/Moves/test_card.tres" id="9_sf8wl"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/hand.gd" id="10_15j4c"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_twunu"]
 texture = ExtResource("1_ot6rc")
@@ -44,13 +47,17 @@ tile_offset_axis = 1
 tile_size = Vector2i(102, 94)
 sources/0 = SubResource("TileSetAtlasSource_twunu")
 
-[node name="CryptidMenagerie" type="Node2D"]
+[node name="VitaChrome" type="Node2D"]
+script = ExtResource("1_w6ofy")
 
-[node name="Player" type="Node2D" parent="."]
+[node name="GameController" type="Node2D" parent="."]
+script = ExtResource("1_2lacv")
+
+[node name="Player" type="Node2D" parent="." groups=["player"]]
 unique_name_in_owner = true
 script = ExtResource("4_gk3sd")
 
-[node name="Enemy" type="Node2D" parent="."]
+[node name="Enemy" type="Node2D" parent="." groups=["enemy"]]
 unique_name_in_owner = true
 script = ExtResource("3_r8k8k")
 cryptid_one = ExtResource("4_rnpdx")
@@ -91,18 +98,38 @@ offset_top = -17.5
 offset_right = 64.5
 offset_bottom = 17.5
 
-[node name="CardDialog" parent="UIRoot" instance=ExtResource("8_hldyh")]
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -311.0
-offset_top = 146.0
-offset_right = -201.0
-offset_bottom = 306.0
+[node name="Hand" type="Control" parent="UIRoot"]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 512.0
+offset_top = 1736.0
+offset_right = 552.0
+offset_bottom = 1776.0
+script = ExtResource("10_15j4c")
+hand_radius = 1300
+max_card_spread_angle = 6.0
+
+[node name="CardDialog" parent="UIRoot/Hand" instance=ExtResource("8_hldyh")]
+layout_mode = 1
+anchor_left = 4.25
+anchor_top = -43.425
+anchor_right = 4.25
+anchor_bottom = -43.425
+offset_left = 245.0
+offset_top = 450.0
+offset_right = 355.0
+offset_bottom = 610.0
 card_resource = ExtResource("9_sf8wl")
+
+[node name="Button" type="Button" parent="UIRoot"]
+offset_left = 69.0
+offset_top = 574.0
+offset_right = 148.0
+offset_bottom = 605.0
+text = "Add Card to Hand"
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(577, 330)
 scale = Vector2(-5.62239, 38.9907)
+
+[connection signal="pressed" from="UIRoot/Button" to="UIRoot/Hand" method="_on_button_pressed"]

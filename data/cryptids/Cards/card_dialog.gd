@@ -17,7 +17,8 @@ extends PanelContainer
 var current_highlighted_container: VBoxContainer = null
 
 func _ready():
-	display(card_resource)
+	if card_resource and action_slot != null:
+		display(card_resource)
 
 func display(card:Card):
 	show()
