@@ -4,13 +4,14 @@ extends VBoxContainer
 @export var highlighted = false
 @onready var top_half_container = %TopHalfContainer
 @onready var bottom_half_container = %BottomHalfContainer
+@onready var hand = $"../../.."
 @onready var card_dialog = $"../.."
 
 
-# Signal handler for input events
+## Signal handler for input events
 func _on_HBoxContainer_input_event(event):
 	if event is InputEventMouseButton and event.pressed:
-		card_dialog.highlight_container(self)
+		hand.call("highlight_card", card_dialog)
 
 func highlight():
 	update_style(true)

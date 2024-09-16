@@ -17,8 +17,8 @@ const MAIN_ATLAS_ID = 0
 var move_action_bool = false
 var attack_action_bool = false
 var current_atlas_coords
-var cur_position_cube
-var move_leftover = 20
+var cur_position_cube 
+var move_leftover = 0
 var attack_range = 2
 var path
 var vector_path = []
@@ -32,18 +32,9 @@ func _ready():
 	create_hex_map_a_star(cur_position.Hex_Cords)
 	show_coordinates_label(cur_position.Hex_Cords)
 	grove_starter.position = map_to_local(cur_position.Hex_Cords)
+	walkable_hexes.erase(cur_position.Hex_Cords)
 	enemy_cryptid.position = map_to_local(enemy_position.Hex_Cords)
-
-func _input(event):
-	if event is InputEventMouse:
-		move_action_selected()
-		attack_action_selected()
-		if event.button_mask == MOUSE_BUTTON_RIGHT and event.is_pressed():
-			handle_right_click()
-		if event is InputEventMouseMotion:
-			handle_mouse_motion()
-		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed():
-			handle_left_click(event)
+	walkable_hexes.erase(enemy_position.Hex_Cords)
 
 func handle_right_click():
 	pass
@@ -59,7 +50,7 @@ func handle_mouse_motion():
 		vector_path.append(map_to_local(a_star_hex_grid.get_point_position(point)))
 		point_path.append(a_star_hex_grid.get_point_position(point))
 	delete_all_lines()
-	if move_action_bool:
+	if move_action_bool and walkable_hexes.find(local_to_map(get_local_mouse_position())) != -1:
 		draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), move_leftover, Color(0, 1, 0))
 	if attack_action_bool:
 		draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), attack_range, Color(1, 0, 1))	
@@ -72,10 +63,14 @@ func handle_left_click(event):
 	if pos_clicked in walkable_hexes:
 		if card_dialog.current_highlighted_container == card_dialog.top_half_container:
 			for action in card_dialog.card_resource.top_move.actions:
-				if action.action_types == [0] and action.amount >= point_path.size() - 1:
+				if action.action_types == [0] and action.amount >= point_path.size() - 1 and local_to_map(enemy_cryptid.position) != pos_clicked:
+					print(action.amount)
+					print(player_pos)
+					walkable_hexes.append(local_to_map(player_pos))
 					action.amount -= point_path.size() - 1
 					player_pos = map_to_local(pos_clicked)
 					grove_starter.position = map_to_local(pos_clicked)
+					walkable_hexes.erase(local_to_map(pos_clicked))
 				
 				if action.action_types == [1] and action.range > 0 and local_to_map(enemy_cryptid.position) == pos_clicked:
 					print("testing")
