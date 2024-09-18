@@ -169,3 +169,11 @@ func paralyze_action(source, targets):
 func immobilize_action(source, targets):
 	# Implement immobilize logic
 	pass
+
+
+func _on_mouse_entered():
+	self.z_index += 2
+
+
+func _on_mouse_exited():
+	self.z_index -= 2

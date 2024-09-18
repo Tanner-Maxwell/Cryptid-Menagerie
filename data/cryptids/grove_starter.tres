@@ -1,14 +1,47 @@
-[gd_resource type="Resource" script_class="Cryptid" load_steps=4 format=3 uid="uid://cdtvoobccjat8"]
+[gd_resource type="Resource" script_class="Cryptid" load_steps=12 format=3 uid="uid://cdtvoobccjat8"]
 
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_75gsa"]
 [ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="1_e7mi7"]
+[ext_resource type="Resource" uid="uid://db7xcrc0xgb8t" path="res://Cryptid-Menagerie/data/cryptids/Moves/test_card.tres" id="2_5kk0b"]
 [ext_resource type="PackedScene" uid="uid://bejk4igyv1d0e" path="res://Cryptid-Menagerie/assets/grove_starter_sprite.tscn" id="2_6wmvt"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/scripts/cryptid.gd" id="3_jep7q"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="3_le5kr"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="4_6ou1u"]
+
+[sub_resource type="Resource" id="Resource_y2ise"]
+script = ExtResource("3_le5kr")
+action_types = Array[int]([1])
+range = 0
+amount = 5
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+
+[sub_resource type="Resource" id="Resource_3hv6w"]
+script = ExtResource("4_6ou1u")
+actions = Array[ExtResource("3_le5kr")]([SubResource("Resource_y2ise")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_4xbca"]
+script = ExtResource("4_6ou1u")
+actions = Array[ExtResource("3_le5kr")]([])
+name_prefix = "dfgdhgerg"
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_4u70t"]
+script = ExtResource("1_75gsa")
+top_move = SubResource("Resource_4xbca")
+bottom_move = SubResource("Resource_3hv6w")
 
 [resource]
 script = ExtResource("3_jep7q")
 name = "Grove Starter"
 scene = ExtResource("2_6wmvt")
 icon = ExtResource("1_e7mi7")
+deck = Array[ExtResource("1_75gsa")]([ExtResource("2_5kk0b"), SubResource("Resource_4u70t"), ExtResource("2_5kk0b"), ExtResource("2_5kk0b"), ExtResource("2_5kk0b")])
 strength = 10
 knowledge = 10
 willpower = 10

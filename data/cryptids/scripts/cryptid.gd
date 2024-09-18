@@ -6,6 +6,7 @@ extends Resource
 @export var name: String
 @export var scene: PackedScene
 @export var icon: Texture2D
+@export var deck:Array[Card]
 
 # Declare main stat variables
 @export var strength: int = 10

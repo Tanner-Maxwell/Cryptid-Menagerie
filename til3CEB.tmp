@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=4 uid="uid://citawmf1hj211"]
+[gd_scene load_steps=15 format=4 uid="uid://citawmf1hj211"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="1_2lacv"]
 [ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_ot6rc"]
@@ -10,6 +10,7 @@
 [ext_resource type="Resource" uid="uid://cdtvoobccjat8" path="res://Cryptid-Menagerie/data/cryptids/grove_starter.tres" id="4_rnpdx"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/ui_root.gd" id="6_giclu"]
 [ext_resource type="PackedScene" uid="uid://dnuhdqmxrstsw" path="res://Cryptid-Menagerie/team/team_dialog.tscn" id="7_e4rc1"]
+[ext_resource type="PackedScene" uid="uid://bp6eytaj6ivbo" path="res://Cryptid-Menagerie/data/cryptids/Cards/card_dialog.tscn" id="8_hldyh"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/hand.gd" id="10_15j4c"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_twunu"]
@@ -88,7 +89,6 @@ script = ExtResource("6_giclu")
 
 [node name="TeamDialog" parent="UIRoot" instance=ExtResource("7_e4rc1")]
 unique_name_in_owner = true
-visible = false
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -113,7 +113,17 @@ card_angle = -7.0
 angle_limit = 22.5
 max_card_spread_angle = 6.0
 
-[node name="AddCardButton" type="Button" parent="UIRoot"]
+[node name="CardDialog" parent="UIRoot/Hand" instance=ExtResource("8_hldyh")]
+layout_mode = 0
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_right = 110.0
+offset_bottom = 160.0
+grow_horizontal = 1
+grow_vertical = 1
+
+[node name="Button" type="Button" parent="UIRoot"]
 offset_left = 69.0
 offset_top = 574.0
 offset_right = 148.0
@@ -124,4 +134,4 @@ text = "Add Card to Hand"
 position = Vector2(577, 330)
 scale = Vector2(-5.62239, 38.9907)
 
-[connection signal="pressed" from="UIRoot/AddCardButton" to="UIRoot/Hand" method="_on_button_pressed"]
+[connection signal="pressed" from="UIRoot/Button" to="UIRoot/Hand" method="_on_button_pressed"]

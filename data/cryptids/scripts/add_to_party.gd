@@ -1,6 +1,7 @@
 extends Node2D
 
 @onready var player = %Player
+@onready var hand = %Hand
 @export var cryptid:Cryptid
 var max_health : int
 var health : int
@@ -16,13 +17,13 @@ func _ready():
 func _process(delta):
 	pass
 
-
 func _on_area_2d_input_event(viewport, event, shape_idx):
 	if event is InputEventMouse:
 		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed():
 			if player.has_method("add_to_party"):
 				player.add_to_party(cryptid)
 				#queue_free()
+			hand.switch_cryptid_deck(cryptid)
 
 func set_health_values(_health: int, _max_health: int):
 	max_health = _max_health
