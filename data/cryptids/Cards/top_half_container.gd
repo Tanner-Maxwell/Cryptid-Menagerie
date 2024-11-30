@@ -10,8 +10,9 @@ extends VBoxContainer
 
 ## Signal handler for input events
 func _on_HBoxContainer_input_event(event):
-	if event is InputEventMouseButton and event.pressed:
-		hand.call("highlight_card", card_dialog)
+	if hand.has_method("highlight_card"):
+		if event is InputEventMouseButton and event.pressed:
+			hand.call("highlight_card", card_dialog)
 
 func highlight():
 	update_style(true)

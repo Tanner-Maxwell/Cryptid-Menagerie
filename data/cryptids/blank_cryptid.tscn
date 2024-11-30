@@ -1,0 +1,65 @@
+[gd_scene load_steps=10 format=3 uid="uid://tlv0gbxmsok6"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/scripts/add_to_party.gd" id="1_50uq3"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="2_aonpn"]
+[ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="3_vk7cm"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/scripts/cryptid.gd" id="4_hb6fc"]
+
+[sub_resource type="PackedScene" id="PackedScene_ajs8k"]
+
+[sub_resource type="Resource" id="Resource_2sdyj"]
+script = ExtResource("4_hb6fc")
+name = ""
+scene = SubResource("PackedScene_ajs8k")
+icon = ExtResource("3_vk7cm")
+deck = Array[ExtResource("2_aonpn")]([])
+selected_cards = Array[ExtResource("2_aonpn")]([])
+completed_turn = false
+currently_selected = false
+strength = 10
+knowledge = 10
+willpower = 10
+dexterity = 10
+vigor = 10
+level = 1
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_3a2fd"]
+
+[sub_resource type="QuadMesh" id="QuadMesh_mhac3"]
+lightmap_size_hint = Vector2i(502, 502)
+size = Vector2(75, 75)
+subdivide_width = 1
+subdivide_depth = 1
+
+[sub_resource type="MeshTexture" id="MeshTexture_t1i1h"]
+
+[node name="Cryptid" type="Node2D"]
+script = ExtResource("1_50uq3")
+cryptid = SubResource("Resource_2sdyj")
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+scale = Vector2(2.5, 2.5)
+shape = SubResource("CircleShape2D_3a2fd")
+
+[node name="HealthBar" type="ProgressBar" parent="."]
+offset_left = -62.0
+offset_top = -73.0
+offset_right = 58.0
+offset_bottom = -46.0
+step = 1.0
+
+[node name="Selected" type="MeshInstance2D" parent="."]
+modulate = Color(0.037701, 0.543802, 0.0306636, 1)
+position = Vector2(-0.499998, -1.5)
+scale = Vector2(1.21333, 1.16)
+mesh = SubResource("QuadMesh_mhac3")
+texture = SubResource("MeshTexture_t1i1h")
+
+[node name="TurnCompleted?" type="MeshInstance2D" parent="."]
+modulate = Color(0.037701, 0.543802, 0.0306636, 1)
+mesh = SubResource("QuadMesh_mhac3")
+texture = SubResource("MeshTexture_t1i1h")
+
+[connection signal="input_event" from="Area2D" to="." method="_on_area_2d_input_event"]

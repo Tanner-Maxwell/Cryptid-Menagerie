@@ -1,6 +1,7 @@
+extends Node2D
 class_name Team
 
-var _content:Array[Cryptid] = []
+@export var _content:Array[Cryptid] = []
 
 func add_cryptid(cryptid:Cryptid):
 	_content.append(cryptid)

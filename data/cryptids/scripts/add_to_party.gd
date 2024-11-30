@@ -2,6 +2,10 @@ extends Node2D
 
 @onready var player = %Player
 @onready var hand = %Hand
+@onready var turn_completed_ = $"TurnCompleted?"
+@onready var selected = $Selected
+@onready var player_team = %PlayerTeam
+
 @export var cryptid:Cryptid
 var max_health : int
 var health : int
@@ -13,17 +17,28 @@ func _ready():
 	set_health_values(cryptid.health, cryptid.health)
 	print(cryptid.health)
 	update_health_bar()
+	hand = %Hand
+	selected.modulate = Color(0, 0 , 0, 0)
 
 func _process(delta):
-	pass
+	player_team = %PlayerTeam
+	if cryptid.completed_turn == true:
+		turn_completed_.modulate = Color(1, 0 , 0, 1)
+	if self.get_parent().is_in_group("enemy"):
+		turn_completed_.modulate = Color(0, 0 , 0, 0)
+	if cryptid.currently_selected == true:
+		selected.modulate = Color(1, 0 , .5, 1)
+	else:
+		selected.modulate = Color(0, 0, 0, 0)
+		
+		
 
 func _on_area_2d_input_event(viewport, event, shape_idx):
 	if event is InputEventMouse:
-		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed():
-			if player.has_method("add_to_party"):
-				player.add_to_party(cryptid)
-				#queue_free()
+		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and self.get_parent().is_in_group("player"):
 			hand.switch_cryptid_deck(cryptid)
+			hand.switch_cryptid_selected_cards(cryptid)
+			cryptid.currently_selected = true
 
 func set_health_values(_health: int, _max_health: int):
 	max_health = _max_health

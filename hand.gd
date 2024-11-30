@@ -6,8 +6,11 @@ extends Control
 @export var highlight_offset: float = 15
 @export var max_card_spread_angle: float = 5
 @export var current_highlighted_container = null
-@onready var selected_cryptid = %"Grove Starter".cryptid
+@onready var tile_map_layer = %TileMapLayer
+@onready var cryptids_cards = %"Cryptids Cards"
+@onready var selected_cards_node = %SelectedCards
 
+@onready var selected_cryptid
 
 var current_highlighted_card: CardDialog = null
 
@@ -18,12 +21,16 @@ var highlighted_cards: Array = []
 var max_highlighted_cards = 2
 
 func _ready():
+	selected_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
 	switch_cryptid_deck(selected_cryptid)
 
 func add_card(card):
 	hand.push_back(card)
 	add_child(card)
 	reposition_cards()
+
+func remove_card(card):
+	hand.erase(card)
 
 func reposition_cards():
 	print(hand.size())
@@ -50,7 +57,6 @@ func card_transform_update(card, angle_in_drag: float):
 	if card in highlighted_cards:
 		card.position.y -= highlight_offset
 
-
 # Function to highlight the selected card
 func highlight_card(new_card: CardDialog):
 	if new_card in highlighted_cards:
@@ -75,6 +81,12 @@ func unhighlight_card(card: CardDialog):
 # Ensure no more than two cards are highlighted
 func can_highlight_more() -> bool:
 	return highlighted_cards.size() < max_highlighted_cards
+	
+func cards_selected(selected_cards: Array):
+	for cards_picked in selected_cards:
+		selected_cryptid.deck.erase(cards_picked.card_resource)
+		selected_cryptid.selected_cards.push_back(cards_picked.card_resource)
+	return selected_cryptid
 
 func switch_cryptid_deck(cryptid: Cryptid):
 	hand.clear()
@@ -86,6 +98,22 @@ func switch_cryptid_deck(cryptid: Cryptid):
 		base_card = card_dialog.instantiate()
 		base_card.card_resource = card_resource
 		add_card(base_card)
+	selected_cryptid.currently_selected = false
+	selected_cryptid = cryptid
+		
+func switch_cryptid_selected_cards(cryptid: Cryptid):
+	selected_cryptid = cryptid
+	highlighted_cards.clear()
+	for child in selected_cards_node.get_children():
+		print(child)
+		selected_cards_node.remove_child(child)
+	var base_card
+	print(cryptid.selected_cards)
+	for card_resource in cryptid.selected_cards:
+		base_card = card_dialog.instantiate()
+		base_card.card_resource = card_resource
+		selected_cards_node.add_child(base_card)
+	selected_cryptid.currently_selected = false
 	selected_cryptid = cryptid
 
 func _on_button_pressed():

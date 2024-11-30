@@ -49,7 +49,7 @@ func _gui_input(event):
 		print(event)
 		# Toggle highlight/unhighlight based on current state
 		if get_global_rect().has_point(event.global_position):
-			if hand_parent:
+			if hand_parent == self.get_parent():
 				if is_card_highlighted:
 					hand_parent.call("unhighlight_card", self)
 				else:

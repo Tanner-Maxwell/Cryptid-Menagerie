@@ -29,7 +29,7 @@ area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
 [sub_resource type="Resource" id="Resource_n0pwa"]
 script = ExtResource("3_ow4q5")
 actions = Array[ExtResource("2_4emrf")]([SubResource("Resource_r2em4")])
-name_prefix = "poop"
+name_prefix = "Test Card"
 name_suffix = "Card"
 card_side = 0
 elemental_type = Array[int]([0])

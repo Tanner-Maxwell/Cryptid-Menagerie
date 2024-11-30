@@ -13,11 +13,19 @@ const MAIN_ATLAS_ID = 0
 @onready var walkable_hexes = []
 @onready var card_dialog = $"../UIRoot/Hand/CardDialog"
 
+@onready var player_team = %PlayerTeam
+@onready var enemy_team = %EnemyTeam
+@onready var player_starting_positions = [Vector2i(-4, 1), Vector2i(-2, 1), Vector2i(0, 1)]
+@onready var enemy_starting_positions = [Vector2i(-4, -3), Vector2i(-2, -3), Vector2i(0, -3)]
+
+@onready var player_cryptids_in_play = []
+@onready var enemy_cryptids_in_play = []
+@onready var blank_cryptid = preload("res://Cryptid-Menagerie/data/cryptids/blank_cryptid.tscn")
 
 var move_action_bool = false
 var attack_action_bool = false
 var current_atlas_coords
-var cur_position_cube 
+var cur_position_cube
 var move_leftover = 0
 var attack_range = 2
 var path
@@ -31,10 +39,27 @@ func _ready():
 	enemy_position.Hex_Cords = Vector2i(0, -3)
 	create_hex_map_a_star(cur_position.Hex_Cords)
 	show_coordinates_label(cur_position.Hex_Cords)
-	grove_starter.position = map_to_local(cur_position.Hex_Cords)
 	walkable_hexes.erase(cur_position.Hex_Cords)
-	enemy_cryptid.position = map_to_local(enemy_position.Hex_Cords)
 	walkable_hexes.erase(enemy_position.Hex_Cords)
+	
+	#Place player and enemy teams on map
+	player_cryptids_in_play = initialize_starting_positions(player_starting_positions, player_team)
+	enemy_cryptids_in_play = initialize_starting_positions(enemy_starting_positions, enemy_team)
+
+#Place player and enemy teams on map
+func initialize_starting_positions(starting_positions : Array, team):
+	var cryptids_in_play = []
+	for positions in starting_positions:
+		var cryptid
+		cryptid = blank_cryptid.instantiate()
+		cryptid.cryptid = team._content[cryptids_in_play.size()]
+		team.add_child(cryptid)
+		print(cryptids_in_play.size())
+		cryptid.position = map_to_local(starting_positions[cryptids_in_play.size()])
+		cryptid.hand = %Hand
+		
+		cryptids_in_play.append(cryptid)
+	return cryptids_in_play
 
 func handle_right_click():
 	pass
@@ -60,12 +85,14 @@ func handle_left_click(event):
 	attack_action_selected()
 	var global_clicked = event.position
 	var pos_clicked = local_to_map(to_local(global_clicked))
+	print(local_to_map(pos_clicked))
 	if pos_clicked in walkable_hexes:
 		if card_dialog.current_highlighted_container == card_dialog.top_half_container:
 			for action in card_dialog.card_resource.top_move.actions:
 				if action.action_types == [0] and action.amount >= point_path.size() - 1 and local_to_map(enemy_cryptid.position) != pos_clicked:
 					print(action.amount)
 					print(player_pos)
+	
 					walkable_hexes.append(local_to_map(player_pos))
 					action.amount -= point_path.size() - 1
 					player_pos = map_to_local(pos_clicked)
@@ -153,6 +180,7 @@ func create_hex_map_a_star(start_pos):
 		a_star_hex_grid.add_point(id_counter, Vector2(current_node.x, current_node.y))
 		processed[current_node] = id_counter
 		for neighbor in get_surrounding_cells(current_node):
+			show_coordinates_label(neighbor)
 			if neighbor not in processed and neighbor not in toSearch and get_cell_atlas_coords(neighbor) != Vector2i(-1, -1):
 				toSearch.append(neighbor)
 				walkable_hexes.append(neighbor)
@@ -204,3 +232,10 @@ func show_coordinates_label(hex_coords):
 	coordinates.position = label_pos
 	coordinates.text = str(local_to_map(label_pos))
 	add_child(coordinates)
+	
+func any_cryptid_not_completed():
+	var turn_completed
+	for cryptid_in_play in player_cryptids_in_play:
+		if cryptid_in_play.cryptid.completed_turn == false:
+			return false 
+	return true 
