@@ -11,6 +11,7 @@ extends PanelContainer
 @onready var top_element = %TopElement
 @onready var bottom_element = %BottomElement
 @onready var card_name = %CardName
+@onready var selected_cards = $UIRoot/SelectedCards
 
 @export var action_types: Array[Action.ActionType] = []
 
@@ -18,8 +19,11 @@ extends PanelContainer
 @onready var fire_starter = %"Fire Starter"
 
 @onready var tile_map_layer = %TileMapLayer
-@onready var hand_parent = %Hand
+@onready var parent = $IRoot/Hand
 @onready var is_card_highlighted: bool = false  # Track if this card is highlighted
+@onready var is_top_highlighted: bool = false
+@onready var is_bottom_highlighted: bool = false
+
 
 enum ActionType {
 	MOVE,
@@ -35,39 +39,82 @@ enum ActionType {
 	IMMOBILIZE
 }
 
-func _ready():
-	# Get the Hand parent node that manages the cards
+signal moving
 
+func _ready():
 	if card_resource != null and action_slot != null:
 		display(card_resource)
-	#perform_action(grove_starter, fire_starter, card_resource.top_move.actions[0].action_types)
+	parent = get_parent()
+	print(top_half_container)
+	tile_map_layer = get_tree().get_nodes_in_group("map")[0]
+	print(tile_map_layer, "tile map layer")
 
-# This function is called when the card is clicked (or any event that triggers the highlight)
 func _gui_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
-		# Notify the hand to highlight this card
-		print(event)
-		# Toggle highlight/unhighlight based on current state
-		if get_global_rect().has_point(event.global_position):
-			if hand_parent == self.get_parent():
-				if is_card_highlighted:
-					hand_parent.call("unhighlight_card", self)
-				else:
-					if hand_parent.call("can_highlight_more"):
-						hand_parent.call("highlight_card", self)
+		if self.get_parent().is_in_group("selected_card"):
+			if top_half_container.get_global_rect().has_point(event.global_position):
+				for card in self.get_parent().get_children():
+					card.bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
+					card.top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
+				top_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for top
+				perform_action(card_resource.top_move.actions[0].action_types)
+			elif bottom_half_container.get_global_rect().has_point(event.global_position):
+				for card in self.get_parent().get_children():
+					card.bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
+					card.top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
+				bottom_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for top
+				perform_action(card_resource.bottom_move.actions[0].action_types)
+				
+		elif self.get_parent():
+			if is_card_highlighted:
+				parent.call("unhighlight_card", self)
+			else:
+				if parent.call("can_highlight_more"):
+					parent.call("highlight_card", self)
+					
+		elif self.get_parent().is_in_group("selected_card"):
+			if is_card_highlighted:
+				parent.call("unhighlight_card", self)
+				print("hellloooo")
+			else:
+				if parent.call("can_highlight_more"):
+					parent.call("highlight_card", self)
+					print("hellloooo")
 
-func is_highlighted() -> bool:
-	return is_card_highlighted
+func is_in_selected_cards() -> bool:
+	return self.get_parent().is_in_group("selected_card")
 
-# Function to highlight this container
+#func toggle_highlight_top():
+	#if is_in_selected_cards():
+		#if not is_top_highlighted:
+			#top_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for top
+			#bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
+			#is_top_highlighted = true
+		#else:
+			#top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for top
+			#bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
+			#is_top_highlighted = false
+#
+#func toggle_highlight_bottom():
+	#if is_in_selected_cards():
+		#if not is_bottom_highlighted:
+			#bottom_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for bottom
+			#top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for top
+			#is_bottom_highlighted = true
+		#else:
+			#bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
+			#top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for top
+			#is_bottom_highlighted = false
+
 func highlight():
 	is_card_highlighted = true  # Update the flag to indicate this card is highlighted
-	modulate = Color(1, 1, 0, 1)  # Change to some highlight color or visual effect
+	if parent.is_in_group("hand"):
+		modulate = Color(1, 1, 0, 1)  # Change to highlight color or visual effect
 
-# Function to unhighlight this container
 func unhighlight():
 	is_card_highlighted = false  # Update the flag to indicate this card is not highlighted
-	modulate = Color(1, 1, 1, 1)  # Reset to normal or faded effect
+	if parent.is_in_group("hand"):
+		modulate = Color(1, 1, 1, 1)  # Reset to normal or faded effect
 
 func display(card: Card):
 	show()
@@ -81,99 +128,92 @@ func display(card: Card):
 		bottom_half_container.add_child(slot)
 		slot.add_action(card.bottom_move.actions[action])
 
-# Function to perform the action
-func perform_action(source, targets, actions: Array[Action.ActionType]):
+
+func perform_action(actions: Array[Action.ActionType]):
 	action_types = actions
 	for action_type in action_types:
 		print(action_type)
 		match action_type:
 			ActionType.MOVE:
-				move_action(source, targets)
+				move_action()
 			ActionType.ATTACK:
-				attack_action(source, targets)
+				attack_action()
 			ActionType.PUSH:
-				push_action(source, targets)
+				push_action()
 			ActionType.PULL:
-				pull_action(source, targets)
+				pull_action()
 			ActionType.RANGED_ATTACK:
-				ranged_attack_action(source, targets)
+				ranged_attack_action()
 			ActionType.HEAL:
-				heal_action(source, targets)
+				heal_action()
 			ActionType.STUN:
-				stun_action(source, targets)
+				stun_action()
 			ActionType.APPLY_VULNERABLE:
-				apply_vulnerable_action(source, targets)
+				apply_vulnerable_action()
 			ActionType.POISON:
-				poison_action(source, targets)
+				poison_action()
 			ActionType.PARALYZE:
-				paralyze_action(source, targets)
+				paralyze_action()
 			ActionType.IMMOBILIZE:
-				immobilize_action(source, targets)
+				immobilize_action()
 			_:
 				print("Unknown action type")
 
-# Define action-specific functions
-@warning_ignore("unused_parameter")
-func move_action(source, targets):
-	# Implement move logic
+func move_action():
 	print("move")
+	tile_map_layer.move_action_bool = true
+	tile_map_layer.move_action_selected(self)
 	pass
 
-@warning_ignore("unused_parameter")
-func attack_action(source, targets):
-	# Implement attack logic
+func attack_action():
 	print("attack")
 	pass
 
-@warning_ignore("unused_parameter")
-func push_action(source, targets):
-	# Implement push logic
+func push_action():
 	pass
 
-@warning_ignore("unused_parameter")
-func pull_action(source, targets):
-	# Implement pull logic
+func pull_action():
 	pass
 
-@warning_ignore("unused_parameter")
-func ranged_attack_action(source, targets):
-	# Implement ranged attack logic
+func ranged_attack_action():
 	pass
 
-@warning_ignore("unused_parameter")
-func heal_action(source, targets):
-	# Implement heal logic
+func heal_action():
 	pass
 
-@warning_ignore("unused_parameter")
-func stun_action(source, targets):
-	# Implement stun logic
+func stun_action():
 	pass
 
-@warning_ignore("unused_parameter")
-func apply_vulnerable_action(source, targets):
-	# Implement apply vulnerable logic
+func apply_vulnerable_action():
 	pass
 
-@warning_ignore("unused_parameter")
-func poison_action(source, targets):
-	# Implement poison logic
+func poison_action():
 	pass
 
-@warning_ignore("unused_parameter")
-func paralyze_action(source, targets):
-	# Implement paralyze logic
+func paralyze_action():
 	pass
 
-@warning_ignore("unused_parameter")
-func immobilize_action(source, targets):
-	# Implement immobilize logic
+func immobilize_action():
 	pass
 
+#func move_action_selected():
+	#var move_action_bool = false
+	#delete_all_lines()
+	#if card_dialog.current_highlighted_container == card_dialog.top_half_container:
+		#for action in card_dialog.card_resource.top_move.actions:
+			#if action.action_types == [0] and action.amount > 0:
+				#move_leftover = action.amount
+				#move_action_bool = true
+				#break
+	#elif card_dialog.current_highlighted_container == card_dialog.bottom_half_container:
+		#for action in card_dialog.card_resource.bottom_move.actions:
+			#if action.action_types == [0] and action.amount > 0:
+				#move_leftover = action.amount
+				#move_action_bool = true
+				#break
 
 func _on_mouse_entered():
 	self.z_index += 2
-
 
 func _on_mouse_exited():
 	self.z_index -= 2

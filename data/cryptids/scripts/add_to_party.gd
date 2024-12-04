@@ -21,7 +21,6 @@ func _ready():
 	selected.modulate = Color(0, 0 , 0, 0)
 
 func _process(delta):
-	player_team = %PlayerTeam
 	if cryptid.completed_turn == true:
 		turn_completed_.modulate = Color(1, 0 , 0, 1)
 	if self.get_parent().is_in_group("enemy"):

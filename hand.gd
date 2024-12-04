@@ -20,6 +20,7 @@ var hand: Array = []
 var highlighted_cards: Array = []
 var max_highlighted_cards = 2
 
+
 func _ready():
 	selected_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
 	switch_cryptid_deck(selected_cryptid)

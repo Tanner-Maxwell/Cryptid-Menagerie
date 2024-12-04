@@ -28,6 +28,8 @@ enum GameState {
 func _ready():
 	# Start with the player's turn when the game begins
 	transition(GameState.PLAYER_TURN)
+	print(selected_cards, "herrro")
+	
 func _process(_delta):
 	if hand.highlighted_cards.size() == 2:
 		confirm_card_button.text = "Confirm Cards"

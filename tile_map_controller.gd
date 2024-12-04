@@ -46,6 +46,10 @@ func _ready():
 	player_cryptids_in_play = initialize_starting_positions(player_starting_positions, player_team)
 	enemy_cryptids_in_play = initialize_starting_positions(enemy_starting_positions, enemy_team)
 
+func _process(delta):
+	if move_action_bool:
+		handle_mouse_motion()
+
 #Place player and enemy teams on map
 func initialize_starting_positions(starting_positions : Array, team):
 	var cryptids_in_play = []
@@ -81,7 +85,6 @@ func handle_mouse_motion():
 		draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), attack_range, Color(1, 0, 1))	
 
 func handle_left_click(event):
-	move_action_selected()
 	attack_action_selected()
 	var global_clicked = event.position
 	var pos_clicked = local_to_map(to_local(global_clicked))
@@ -118,21 +121,22 @@ func handle_left_click(event):
 		#cur_position_cube = axial_to_cube(pos_clicked)
 		#grove_starter.position = map_to_local(pos_clicked)
 
-func move_action_selected():
+func move_action_selected(current_card):
 	move_action_bool = false
 	delete_all_lines()
-	if card_dialog.current_highlighted_container == card_dialog.top_half_container:
-		for action in card_dialog.card_resource.top_move.actions:
-			if action.action_types == [0] and action.amount > 0:
-				move_leftover = action.amount
-				move_action_bool = true
-				break
-	elif card_dialog.current_highlighted_container == card_dialog.bottom_half_container:
-		for action in card_dialog.card_resource.bottom_move.actions:
-			if action.action_types == [0] and action.amount > 0:
-				move_leftover = action.amount
-				move_action_bool = true
-				break
+	#if current_card.current_highlighted_container == current_card.top_half_container:
+	for action in current_card.card_resource.top_move.actions:
+		if action.action_types == [0] and action.amount > 0:
+			print(action.amount)
+			move_leftover = action.amount
+			move_action_bool = true
+			break
+	#elif current_card.current_highlighted_container == current_card.bottom_half_container:
+	for action in current_card.card_resource.bottom_move.actions:
+		if action.action_types == [0] and action.amount > 0:
+			move_leftover = action.amount
+			move_action_bool = true
+			break
 
 func attack_action_selected():
 	attack_action_bool = false
