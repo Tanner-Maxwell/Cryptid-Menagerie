@@ -44,7 +44,6 @@ func switch_cryptid_selected_cards(cryptid: Cryptid):
 	for card_resource in cryptid.selected_cards:
 		base_card = card_dialog.instantiate()
 		base_card.card_resource = card_resource
-		print(base_card)
 		card_container.add_child(base_card)
 	selected_cryptid.currently_selected = false
 	selected_cryptid = cryptid

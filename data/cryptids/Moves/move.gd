@@ -29,7 +29,7 @@ enum ELEMENTAL_TYPE {
 }
 
 func add_action(action:Action):
-	actions.append(action)
+	actions.append(action.duplicate())
 
 func remove_action(action:Action):
 	actions.erase(action)

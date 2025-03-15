@@ -34,7 +34,6 @@ func remove_card(card):
 	hand.erase(card)
 
 func reposition_cards():
-	print(hand.size())
 	var card_spread = min(angle_limit / hand.size(), max_card_spread_angle)
 	var current_angle = 0
 	if hand.size() > 1:	
@@ -106,10 +105,8 @@ func switch_cryptid_selected_cards(cryptid: Cryptid):
 	selected_cryptid = cryptid
 	highlighted_cards.clear()
 	for child in selected_cards_node.get_children():
-		print(child)
 		selected_cards_node.remove_child(child)
 	var base_card
-	print(cryptid.selected_cards)
 	for card_resource in cryptid.selected_cards:
 		base_card = card_dialog.instantiate()
 		base_card.card_resource = card_resource
@@ -122,4 +119,3 @@ func _on_button_pressed():
 	base_card.card_resource = preload("res://Cryptid-Menagerie/data/cryptids/Moves/test_card.tres")
 	add_card(base_card)
 	selected_cryptid.deck.push_back(base_card.card_resource)
-	print("card added: ", base_card)

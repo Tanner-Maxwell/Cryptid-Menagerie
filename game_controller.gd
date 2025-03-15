@@ -28,7 +28,6 @@ enum GameState {
 func _ready():
 	# Start with the player's turn when the game begins
 	transition(GameState.PLAYER_TURN)
-	print(selected_cards, "herrro")
 	
 func _process(_delta):
 	if hand.highlighted_cards.size() == 2:
@@ -49,16 +48,14 @@ func transition(next_state: GameState):
 # Function that starts the player's turn
 func start_player_turn():
 	# Display the action selection menu
-	print("start player turn")
 	action_selection_menu.prompt_player_for_action()
-	
 	# Connect to the menu's signal if not already connected
 	if not action_selection_menu.is_connected("action_selected", Callable(self, "_on_action_selected")):
 		action_selection_menu.connect("action_selected", Callable(self, "_on_action_selected"))
 
 # Function to start the enemy turn (you can expand this)
 func start_enemy_turn():
-	print("Enemy turn starts")
+	pass
 
 # Function to handle the selected action from the ActionSelectionMenu
 func _on_action_selected(action_type: int):
@@ -87,8 +84,6 @@ func prompt_pick_cards():
 	pick_card_button.hide()
 	confirm_card_button.show()
 	action_selection_menu.show()
-	
-	
 
 func prompt_swap_cryptid():
 	print("Prompting player to swap cryptid")
@@ -108,8 +103,6 @@ func cards_picked():
 		card.queue_free()
 		hand.hand.erase(card)
 		hand.selected_cryptid.deck.erase(card)
-		print(hand.selected_cryptid.deck)
-		print(card)
 	turn_order._add_picked_cards_to_turn_order(hand.highlighted_cards[0], hand.highlighted_cards[1])
 	hand.highlighted_cards.clear()
 	hand.reposition_cards()

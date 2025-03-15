@@ -10,6 +10,7 @@ action_types = Array[int]([1])
 range = 1
 amount = 3
 area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
 
 [sub_resource type="Resource" id="Resource_la3hq"]
 script = ExtResource("3_ow4q5")
@@ -25,6 +26,7 @@ action_types = Array[int]([0])
 range = 1
 amount = 3
 area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
 
 [sub_resource type="Resource" id="Resource_n0pwa"]
 script = ExtResource("3_ow4q5")

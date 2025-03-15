@@ -45,20 +45,18 @@ func _ready():
 	if card_resource != null and action_slot != null:
 		display(card_resource)
 	parent = get_parent()
-	print(top_half_container)
 	tile_map_layer = get_tree().get_nodes_in_group("map")[0]
-	print(tile_map_layer, "tile map layer")
 
 func _gui_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
-		if self.get_parent().is_in_group("selected_card"):
-			if top_half_container.get_global_rect().has_point(event.global_position):
+		if self.get_parent().is_in_group("hand"):
+			if top_half_container.get_global_rect().has_point(event.global_position) and top_half_container.disabled == false:
 				for card in self.get_parent().get_children():
 					card.bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
 					card.top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
 				top_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for top
 				perform_action(card_resource.top_move.actions[0].action_types)
-			elif bottom_half_container.get_global_rect().has_point(event.global_position):
+			elif bottom_half_container.get_global_rect().has_point(event.global_position) and bottom_half_container.disabled == false:
 				for card in self.get_parent().get_children():
 					card.bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
 					card.top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
@@ -75,36 +73,12 @@ func _gui_input(event):
 		elif self.get_parent().is_in_group("selected_card"):
 			if is_card_highlighted:
 				parent.call("unhighlight_card", self)
-				print("hellloooo")
 			else:
 				if parent.call("can_highlight_more"):
 					parent.call("highlight_card", self)
-					print("hellloooo")
 
 func is_in_selected_cards() -> bool:
 	return self.get_parent().is_in_group("selected_card")
-
-#func toggle_highlight_top():
-	#if is_in_selected_cards():
-		#if not is_top_highlighted:
-			#top_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for top
-			#bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
-			#is_top_highlighted = true
-		#else:
-			#top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for top
-			#bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
-			#is_top_highlighted = false
-#
-#func toggle_highlight_bottom():
-	#if is_in_selected_cards():
-		#if not is_bottom_highlighted:
-			#bottom_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for bottom
-			#top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for top
-			#is_bottom_highlighted = true
-		#else:
-			#bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
-			#top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for top
-			#is_bottom_highlighted = false
 
 func highlight():
 	is_card_highlighted = true  # Update the flag to indicate this card is highlighted
@@ -132,7 +106,6 @@ func display(card: Card):
 func perform_action(actions: Array[Action.ActionType]):
 	action_types = actions
 	for action_type in action_types:
-		print(action_type)
 		match action_type:
 			ActionType.MOVE:
 				move_action()
@@ -160,13 +133,11 @@ func perform_action(actions: Array[Action.ActionType]):
 				print("Unknown action type")
 
 func move_action():
-	print("move")
 	tile_map_layer.move_action_bool = true
 	tile_map_layer.move_action_selected(self)
 	pass
 
 func attack_action():
-	print("attack")
 	pass
 
 func push_action():

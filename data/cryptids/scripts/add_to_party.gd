@@ -15,7 +15,6 @@ func _ready():
 	add_child(instance)
 	cryptid.update_stats()
 	set_health_values(cryptid.health, cryptid.health)
-	print(cryptid.health)
 	update_health_bar()
 	hand = %Hand
 	selected.modulate = Color(0, 0 , 0, 0)
@@ -35,9 +34,8 @@ func _process(delta):
 func _on_area_2d_input_event(viewport, event, shape_idx):
 	if event is InputEventMouse:
 		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and self.get_parent().is_in_group("player"):
-			hand.switch_cryptid_deck(cryptid)
+			#hand.switch_cryptid_deck(cryptid)
 			hand.switch_cryptid_selected_cards(cryptid)
-			cryptid.currently_selected = true
 
 func set_health_values(_health: int, _max_health: int):
 	max_health = _max_health
@@ -46,6 +44,3 @@ func set_health_values(_health: int, _max_health: int):
 func update_health_bar():
 	($HealthBar as ProgressBar).max_value = max_health
 	($HealthBar as ProgressBar).value = health
-	print(health, "health")
-	print(max_health, "max_health")
-	print(cryptid.name)

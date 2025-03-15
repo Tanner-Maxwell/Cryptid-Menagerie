@@ -6,7 +6,7 @@ extends Resource
 @export var range: int
 @export var amount: int
 @export var area_of_effect: Array[Vector2i] = [Vector2i(0,0)]
-
+@export var disabled = false
 
 
 

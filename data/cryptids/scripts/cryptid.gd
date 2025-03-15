@@ -10,6 +10,8 @@ extends Resource
 @export var selected_cards: Array[Card]
 @export var completed_turn: bool
 @export var currently_selected: bool
+@export var top_card_played: bool
+@export var bottom_card_played: bool
 
 # Declare main stat variables
 @export var strength: int = 10
