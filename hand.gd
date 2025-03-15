@@ -20,6 +20,9 @@ var hand: Array = []
 var highlighted_cards: Array = []
 var max_highlighted_cards = 2
 
+var selected_top_card: CardDialog = null
+var selected_bottom_card: CardDialog = null
+
 
 func _ready():
 	selected_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
@@ -89,6 +92,8 @@ func cards_selected(selected_cards: Array):
 	return selected_cryptid
 
 func switch_cryptid_deck(cryptid: Cryptid):
+	print("Switching deck to cryptid: ", cryptid.name)
+	
 	hand.clear()
 	highlighted_cards.clear()
 	for child in self.get_children():
@@ -98,8 +103,14 @@ func switch_cryptid_deck(cryptid: Cryptid):
 		base_card = card_dialog.instantiate()
 		base_card.card_resource = card_resource
 		add_card(base_card)
-	selected_cryptid.currently_selected = false
+	
+	if selected_cryptid:
+		selected_cryptid.currently_selected = false
 	selected_cryptid = cryptid
+	selected_cryptid.currently_selected = true
+	
+	# Update card availability based on the new cryptid's state
+	update_card_availability()
 		
 func switch_cryptid_selected_cards(cryptid: Cryptid):
 	selected_cryptid = cryptid
@@ -119,3 +130,104 @@ func _on_button_pressed():
 	base_card.card_resource = preload("res://Cryptid-Menagerie/data/cryptids/Moves/test_card.tres")
 	add_card(base_card)
 	selected_cryptid.deck.push_back(base_card.card_resource)
+
+func set_selected_top_card(card: CardDialog):
+	# Check if a top action has already been used this turn
+	if selected_cryptid.top_card_played:
+		print("Already used a top action this turn")
+		return
+		
+	selected_top_card = card
+	check_if_turn_complete()
+
+func set_selected_bottom_card(card: CardDialog):
+	# Check if a bottom action has already been used this turn
+	if selected_cryptid.bottom_card_played:
+		print("Already used a bottom action this turn")
+		return
+		
+	selected_bottom_card = card
+	check_if_turn_complete()
+
+func check_if_turn_complete():
+	if selected_top_card != null and selected_bottom_card != null:
+		# Both top and bottom actions have been selected
+		# Make sure they're from different cards
+		if selected_top_card.card_resource != selected_bottom_card.card_resource:
+			selected_cryptid.top_card_played = true
+			selected_cryptid.bottom_card_played = true
+			# Add the used cards to the discard pile or remove from hand
+			var cards_to_discard = [selected_top_card, selected_bottom_card]
+			cards_selected(cards_to_discard)
+			# Reset selections
+			selected_top_card = null
+			selected_bottom_card = null
+			# Mark cryptid's turn as completed
+			selected_cryptid.completed_turn = true
+			# Get next cryptid in turn order
+			next_cryptid_turn()
+
+func next_cryptid_turn():
+	print("Switching to next cryptid's turn")
+	
+	# Find the index of the current cryptid in player_cryptids_in_play
+	var current_index = -1
+	for i in range(tile_map_layer.player_cryptids_in_play.size()):
+		if tile_map_layer.player_cryptids_in_play[i].cryptid == selected_cryptid:
+			current_index = i
+			break
+	
+	print("Current cryptid index: ", current_index)
+	
+	# Find the next cryptid that hasn't completed their turn
+	var next_index = (current_index + 1) % tile_map_layer.player_cryptids_in_play.size()
+	var next_cryptid = null
+	
+	# Loop through all cryptids starting from the next one
+	while next_cryptid == null:
+		if not tile_map_layer.player_cryptids_in_play[next_index].cryptid.completed_turn:
+			next_cryptid = tile_map_layer.player_cryptids_in_play[next_index].cryptid
+			break
+		next_index = (next_index + 1) % tile_map_layer.player_cryptids_in_play.size()
+		if next_index == current_index:
+			break  # Prevents infinite loop if all cryptids have completed turns
+	
+	if next_cryptid == null:
+		print("All cryptids have taken their turn, moving to battle phase")
+		# All cryptids have taken their turn, transition to the next phase
+		var game_controller = get_node("/root/Main/GameController")
+		game_controller.battle_phase()
+		return
+	
+	print("Switching to cryptid: ", next_cryptid.name)
+	
+func check_turn_completion():
+	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
+		# Both actions have been used, mark turn as complete
+		selected_cryptid.completed_turn = true
+		
+		# Check if there are more cryptids that need to take their turn
+		if tile_map_layer.any_cryptid_not_completed():
+			next_cryptid_turn()
+		else:
+			# All cryptids have taken their turn, move to battle phase
+			get_node("/root/Main/GameController").battle_phase()
+			
+func update_card_availability():
+	# Gray out all top halves if a top action has been used
+	if selected_cryptid.top_card_played:
+		for card in get_children():
+			if card is CardDialog:
+				card.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				card.top_half_container.disabled = true
+	
+	# Gray out all bottom halves if a bottom action has been used
+	if selected_cryptid.bottom_card_played:
+		for card in get_children():
+			if card is CardDialog:
+				card.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				card.bottom_half_container.disabled = true
+				
+	# If both actions have been used, check if turn is complete
+	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
+		selected_cryptid.completed_turn = true

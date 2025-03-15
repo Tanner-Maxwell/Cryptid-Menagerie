@@ -104,6 +104,8 @@ func handle_right_click():
 func handle_mouse_motion():
 	if selected_cryptid == null:
 		selected_cryptid = player_cryptids_in_play[0]
+	
+	# Calculate path to mouse position
 	path = a_star_hex_grid.get_id_path(
 		a_star_hex_grid.get_closest_point(local_to_map(selected_cryptid.position)),
 		a_star_hex_grid.get_closest_point(local_to_map(get_local_mouse_position()))
@@ -114,13 +116,19 @@ func handle_mouse_motion():
 		vector_path.append(map_to_local(a_star_hex_grid.get_point_position(point)))
 		point_path.append(a_star_hex_grid.get_point_position(point))
 	delete_all_lines()
+	
+	# Handle move action visualization
 	if move_action_bool and walkable_hexes.find(local_to_map(get_local_mouse_position())) != -1:
 		draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), move_leftover, Color(0, 1, 0))
+	
+	# Handle attack action visualization
 	if attack_action_bool:
-		draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), attack_range, Color(1, 0, 1))	
+		var attack_distance = point_path.size() - 1
+		if attack_distance <= attack_range:
+			var attack_color = Color(1, 0, 0)  # Red for attack
+			draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), attack_range, attack_color)	
 
 func handle_left_click(event):
-	#attack_action_selected()
 	var global_clicked = event.position
 	selected_cryptid = currently_selected_cryptid()
 	var pos_clicked = local_to_map(to_local(global_clicked))
@@ -128,55 +136,100 @@ func handle_left_click(event):
 	if selected_cryptid == null:
 		selected_cryptid = player_cryptids_in_play[0]
 	
+	# Handle action based on what is active
+	if move_action_bool:
+		handle_move_action(pos_clicked)
+	elif attack_action_bool:
+		handle_attack_action(pos_clicked)
+	
+func handle_move_action(pos_clicked):
 	if pos_clicked in walkable_hexes:
-		#if card_dialog.current_highlighted_container == card_dialog.top_half_container:
-		if true:
-			print(card_dialog.card_resource.top_move.actions)
+		if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.top_move.actions:
-				if action.action_types == [0] and action.amount >= point_path.size() - 1 and selected_cryptid.cryptid.top_card_played == false:
-					#and local_to_map(enemy_cryptid.position) != pos_clicked
-					walkable_hexes.append(local_to_map(player_pos))
+				if action.action_types == [0] and action.amount >= point_path.size() - 1:
+					walkable_hexes.append(local_to_map(selected_cryptid.position))
 					action.amount -= point_path.size() - 1
 					move_leftover -= point_path.size() - 1
-					player_pos = map_to_local(pos_clicked)
 					selected_cryptid.position = map_to_local(pos_clicked)
 					walkable_hexes.erase(local_to_map(pos_clicked))
-					print("testing", player_cryptids_in_play[0].position)
-					#need to change this so it disables all other cards. The problem with this is you cannot do partial moves
-					for card in hand.get_children():
-						if card != card_dialog:
-							card.top_half_container.disable_top_half()
-						
-				
-				if action.action_types == [1] and action.range > 0 and local_to_map(enemy_cryptids_in_play[0].position) == pos_clicked:
-					pass
-		#if card_dialog.current_highlighted_container == card_dialog.bottom_half_container:
-		if true:
+					
+					# Mark top action as used
+					card_dialog.top_half_container.disabled = true
+					selected_cryptid.cryptid.top_card_played = true
+					
+		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.bottom_move.actions:
-				if action.action_types == [0] and action.amount >= point_path.size() - 1 and selected_cryptid.cryptid.bottom_card_played == false:
+				if action.action_types == [0] and action.amount >= point_path.size() - 1:
+					walkable_hexes.append(local_to_map(selected_cryptid.position))
 					action.amount -= point_path.size() - 1
-					player_pos = map_to_local(pos_clicked)
-					selected_cryptid = currently_selected_cryptid()
+					move_leftover -= point_path.size() - 1
 					selected_cryptid.position = map_to_local(pos_clicked)
+					walkable_hexes.erase(local_to_map(pos_clicked))
+					
+					# Mark bottom action as used
+					card_dialog.bottom_half_container.disabled = true
 					selected_cryptid.cryptid.bottom_card_played = true
-				if action.action_types == [1] and attack_range >= point_path.size() - 1 and local_to_map(enemy_cryptids_in_play[0].position) == pos_clicked:
-					enemy_cryptid.health -= action.amount
-					enemy_cryptid.update_health_bar()
-		#print(move_leftover)
-		player_pos = map_to_local(pos_clicked)
-		#cur_position_cube = axial_to_cube(pos_clicked)
-		#grove_starter.position = map_to_local(pos_clicked)
-	selected_cryptid = currently_selected_cryptid()
+		
+	# Mark the appropriate half as used
+	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
+		card_dialog.top_half_container.disabled = true
+		selected_cryptid.cryptid.top_card_played = true
+	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
+		card_dialog.bottom_half_container.disabled = true
+		selected_cryptid.cryptid.bottom_card_played = true
+	
+	# Update all cards to show availability
+	hand.update_card_availability()
+	
+	# Reset action state
+	move_action_bool = false
+	delete_all_lines()
+	
+	# Check if turn is complete
+	if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+		selected_cryptid.cryptid.completed_turn = true
+		hand.next_cryptid_turn()
+
+# Similar changes for attack action
+# In tile_map_controller.gd, update the handle_attack_action function:
+func handle_attack_action(pos_clicked):
+	var target_cryptid = get_cryptid_at_position(pos_clicked)
+	if target_cryptid != null and target_cryptid in enemy_cryptids_in_play:
+		var attack_distance = path.size() - 1
+		
+		if attack_distance <= attack_range:
+			apply_damage(target_cryptid, damage)
+			
+	# Mark the appropriate half as used
+	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
+		card_dialog.top_half_container.disabled = true
+		selected_cryptid.cryptid.top_card_played = true
+	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
+		card_dialog.bottom_half_container.disabled = true
+		selected_cryptid.cryptid.bottom_card_played = true
+	
+	# Update all cards to show availability
+	hand.update_card_availability()
+	
+	# Reset action state
+	attack_action_bool = false
+	delete_all_lines()
+	delete_all_indicators()
+	
+	# Check if turn is complete
+	if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+		selected_cryptid.cryptid.completed_turn = true
+		hand.next_cryptid_turn()
+
 
 func _input(event):
 	if event is InputEventMouse:
-		#attack_action_selected()
 		if event.button_mask == MOUSE_BUTTON_RIGHT and event.is_pressed():
 			handle_right_click()
-		if event is InputEventMouseMotion and move_action_bool:
+		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool):
 			if event is InputEventMouseMotion:
 				handle_mouse_motion()
-		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and move_action_bool:
+		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool):
 			if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed():
 				handle_left_click(event)
 
@@ -200,21 +253,29 @@ func move_action_selected(current_card):
 				move_action_bool = true
 				break
 
-func attack_action_selected():
+func attack_action_selected(current_card):
+	card_dialog = current_card
+	
+	# Important: Reset ALL action booleans first
+	move_action_bool = false  # Explicitly disable movement
 	attack_action_bool = false
+	
+	selected_cryptid = currently_selected_cryptid()
 	delete_all_lines()
-	if card_dialog.current_highlighted_container == card_dialog.top_half_container:
+	
+	# Check for attack action in the card
+	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
 		for action in card_dialog.card_resource.top_move.actions:
-			if action.action_types == [1]:
-				damage = action.amount
+			if action.action_types == [1]:  # Attack action type
 				attack_range = action.range
+				damage = action.amount
 				attack_action_bool = true
 				break
-	elif card_dialog.current_highlighted_container == card_dialog.bottom_half_container:
+	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 		for action in card_dialog.card_resource.bottom_move.actions:
-			if action.action_types == [1]:
-				damage = action.amount
+			if action.action_types == [1]:  # Attack action type
 				attack_range = action.range
+				damage = action.amount
 				attack_action_bool = true
 				break
 
@@ -299,11 +360,10 @@ func show_coordinates_label(hex_coords):
 	add_child(coordinates)
 	
 func any_cryptid_not_completed():
-	var turn_completed
 	for cryptid_in_play in player_cryptids_in_play:
 		if cryptid_in_play.cryptid.completed_turn == false:
-			return false 
-	return true 
+			return true 
+	return false
 
 func currently_selected_cryptid():
 	for player_cryptids in player_cryptids_in_play:
@@ -318,3 +378,77 @@ func compare_cryptids(a, b):
 func sort_cryptids_by_speed(cryptid_array):
 	cryptid_array.sort_custom(Callable(self, "compare_cryptids"))
 
+func show_attackable_area(center_pos, max_range):
+	var center_hex = local_to_map(center_pos)
+	var center_cube = axial_to_cube(center_hex)
+	
+	# Get all hexes within range
+	for x in range(-max_range, max_range + 1):
+		for y in range(max(-max_range, -x - max_range), min(max_range, -x + max_range) + 1):
+			var z = -x - y
+			var cube = Vector3i(center_cube.x + x, center_cube.y + y, center_cube.z + z)
+			var hex = cube_to_axial(cube)
+			
+			# Check if hex is valid
+			if get_cell_atlas_coords(hex) != Vector2i(-1, -1):
+				# Draw a small indicator at this hex
+				var indicator = ColorRect.new()
+				indicator.color = Color(1, 0, 0, 0.3)  # Semi-transparent red
+				indicator.size = Vector2(10, 10)
+				indicator.position = map_to_local(hex) - Vector2(5, 5)
+				indicator.name = "attack_indicator"
+				add_child(indicator)
+# Find a cryptid at a given hex position
+func get_cryptid_at_position(hex_pos):
+	for cryptid in all_cryptids_in_play:
+		if local_to_map(cryptid.position) == hex_pos:
+			return cryptid
+	return null
+
+# Apply damage to a target cryptid
+func apply_damage(target_cryptid, damage_amount):
+	# Access the health value from the add_to_party.gd script
+	var health_var = target_cryptid.get_node("HealthBar")
+	if health_var:
+		health_var.value -= damage_amount
+		
+		# If you have a health getter/setter in your cryptid class
+		target_cryptid.set_health_values(health_var.value, health_var.max_value)
+		target_cryptid.update_health_bar()
+	
+	# Check if the cryptid is defeated
+	if health_var and health_var.value <= 0:
+		handle_cryptid_defeat(target_cryptid)
+
+# Handle a defeated cryptid
+func handle_cryptid_defeat(defeated_cryptid):
+	# Remove from play
+	if defeated_cryptid in player_cryptids_in_play:
+		player_cryptids_in_play.erase(defeated_cryptid)
+	elif defeated_cryptid in enemy_cryptids_in_play:
+		enemy_cryptids_in_play.erase(defeated_cryptid)
+	
+	all_cryptids_in_play.erase(defeated_cryptid)
+	
+	# Make hex walkable again
+	walkable_hexes.append(local_to_map(defeated_cryptid.position))
+	
+	# Visual effect for defeat
+	defeated_cryptid.modulate = Color(1, 0, 0, 0.5)  # Red fade
+	
+	# Remove after a delay
+	var tween = get_tree().create_tween()
+	tween.tween_property(defeated_cryptid, "modulate", Color(1, 0, 0, 0), 1.0)
+	tween.tween_callback(Callable(defeated_cryptid, "queue_free"))
+
+# Clean up attack indicators
+func delete_all_indicators():
+	for child in get_children():
+		if child.name == "attack_indicator":
+			child.queue_free()
+
+func reset_action_modes():
+	move_action_bool = false
+	attack_action_bool = false
+	delete_all_lines()
+	delete_all_indicators()

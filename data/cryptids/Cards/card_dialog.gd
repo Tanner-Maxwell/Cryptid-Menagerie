@@ -50,32 +50,45 @@ func _ready():
 func _gui_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
 		if self.get_parent().is_in_group("hand"):
-			if top_half_container.get_global_rect().has_point(event.global_position) and top_half_container.disabled == false:
-				for card in self.get_parent().get_children():
-					card.bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
-					card.top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
-				top_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for top
-				perform_action(card_resource.top_move.actions[0].action_types)
-			elif bottom_half_container.get_global_rect().has_point(event.global_position) and bottom_half_container.disabled == false:
-				for card in self.get_parent().get_children():
-					card.bottom_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
-					card.top_half_container.modulate = Color(1, 1, 1, 1)  # Default color for bottom
-				bottom_half_container.modulate = Color(1, 1, 0, 1)  # Highlight color for top
-				perform_action(card_resource.bottom_move.actions[0].action_types)
-				
-		elif self.get_parent():
-			if is_card_highlighted:
-				parent.call("unhighlight_card", self)
-			else:
-				if parent.call("can_highlight_more"):
-					parent.call("highlight_card", self)
+			var parent_hand = self.get_parent()
+			
+			# Check if top half is clicked
+			if top_half_container.get_global_rect().has_point(event.global_position):
+				# Check if this half is disabled
+				if top_half_container.disabled:
+					return
 					
-		elif self.get_parent().is_in_group("selected_card"):
-			if is_card_highlighted:
-				parent.call("unhighlight_card", self)
-			else:
-				if parent.call("can_highlight_more"):
-					parent.call("highlight_card", self)
+				# Check if the cryptid already used a top action this turn
+				if parent_hand.selected_cryptid.top_card_played:
+					print("Already used a top action this turn")
+					return
+				
+				# Reset all highlighting
+				for card in parent_hand.get_children():
+					card.top_half_container.modulate = Color(1, 1, 1, 1)
+				
+				# Highlight this top half
+				top_half_container.modulate = Color(1, 1, 0, 1)
+				perform_action(card_resource.top_move.actions[0].action_types)
+				
+			# Check if bottom half is clicked
+			elif bottom_half_container.get_global_rect().has_point(event.global_position):
+				# Check if this half is disabled
+				if bottom_half_container.disabled:
+					return
+					
+				# Check if the cryptid already used a bottom action this turn
+				if parent_hand.selected_cryptid.bottom_card_played:
+					print("Already used a bottom action this turn")
+					return
+				
+				# Reset all highlighting
+				for card in parent_hand.get_children():
+					card.bottom_half_container.modulate = Color(1, 1, 1, 1)
+				
+				# Highlight this bottom half
+				bottom_half_container.modulate = Color(1, 1, 0, 1)
+				perform_action(card_resource.bottom_move.actions[0].action_types)
 
 func is_in_selected_cards() -> bool:
 	return self.get_parent().is_in_group("selected_card")
@@ -105,6 +118,13 @@ func display(card: Card):
 
 func perform_action(actions: Array[Action.ActionType]):
 	action_types = actions
+	
+	# Reset any previous action states before starting a new one
+	tile_map_layer.move_action_bool = false
+	tile_map_layer.attack_action_bool = false
+	tile_map_layer.delete_all_lines()
+	tile_map_layer.delete_all_indicators()
+	
 	for action_type in action_types:
 		match action_type:
 			ActionType.MOVE:
@@ -131,6 +151,12 @@ func perform_action(actions: Array[Action.ActionType]):
 				immobilize_action()
 			_:
 				print("Unknown action type")
+				
+	# Mark this half as used
+	if top_half_container.modulate == Color(1, 1, 0, 1):
+		top_half_container.disabled = true
+	elif bottom_half_container.modulate == Color(1, 1, 0, 1):
+		bottom_half_container.disabled = true
 
 func move_action():
 	tile_map_layer.move_action_bool = true
@@ -138,7 +164,10 @@ func move_action():
 	pass
 
 func attack_action():
-	pass
+	tile_map_layer.attack_action_bool = true
+	tile_map_layer.attack_action_selected(self)
+	# Store the current card for reference in the tile map controller
+	tile_map_layer.current_card = self
 
 func push_action():
 	pass

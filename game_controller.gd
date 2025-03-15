@@ -102,21 +102,47 @@ func cards_picked():
 	for card in hand.highlighted_cards:
 		card.queue_free()
 		hand.hand.erase(card)
-		hand.selected_cryptid.deck.erase(card)
+		hand.selected_cryptid.deck.erase(card.card_resource)
 	turn_order._add_picked_cards_to_turn_order(hand.highlighted_cards[0], hand.highlighted_cards[1])
 	hand.highlighted_cards.clear()
 	hand.reposition_cards()
 	hand.selected_cryptid.completed_turn = true
-	swap_button.show()
-	rest_button.show()
-	catch_button.show()
-	pick_card_button.show()
-	confirm_card_button.hide()
-	action_selection_menu.hide()
-	start_player_turn()
+	
+	# Check if all cryptids have completed their turns
+	if tile_map_layer.any_cryptid_not_completed() == false:
+		battle_phase()
+	else:
+		# There are still cryptids that need to take their turn
+		swap_button.show()
+		rest_button.show()
+		catch_button.show()
+		pick_card_button.show()
+		confirm_card_button.hide()
+		action_selection_menu.hide()
+		start_player_turn()
 	
 func battle_phase():
 	hand.hide()
 	action_selection_menu.hide()
 	selected_cards.show()
 	
+	# Check if all player cryptids have completed their turns
+	var all_completed = true
+	for cryptid in tile_map_layer.player_cryptids_in_play:
+		if cryptid.cryptid.completed_turn == false:
+			all_completed = false
+			break
+	
+	if all_completed:
+		# Enemy turn logic would go here
+		# ...
+		
+		# After enemy turn, reset all turns and start a new round
+		reset_all_cryptid_turns()
+		transition(GameState.PLAYER_TURN)
+	
+func reset_all_cryptid_turns():
+	for cryptid_in_play in tile_map_layer.player_cryptids_in_play:
+		cryptid_in_play.cryptid.completed_turn = false
+		cryptid_in_play.cryptid.top_card_played = false
+		cryptid_in_play.cryptid.bottom_card_played = false
