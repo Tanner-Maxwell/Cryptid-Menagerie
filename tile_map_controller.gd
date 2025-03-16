@@ -22,6 +22,9 @@ const MAIN_ATLAS_ID = 0
 @onready var enemy_starting_positions = [Vector2i(-4, -3), Vector2i(-2, -3), Vector2i(0, -3)]
 
 
+var movement_in_progress = false
+var current_tween = null
+
 @onready var player_cryptids_in_play = []
 @onready var enemy_cryptids_in_play = []
 
@@ -162,62 +165,51 @@ func handle_move_action(pos_clicked):
 	if pos_clicked in walkable_hexes:
 		var move_performed = false  # Track if a move was actually performed
 		
+		# Store the original position for freeing up after movement
+		var original_position = local_to_map(selected_cryptid.position)
+		
 		if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.top_move.actions:
 				if action.action_types == [0] and action.amount >= point_path.size() - 1:
-					# Save the old position for comparison
-					var old_position = local_to_map(selected_cryptid.position)
-					
-					walkable_hexes.append(local_to_map(selected_cryptid.position))
+					# Don't immediately move the cryptid - we'll animate it
 					action.amount -= point_path.size() - 1
 					move_leftover -= point_path.size() - 1
-					selected_cryptid.position = map_to_local(pos_clicked)
-					walkable_hexes.erase(local_to_map(pos_clicked))
 					
-					# Verify that the cryptid actually moved
-					var new_position = local_to_map(selected_cryptid.position)
-					move_performed = (old_position != new_position)
+					# Verify the move is actually changing position
+					var new_position = pos_clicked
+					move_performed = (original_position != new_position)
 					
-					# Mark top action as used only if a move was performed
 					if move_performed:
-						# Disable both halves of this specific card
+						# Animate movement along the path
+						animate_movement_along_path(selected_cryptid, original_position, new_position)
+						
+						# Mark top action as used
 						card_dialog.top_half_container.disabled = true
 						card_dialog.bottom_half_container.disabled = true
-						
-						# Gray out both halves of the card
-						card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out top half
-						card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out bottom half
-						
-						# Only mark the top action as used for this cryptid
+						card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+						card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 						selected_cryptid.cryptid.top_card_played = true
 					
 		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.bottom_move.actions:
 				if action.action_types == [0] and action.amount >= point_path.size() - 1:
-					# Save the old position for comparison
-					var old_position = local_to_map(selected_cryptid.position)
-					
-					walkable_hexes.append(local_to_map(selected_cryptid.position))
+					# Don't immediately move the cryptid - we'll animate it
 					action.amount -= point_path.size() - 1
 					move_leftover -= point_path.size() - 1
-					selected_cryptid.position = map_to_local(pos_clicked)
-					walkable_hexes.erase(local_to_map(pos_clicked))
 					
-					# Verify that the cryptid actually moved
-					var new_position = local_to_map(selected_cryptid.position)
-					move_performed = (old_position != new_position)
+					# Verify the move is actually changing position
+					var new_position = pos_clicked
+					move_performed = (original_position != new_position)
 					
-					# Mark bottom action as used only if a move was performed
 					if move_performed:
-						# Disable both halves of this specific card
+						# Animate movement along the path
+						animate_movement_along_path(selected_cryptid, original_position, new_position)
+						
+						# Mark bottom action as used
 						card_dialog.top_half_container.disabled = true
 						card_dialog.bottom_half_container.disabled = true
-						
-						# Gray out both halves of the card
-						card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out top half
-						card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out bottom half
-						
-						# Only mark the bottom action as used for this cryptid
+						card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+						card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 						selected_cryptid.cryptid.bottom_card_played = true
 		
 		# Only update the game state if a move was actually performed
@@ -323,6 +315,9 @@ func handle_attack_action(pos_clicked):
 
 
 func _input(event):
+	if movement_in_progress:
+		return
+	
 	if event is InputEventMouse:
 		if event.button_mask == MOUSE_BUTTON_RIGHT and event.is_pressed():
 			handle_right_click()
@@ -637,3 +632,150 @@ func reset_action_modes():
 	attack_action_bool = false
 	delete_all_lines()
 	delete_all_indicators()
+
+# Function to create a tween with proper completion tracking
+func create_movement_tween():
+	# Cancel any existing tween
+	if current_tween != null and current_tween.is_valid():
+		current_tween.kill()
+	
+	# Create a new tween
+	current_tween = create_tween()
+	current_tween.set_trans(Tween.TRANS_QUAD)
+	current_tween.set_ease(Tween.EASE_IN_OUT)
+	
+	# Set flag to indicate movement is in progress
+	movement_in_progress = true
+	
+	# Add a callback when tween finishes
+	current_tween.finished.connect(Callable(self, "_on_movement_tween_finished"))
+	
+	return current_tween
+
+# Callback for when tween completes
+func _on_movement_tween_finished():
+	movement_in_progress = false
+	current_tween = null
+	
+	# Re-enable input that might have been disabled during animation
+	set_process_input(true)
+	
+	# Reset any visual cues used during movement
+	delete_all_lines()
+	
+func create_movement_trail(cryptid_node, path):
+	# Create a new line to show the path being followed
+	var trail = Line2D.new()
+	trail.width = 5
+	trail.default_color = Color(0.2, 0.8, 0.2, 0.7)  # Semi-transparent green
+	trail.z_index = -1  # Make sure it appears below the cryptid
+	trail.name = "movement_trail"
+	
+	# Add all points in the path
+	for point in path:
+		trail.add_point(point)
+	
+	# Add the trail to the scene
+	add_child(trail)
+	
+	return trail
+
+# Function to remove the movement trail
+func remove_movement_trail():
+	for child in get_children():
+		if child.name == "movement_trail":
+			child.queue_free()
+			
+func animate_movement_along_path(cryptid_node, start_pos, end_pos):
+	# If movement is already in progress, don't start another one
+	if movement_in_progress:
+		print("Movement already in progress, ignoring new movement command")
+		return
+	
+	# First, make the original hex walkable again
+	walkable_hexes.append(start_pos)
+	
+	# Remove walkability from the destination hex immediately
+	# so no other cryptid can move there during animation
+	walkable_hexes.erase(end_pos)
+	
+	# Create a temp variable to store the full path
+	var movement_path = vector_path.duplicate()
+	
+	# Ensure we're only using the points we need
+	var needed_path = []
+	for i in range(movement_path.size()):
+		if i == 0 or local_to_map(movement_path[i]) != start_pos:
+			needed_path.append(movement_path[i])
+			
+		# Stop when we reach the destination
+		if local_to_map(movement_path[i]) == end_pos:
+			break
+	
+	# Create visual trail for the movement
+	var trail = create_movement_trail(cryptid_node, needed_path)
+	
+	# Create a tween for smooth movement
+	var tween = create_movement_tween()
+	
+	# Add starting position effect
+	var start_circle = ColorRect.new()
+	start_circle.color = Color(0.2, 0.8, 0.2, 0.5)
+	start_circle.size = Vector2(30, 30)
+	start_circle.position = map_to_local(start_pos) - Vector2(15, 15)
+	start_circle.name = "movement_marker"
+	add_child(start_circle)
+	
+	# Pulse effect for start position
+	var pulse_tween = create_tween()
+	pulse_tween.tween_property(start_circle, "scale", Vector2(1.5, 1.5), 0.5)
+	pulse_tween.tween_property(start_circle, "scale", Vector2(1.0, 1.0), 0.5)
+	pulse_tween.tween_property(start_circle, "modulate", Color(0.2, 0.8, 0.2, 0), 0.3)
+	
+	# Disable input during movement to prevent multiple actions
+	set_process_input(false)
+	
+	# Set movement speed (adjust this value to control animation speed)
+	var movement_speed = 0.2  # seconds per hex
+	
+	# Animate through each point in the path
+	for i in range(1, needed_path.size()):
+		var duration = movement_speed
+		tween.tween_property(cryptid_node, "position", needed_path[i], duration)
+	
+	# Add a small bounce at the end for visual feedback
+	tween.tween_property(cryptid_node, "scale", Vector2(1.1, 1.1), 0.1)
+	tween.tween_property(cryptid_node, "scale", Vector2(1.0, 1.0), 0.1)
+	
+	# Fade out the trail when finished
+	tween.tween_callback(Callable(self, "fade_out_movement_effects"))
+
+# Fade out movement effects
+func fade_out_movement_effects():
+	# Find all movement visual elements
+	var trail = null
+	var markers = []
+	
+	for child in get_children():
+		if child.name == "movement_trail":
+			trail = child
+		elif child.name == "movement_marker":
+			markers.append(child)
+	
+	# Create a tween to fade them out
+	var fade_tween = create_tween()
+	
+	if trail:
+		fade_tween.tween_property(trail, "modulate", Color(1, 1, 1, 0), 0.5)
+	
+	for marker in markers:
+		fade_tween.parallel().tween_property(marker, "modulate", Color(1, 1, 1, 0), 0.5)
+	
+	# Clean up after fading
+	fade_tween.tween_callback(Callable(self, "clean_up_movement_effects"))
+
+# Clean up movement effects
+func clean_up_movement_effects():
+	for child in get_children():
+		if child.name == "movement_trail" or child.name == "movement_marker":
+			child.queue_free()
