@@ -348,3 +348,4 @@ func create_unique_card_instance(card_template):
 	new_card.bottom_move = new_bottom_move
 	
 	return new_card
+

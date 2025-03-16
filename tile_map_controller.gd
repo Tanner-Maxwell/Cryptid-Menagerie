@@ -240,8 +240,8 @@ func handle_attack_action(pos_clicked):
 	print("In handle_attack_action...")
 	
 	var target_cryptid = get_cryptid_at_position(pos_clicked)
-	print("Target position: ", pos_clicked)
-	print("Target cryptid: ", target_cryptid)
+	print("Target position:", pos_clicked)
+	print("Target cryptid:", target_cryptid)
 	
 	var attack_performed = false
 	
@@ -249,69 +249,53 @@ func handle_attack_action(pos_clicked):
 	if target_cryptid != null and target_cryptid in enemy_cryptids_in_play:
 		print("Valid enemy target found")
 		var attack_distance = path.size() - 1
-		print("Attack distance: ", attack_distance)
-		print("Attack range: ", attack_range)
+		print("Attack distance:", attack_distance)
+		print("Attack range:", attack_range)
 		
 		if attack_distance <= attack_range:
-			print("Target in range, applying damage: ", damage)
-			# Apply damage if target is in range
-			apply_damage(target_cryptid, damage)
-			attack_performed = true
+			print("Target is within range")
 			
-			print("Attack performed successfully")
+			# Get the currently selected cryptid
+			selected_cryptid = currently_selected_cryptid()
+			print("Attacker:", selected_cryptid)
 			
-			# Only mark the appropriate half as used if attack was successful
-			if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-				# Disable both halves of this specific card
+			# Store which card half was used for later
+			var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
+			var using_bottom_half = card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1)
+			
+			# Disable the card UI immediately to prevent multiple uses
+			if using_top_half:
+				print("Using top half of card")
 				card_dialog.top_half_container.disabled = true
 				card_dialog.bottom_half_container.disabled = true
-				
-				# Gray out both halves of the card
-				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out top half
-				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out bottom half
-				
-				# Only mark the top action as used for this cryptid
+				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				selected_cryptid.cryptid.top_card_played = true
-				print("Top card action marked as played")
-			elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-				# Disable both halves of this specific card
+			elif using_bottom_half:
+				print("Using bottom half of card")
 				card_dialog.top_half_container.disabled = true
 				card_dialog.bottom_half_container.disabled = true
-				
-				# Gray out both halves of the card
-				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out top half
-				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out bottom half
-				
-				# Only mark the bottom action as used for this cryptid
+				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				selected_cryptid.cryptid.bottom_card_played = true
-				print("Bottom card action marked as played")
+			
+			# Play the attack animation
+			print("Starting attack animation")
+			animate_attack(selected_cryptid, target_cryptid)
+			
+			attack_performed = true
+			print("Attack performed successfully")
 		else:
 			print("Target out of range")
 	else:
 		print("Invalid attack: No enemy target at the selected position")
 	
-	# Only update game state if an attack was performed
-	if attack_performed:
-		print("Updating game state after successful attack")
-		# Update all cards to show availability
-		hand.update_card_availability()
-		
-		# Now show the action menu again with updated button state
-		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-		if action_menu and action_menu.has_method("update_menu_visibility"):
-			action_menu.update_menu_visibility(selected_cryptid.cryptid)
-			action_menu.show()
-		
-		# Check if turn is complete
-		if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
-			selected_cryptid.cryptid.completed_turn = true
-			hand.next_cryptid_turn()
-	
-	# Reset action state
-	print("Resetting attack action state")
-	attack_action_bool = false
-	delete_all_lines()
-	delete_all_indicators()
+	# Reset action state if no attack was performed
+	if not attack_performed:
+		print("No attack performed - resetting action state")
+		attack_action_bool = false
+		delete_all_lines()
+		delete_all_indicators()
 
 
 func _input(event):
@@ -779,3 +763,150 @@ func clean_up_movement_effects():
 	for child in get_children():
 		if child.name == "movement_trail" or child.name == "movement_marker":
 			child.queue_free()
+
+func animate_attack(attacker, target):
+	print("Starting attack animation from", attacker, "to", target)
+	
+	# If movement is already in progress, don't start another one
+	if movement_in_progress:
+		print("Movement already in progress, ignoring attack animation")
+		return
+		
+	print("Animation will proceed - movement_in_progress is false")
+	
+	# Store original position
+	var original_position = attacker.position
+	print("Original position:", original_position)
+	
+	# Calculate direction vector from attacker to target
+	var direction = (target.position - original_position).normalized()
+	print("Direction vector:", direction)
+	
+	# Calculate how far to bump (40% of the way to the target, max 60 pixels)
+	# Increased values to make animation more noticeable
+	var bump_distance = min((target.position - original_position).length() * 0.4, 60.0)
+	var bump_position = original_position + direction * bump_distance
+	print("Bump distance:", bump_distance, "New position:", bump_position)
+	
+	# Set flag to indicate movement is in progress
+	movement_in_progress = true
+	print("Set movement_in_progress to true")
+	
+	# Create a tween for the animation - using direct create_tween() instead of helper function
+	var tween = create_tween()
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.set_ease(Tween.EASE_OUT)
+	print("Created new tween:", tween)
+	
+	# Connect finished signal
+	tween.finished.connect(Callable(self, "_on_attack_tween_finished").bind([target, damage]))
+	
+	# Disable input during animation
+	set_process_input(false)
+	print("Disabled input processing")
+	
+	# Start with a quick forward movement
+	print("Starting animation to bump position:", bump_position)
+	tween.tween_property(attacker, "position", bump_position, 0.2)
+	
+	# Then return to the original position with a slight bounce
+	print("Adding return animation to original position:", original_position)
+	tween.tween_property(attacker, "position", original_position, 0.3)
+	
+	# Create attack visual effect - using more noticeable effects
+	create_attack_effect(attacker.position, target.position)
+	
+	return tween
+
+
+# Create a visual effect for the attack
+func create_attack_effect(start_pos, end_pos):
+	print("Creating attack visual effects")
+	
+	# Create a line for the attack - thicker line with brighter color
+	var attack_line = Line2D.new()
+	attack_line.width = 8
+	attack_line.default_color = Color(1, 0, 0, 0.9)  # Bright red
+	attack_line.add_point(start_pos)
+	attack_line.add_point(end_pos)
+	attack_line.name = "attack_effect"
+	attack_line.z_index = 10  # Make sure it appears above other elements
+	add_child(attack_line)
+	print("Added attack line from", start_pos, "to", end_pos)
+	
+	# Create impact effect at target - larger impact
+	var impact = ColorRect.new()
+	impact.color = Color(1, 0, 0, 0.8)
+	impact.size = Vector2(40, 40)
+	impact.position = end_pos - Vector2(20, 20)
+	impact.name = "attack_effect"
+	impact.z_index = 10  # Make sure it appears above other elements
+	add_child(impact)
+	print("Added impact effect at", end_pos)
+	
+	# Animate the attack effects - longer duration
+	var effect_tween = create_tween()
+	effect_tween.set_parallel(true)
+	
+	# Flash the line with more dramatic effect
+	effect_tween.tween_property(attack_line, "width", 15, 0.15)
+	effect_tween.tween_property(attack_line, "width", 3, 0.35)
+	
+	# Expand the impact and fade out
+	effect_tween.tween_property(impact, "scale", Vector2(2.0, 2.0), 0.4)
+	effect_tween.tween_property(impact, "modulate", Color(1, 0, 0, 0), 0.4)
+	
+	# Clean up after animation
+	effect_tween.tween_callback(Callable(self, "clean_up_attack_effects"))
+
+# Clean up attack effects
+func clean_up_attack_effects():
+	for child in get_children():
+		if child.name == "attack_effect":
+			child.queue_free()
+			
+# Helper function to apply damage after animation completes
+func apply_delayed_damage(params):
+	print("Applying delayed damage")
+	var target_cryptid = params[0]
+	var damage_amount = params[1]
+	
+	# Apply the actual damage
+	print("Applying", damage_amount, "damage to", target_cryptid)
+	apply_damage(target_cryptid, damage_amount)
+	
+	print("Updating game state after successful attack")
+	# Update all cards to show availability
+	hand.update_card_availability()
+	
+	# Now show the action menu again with updated button state
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu and action_menu.has_method("update_menu_visibility"):
+		action_menu.update_menu_visibility(selected_cryptid.cryptid)
+		action_menu.show()
+	
+	# Check if turn is complete
+	if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+		selected_cryptid.cryptid.completed_turn = true
+		hand.next_cryptid_turn()
+	
+	# Reset action state
+	print("Resetting attack action state")
+	attack_action_bool = false
+	delete_all_lines()
+	delete_all_indicators()
+
+# Function called when attack tween completes
+func _on_attack_tween_finished(params):
+	print("Attack animation finished")
+	
+	# Reset movement flag
+	movement_in_progress = false
+	print("Reset movement_in_progress to false")
+	
+	# Re-enable input
+	set_process_input(true)
+	print("Re-enabled input processing")
+	
+	# Apply damage and continue with game logic
+	apply_delayed_damage(params)
