@@ -474,18 +474,11 @@ offset_top = 125.0
 offset_right = 189.0
 offset_bottom = 365.0
 
-[node name="PickCardButton" type="Button" parent="UIRoot/ActionSelectMenu/VBoxContainer"]
+[node name="EndTurnButton" type="Button" parent="UIRoot/ActionSelectMenu/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-text = "Pick 2 Cards"
-
-[node name="ConfirmCardButton" type="Button" parent="UIRoot/ActionSelectMenu/VBoxContainer"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-size_flags_vertical = 3
-text = "Pick 2 Cards"
+text = "End Turn"
 
 [node name="SwapButton" type="Button" parent="UIRoot/ActionSelectMenu/VBoxContainer"]
 unique_name_in_owner = true

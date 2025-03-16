@@ -102,14 +102,18 @@ func handle_right_click():
 	pass
 
 func handle_mouse_motion():
+	# Get the currently selected cryptid
+	selected_cryptid = currently_selected_cryptid()
+	
 	if selected_cryptid == null:
 		selected_cryptid = player_cryptids_in_play[0]
 	
-	# Calculate path to mouse position
+	# Always calculate path from the currently selected cryptid's position
 	path = a_star_hex_grid.get_id_path(
 		a_star_hex_grid.get_closest_point(local_to_map(selected_cryptid.position)),
 		a_star_hex_grid.get_closest_point(local_to_map(get_local_mouse_position()))
 	)
+	
 	vector_path = []
 	point_path = []
 	for point in path:
@@ -126,100 +130,196 @@ func handle_mouse_motion():
 		var attack_distance = point_path.size() - 1
 		if attack_distance <= attack_range:
 			var attack_color = Color(1, 0, 0)  # Red for attack
-			draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), attack_range, attack_color)	
+			draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), attack_range, attack_color)
 
 func handle_left_click(event):
 	var global_clicked = event.position
 	selected_cryptid = currently_selected_cryptid()
 	var pos_clicked = local_to_map(to_local(global_clicked))
 	
+	# Debugging
+	print("Left click detected!")
+	print("move_action_bool = ", move_action_bool)
+	print("attack_action_bool = ", attack_action_bool)
+	
 	if selected_cryptid == null:
+		print("WARNING: No selected cryptid found, using first cryptid")
 		selected_cryptid = player_cryptids_in_play[0]
 	
 	# Handle action based on what is active
 	if move_action_bool:
+		print("Handling move action")
 		handle_move_action(pos_clicked)
 	elif attack_action_bool:
+		print("Handling attack action")
 		handle_attack_action(pos_clicked)
+	else:
+		print("No action type active")
+
 	
 func handle_move_action(pos_clicked):
+	# Only process the move if the clicked position is walkable
 	if pos_clicked in walkable_hexes:
+		var move_performed = false  # Track if a move was actually performed
+		
 		if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.top_move.actions:
 				if action.action_types == [0] and action.amount >= point_path.size() - 1:
+					# Save the old position for comparison
+					var old_position = local_to_map(selected_cryptid.position)
+					
 					walkable_hexes.append(local_to_map(selected_cryptid.position))
 					action.amount -= point_path.size() - 1
 					move_leftover -= point_path.size() - 1
 					selected_cryptid.position = map_to_local(pos_clicked)
 					walkable_hexes.erase(local_to_map(pos_clicked))
 					
-					# Mark top action as used
-					card_dialog.top_half_container.disabled = true
-					selected_cryptid.cryptid.top_card_played = true
+					# Verify that the cryptid actually moved
+					var new_position = local_to_map(selected_cryptid.position)
+					move_performed = (old_position != new_position)
+					
+					# Mark top action as used only if a move was performed
+					if move_performed:
+						# Disable both halves of this specific card
+						card_dialog.top_half_container.disabled = true
+						card_dialog.bottom_half_container.disabled = true
+						
+						# Gray out both halves of the card
+						card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out top half
+						card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out bottom half
+						
+						# Only mark the top action as used for this cryptid
+						selected_cryptid.cryptid.top_card_played = true
 					
 		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.bottom_move.actions:
 				if action.action_types == [0] and action.amount >= point_path.size() - 1:
+					# Save the old position for comparison
+					var old_position = local_to_map(selected_cryptid.position)
+					
 					walkable_hexes.append(local_to_map(selected_cryptid.position))
 					action.amount -= point_path.size() - 1
 					move_leftover -= point_path.size() - 1
 					selected_cryptid.position = map_to_local(pos_clicked)
 					walkable_hexes.erase(local_to_map(pos_clicked))
 					
-					# Mark bottom action as used
-					card_dialog.bottom_half_container.disabled = true
-					selected_cryptid.cryptid.bottom_card_played = true
+					# Verify that the cryptid actually moved
+					var new_position = local_to_map(selected_cryptid.position)
+					move_performed = (old_position != new_position)
+					
+					# Mark bottom action as used only if a move was performed
+					if move_performed:
+						# Disable both halves of this specific card
+						card_dialog.top_half_container.disabled = true
+						card_dialog.bottom_half_container.disabled = true
+						
+						# Gray out both halves of the card
+						card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out top half
+						card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out bottom half
+						
+						# Only mark the bottom action as used for this cryptid
+						selected_cryptid.cryptid.bottom_card_played = true
 		
-	# Mark the appropriate half as used
-	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-		card_dialog.top_half_container.disabled = true
-		selected_cryptid.cryptid.top_card_played = true
-	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-		card_dialog.bottom_half_container.disabled = true
-		selected_cryptid.cryptid.bottom_card_played = true
-	
-	# Update all cards to show availability
-	hand.update_card_availability()
+		# Only update the game state if a move was actually performed
+		if move_performed:
+			# Update all cards to show availability
+			hand.update_card_availability()
+			
+			# Now show the action menu again with updated button state
+			var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+			if action_menu and action_menu.has_method("update_menu_visibility"):
+				action_menu.update_menu_visibility(selected_cryptid.cryptid)
+				action_menu.show()
+			
+			# Check if turn is complete
+			if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+				selected_cryptid.cryptid.completed_turn = true
+				hand.next_cryptid_turn()
+	else:
+		print("Invalid move: Clicked on a non-walkable hex")
 	
 	# Reset action state
 	move_action_bool = false
 	delete_all_lines()
-	
-	# Check if turn is complete
-	if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
-		selected_cryptid.cryptid.completed_turn = true
-		hand.next_cryptid_turn()
 
 # Similar changes for attack action
 # In tile_map_controller.gd, update the handle_attack_action function:
 func handle_attack_action(pos_clicked):
+	print("In handle_attack_action...")
+	
 	var target_cryptid = get_cryptid_at_position(pos_clicked)
+	print("Target position: ", pos_clicked)
+	print("Target cryptid: ", target_cryptid)
+	
+	var attack_performed = false
+	
+	# Only count as an attack if targeting an enemy cryptid
 	if target_cryptid != null and target_cryptid in enemy_cryptids_in_play:
+		print("Valid enemy target found")
 		var attack_distance = path.size() - 1
+		print("Attack distance: ", attack_distance)
+		print("Attack range: ", attack_range)
 		
 		if attack_distance <= attack_range:
+			print("Target in range, applying damage: ", damage)
+			# Apply damage if target is in range
 			apply_damage(target_cryptid, damage)
+			attack_performed = true
 			
-	# Mark the appropriate half as used
-	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-		card_dialog.top_half_container.disabled = true
-		selected_cryptid.cryptid.top_card_played = true
-	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-		card_dialog.bottom_half_container.disabled = true
-		selected_cryptid.cryptid.bottom_card_played = true
+			print("Attack performed successfully")
+			
+			# Only mark the appropriate half as used if attack was successful
+			if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
+				# Disable both halves of this specific card
+				card_dialog.top_half_container.disabled = true
+				card_dialog.bottom_half_container.disabled = true
+				
+				# Gray out both halves of the card
+				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out top half
+				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out bottom half
+				
+				# Only mark the top action as used for this cryptid
+				selected_cryptid.cryptid.top_card_played = true
+				print("Top card action marked as played")
+			elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
+				# Disable both halves of this specific card
+				card_dialog.top_half_container.disabled = true
+				card_dialog.bottom_half_container.disabled = true
+				
+				# Gray out both halves of the card
+				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out top half
+				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out bottom half
+				
+				# Only mark the bottom action as used for this cryptid
+				selected_cryptid.cryptid.bottom_card_played = true
+				print("Bottom card action marked as played")
+		else:
+			print("Target out of range")
+	else:
+		print("Invalid attack: No enemy target at the selected position")
 	
-	# Update all cards to show availability
-	hand.update_card_availability()
+	# Only update game state if an attack was performed
+	if attack_performed:
+		print("Updating game state after successful attack")
+		# Update all cards to show availability
+		hand.update_card_availability()
+		
+		# Now show the action menu again with updated button state
+		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+		if action_menu and action_menu.has_method("update_menu_visibility"):
+			action_menu.update_menu_visibility(selected_cryptid.cryptid)
+			action_menu.show()
+		
+		# Check if turn is complete
+		if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+			selected_cryptid.cryptid.completed_turn = true
+			hand.next_cryptid_turn()
 	
 	# Reset action state
+	print("Resetting attack action state")
 	attack_action_bool = false
 	delete_all_lines()
 	delete_all_indicators()
-	
-	# Check if turn is complete
-	if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
-		selected_cryptid.cryptid.completed_turn = true
-		hand.next_cryptid_turn()
 
 
 func _input(event):
@@ -236,21 +336,37 @@ func _input(event):
 func move_action_selected(current_card):
 	card_dialog = current_card
 	move_action_bool = false
+	
+	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found when selecting move action")
+		return
+		
 	delete_all_lines()
-	#if current_card.current_highlighted_container == current_card.top_half_container:
-	if current_card != null:
+	
+	# Check for move action in the top half
+	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
 		for action in card_dialog.card_resource.top_move.actions:
 			if action.action_types == [0] and action.amount > 0:
 				move_leftover = action.amount
 				move_action_bool = true
+				
+				# For debugging
+				print("Move action selected: Distance = ", move_leftover)
+				print("Selected cryptid position: ", local_to_map(selected_cryptid.position))
 				break
-	#elif current_card.current_highlighted_container == current_card.bottom_half_container:
-	if current_card != null:
+	
+	# Check for move action in the bottom half
+	if card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 		for action in card_dialog.card_resource.bottom_move.actions:
 			if action.action_types == [0] and action.amount > 0:
 				move_leftover = action.amount
 				move_action_bool = true
+				
+				# For debugging
+				print("Move action selected: Distance = ", move_leftover)
+				print("Selected cryptid position: ", local_to_map(selected_cryptid.position))
 				break
 
 func attack_action_selected(current_card):
@@ -260,7 +376,12 @@ func attack_action_selected(current_card):
 	move_action_bool = false  # Explicitly disable movement
 	attack_action_bool = false
 	
+	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found when selecting attack action")
+		return
+		
 	delete_all_lines()
 	
 	# Check for attack action in the card
@@ -270,6 +391,16 @@ func attack_action_selected(current_card):
 				attack_range = action.range
 				damage = action.amount
 				attack_action_bool = true
+				
+				# For debugging
+				print("Attack action selected: Range = ", attack_range, ", Damage = ", damage)
+				print("Selected cryptid position: ", local_to_map(selected_cryptid.position))
+				
+				# Store the current card for reference
+				current_card = card_dialog
+				
+				# Add this to ensure the attack action is active
+				print("Attack action bool set to: ", attack_action_bool)
 				break
 	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 		for action in card_dialog.card_resource.bottom_move.actions:
@@ -277,7 +408,30 @@ func attack_action_selected(current_card):
 				attack_range = action.range
 				damage = action.amount
 				attack_action_bool = true
+				
+				# For debugging
+				print("Attack action selected: Range = ", attack_range, ", Damage = ", damage)
+				print("Selected cryptid position: ", local_to_map(selected_cryptid.position))
+				
+				# Store the current card for reference
+				current_card = card_dialog
+				
+				# Add this to ensure the attack action is active
+				print("Attack action bool set to: ", attack_action_bool)
 				break
+				
+	# If we failed to set attack_action_bool, print an error
+	if not attack_action_bool:
+		print("ERROR: Failed to activate attack action - no attack action found in selected card")
+		# Check what actions are in the card
+		if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
+			print("Top half actions:")
+			for action in card_dialog.card_resource.top_move.actions:
+				print("Action type: ", action.action_types)
+		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
+			print("Bottom half actions:")
+			for action in card_dialog.card_resource.bottom_move.actions:
+				print("Action type: ", action.action_types)
 
 func axial_to_cube(hex):
 	var q = hex.y
@@ -366,9 +520,40 @@ func any_cryptid_not_completed():
 	return false
 
 func currently_selected_cryptid():
-	for player_cryptids in player_cryptids_in_play:
-		if player_cryptids.cryptid.currently_selected == true:
-			return player_cryptids
+	# Debug which cryptids are in play
+	print("Checking for currently selected cryptid")
+	print("Number of player cryptids in play: ", player_cryptids_in_play.size())
+	
+	# First check if any cryptid is marked as currently_selected
+	for player_cryptid in player_cryptids_in_play:
+		if player_cryptid.cryptid.currently_selected == true:
+			print("Found selected cryptid: ", player_cryptid.cryptid.name)
+			return player_cryptid
+	
+	# If no cryptid is marked as currently_selected, check hand reference
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.selected_cryptid:
+		print("No cryptid marked as selected, using hand.selected_cryptid: ", hand_node.selected_cryptid.name)
+		
+		# Find the cryptid in player_cryptids_in_play that matches hand.selected_cryptid
+		for player_cryptid in player_cryptids_in_play:
+			if player_cryptid.cryptid == hand_node.selected_cryptid:
+				print("Found matching cryptid in player_cryptids_in_play")
+				return player_cryptid
+		
+		# If we didn't find a match, just return the first cryptid
+		print("WARNING: No matching cryptid found, using first cryptid")
+		if player_cryptids_in_play.size() > 0:
+			return player_cryptids_in_play[0]
+	
+	# If all else fails, return the first cryptid if available
+	if player_cryptids_in_play.size() > 0:
+		print("No selected cryptid found, defaulting to first cryptid")
+		return player_cryptids_in_play[0]
+	
+	# If we get here, something is seriously wrong
+	print("CRITICAL ERROR: No cryptids in play!")
+	return null
 
 # Function to compare two cryptid objects based on their speed
 func compare_cryptids(a, b):

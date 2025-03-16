@@ -94,16 +94,25 @@ func cards_selected(selected_cards: Array):
 func switch_cryptid_deck(cryptid: Cryptid):
 	print("Switching deck to cryptid: ", cryptid.name)
 	
+	# Clear existing hand
 	hand.clear()
 	highlighted_cards.clear()
 	for child in self.get_children():
 		remove_child(child)
+		child.queue_free()
+	
+	# Create unique instances of each card
 	var base_card
 	for card_resource in cryptid.deck:
+		# Create a unique copy of the card resource
+		var unique_card_resource = create_unique_card_instance(card_resource)
+		
+		# Instantiate the card dialog
 		base_card = card_dialog.instantiate()
-		base_card.card_resource = card_resource
+		base_card.card_resource = unique_card_resource
 		add_card(base_card)
 	
+	# Update the selected cryptid
 	if selected_cryptid:
 		selected_cryptid.currently_selected = false
 	selected_cryptid = cryptid
@@ -111,6 +120,15 @@ func switch_cryptid_deck(cryptid: Cryptid):
 	
 	# Update card availability based on the new cryptid's state
 	update_card_availability()
+	
+	# Reset any active action states in the tile map
+	var tile_map = get_node("/root/VitaChrome/TileMapLayer")
+	if tile_map:
+		tile_map.move_action_bool = false
+		tile_map.attack_action_bool = false
+		tile_map.delete_all_lines()
+		tile_map.delete_all_indicators()
+		print("Reset action states in tile map")
 		
 func switch_cryptid_selected_cards(cryptid: Cryptid):
 	selected_cryptid = cryptid
@@ -126,10 +144,15 @@ func switch_cryptid_selected_cards(cryptid: Cryptid):
 	selected_cryptid = cryptid
 
 func _on_button_pressed():
+	var card_template = preload("res://Cryptid-Menagerie/data/cryptids/Moves/test_card.tres")
+	var unique_card_resource = create_unique_card_instance(card_template)
+	
 	var base_card = card_dialog.instantiate()
-	base_card.card_resource = preload("res://Cryptid-Menagerie/data/cryptids/Moves/test_card.tres")
+	base_card.card_resource = unique_card_resource
 	add_card(base_card)
-	selected_cryptid.deck.push_back(base_card.card_resource)
+	
+	# Add the unique card resource to the cryptid's deck
+	selected_cryptid.deck.push_back(unique_card_resource)
 
 func set_selected_top_card(card: CardDialog):
 	# Check if a top action has already been used this turn
@@ -170,6 +193,14 @@ func check_if_turn_complete():
 func next_cryptid_turn():
 	print("Switching to next cryptid's turn")
 	
+	# First ensure that player_cryptids_in_play are sorted by speed
+	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.player_cryptids_in_play)
+	
+	# Log the current speed order for debugging
+	print("Current cryptid speed order:")
+	for cryptid in tile_map_layer.player_cryptids_in_play:
+		print(cryptid.cryptid.name, " - Speed: ", cryptid.cryptid.speed)
+	
 	# Find the index of the current cryptid in player_cryptids_in_play
 	var current_index = -1
 	for i in range(tile_map_layer.player_cryptids_in_play.size()):
@@ -179,18 +210,27 @@ func next_cryptid_turn():
 	
 	print("Current cryptid index: ", current_index)
 	
+	# Set the current cryptid as not selected
+	if selected_cryptid:
+		selected_cryptid.currently_selected = false
+	
 	# Find the next cryptid that hasn't completed their turn
+	# Start from the next index and loop around if necessary
+	var checked_count = 0
 	var next_index = (current_index + 1) % tile_map_layer.player_cryptids_in_play.size()
 	var next_cryptid = null
 	
-	# Loop through all cryptids starting from the next one
-	while next_cryptid == null:
-		if not tile_map_layer.player_cryptids_in_play[next_index].cryptid.completed_turn:
-			next_cryptid = tile_map_layer.player_cryptids_in_play[next_index].cryptid
+	# Loop through all cryptids starting from the next one and going in order
+	while checked_count < tile_map_layer.player_cryptids_in_play.size():
+		var candidate = tile_map_layer.player_cryptids_in_play[next_index].cryptid
+		
+		if not candidate.completed_turn:
+			next_cryptid = candidate
 			break
+			
+		# Move to the next index, wrapping around if necessary
 		next_index = (next_index + 1) % tile_map_layer.player_cryptids_in_play.size()
-		if next_index == current_index:
-			break  # Prevents infinite loop if all cryptids have completed turns
+		checked_count += 1
 	
 	if next_cryptid == null:
 		print("All cryptids have taken their turn, moving to battle phase")
@@ -199,7 +239,39 @@ func next_cryptid_turn():
 		game_controller.battle_phase()
 		return
 	
-	print("Switching to cryptid: ", next_cryptid.name)
+	# Set the new cryptid as selected and update the UI
+	selected_cryptid = next_cryptid
+	selected_cryptid.currently_selected = true
+	switch_cryptid_deck(selected_cryptid)
+		# Force update action menu button state for the new cryptid
+	var action_menu = get_node("/root/Main/UIRoot/ActionSelectMenu")
+	if action_menu:
+		# First ensure it's visible
+		action_menu.show()
+		
+		# Get direct references to the buttons
+		var swap_button = action_menu.get_node("VBoxContainer/SwapButton")
+		var rest_button = action_menu.get_node("VBoxContainer/RestButton")
+		var catch_button = action_menu.get_node("VBoxContainer/CatchButton")
+		var end_turn_button = action_menu.get_node("VBoxContainer/EndTurnButton")
+		
+		# Check if this cryptid has already used a card action
+		if selected_cryptid.top_card_played or selected_cryptid.bottom_card_played:
+			print("NEW TURN - Cryptid has used card action, hiding action buttons")
+			
+			# Hide action buttons, show only end turn
+			if swap_button: swap_button.hide()
+			if rest_button: rest_button.hide()
+			if catch_button: catch_button.hide()
+			if end_turn_button: end_turn_button.show()
+		else:
+			print("NEW TURN - Cryptid has not used card action, showing all buttons")
+			
+			# Show all buttons
+			if swap_button: swap_button.show()
+			if rest_button: rest_button.show()
+			if catch_button: catch_button.show()
+			if end_turn_button: end_turn_button.show()
 	
 func check_turn_completion():
 	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
@@ -231,3 +303,48 @@ func update_card_availability():
 	# If both actions have been used, check if turn is complete
 	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
 		selected_cryptid.completed_turn = true
+		
+
+func create_unique_card_instance(card_template):
+	# Create a new card resource
+	var new_card = Card.new()
+	
+	# Duplicate the top move
+	var new_top_move = Move.new()
+	new_top_move.name_prefix = card_template.top_move.name_prefix
+	new_top_move.name_suffix = card_template.top_move.name_suffix
+	new_top_move.card_side = card_template.top_move.card_side
+	new_top_move.elemental_type = card_template.top_move.elemental_type.duplicate()
+	
+	# Duplicate top move actions
+	for action in card_template.top_move.actions:
+		var new_action = Action.new()
+		new_action.action_types = action.action_types.duplicate()
+		new_action.range = action.range
+		new_action.amount = action.amount
+		new_action.area_of_effect = action.area_of_effect.duplicate()
+		new_action.disabled = action.disabled
+		new_top_move.add_action(new_action)
+	
+	# Duplicate the bottom move
+	var new_bottom_move = Move.new()
+	new_bottom_move.name_prefix = card_template.bottom_move.name_prefix
+	new_bottom_move.name_suffix = card_template.bottom_move.name_suffix
+	new_bottom_move.card_side = card_template.bottom_move.card_side
+	new_bottom_move.elemental_type = card_template.bottom_move.elemental_type.duplicate()
+	
+	# Duplicate bottom move actions
+	for action in card_template.bottom_move.actions:
+		var new_action = Action.new()
+		new_action.action_types = action.action_types.duplicate()
+		new_action.range = action.range
+		new_action.amount = action.amount
+		new_action.area_of_effect = action.area_of_effect.duplicate()
+		new_action.disabled = action.disabled
+		new_bottom_move.add_action(new_action)
+	
+	# Assign the duplicated moves to the new card
+	new_card.top_move = new_top_move
+	new_card.bottom_move = new_bottom_move
+	
+	return new_card

@@ -54,41 +54,42 @@ func _gui_input(event):
 			
 			# Check if top half is clicked
 			if top_half_container.get_global_rect().has_point(event.global_position):
-				# Check if this half is disabled
+				# Only check if disabled, not whether an action was used
 				if top_half_container.disabled:
 					return
-					
-				# Check if the cryptid already used a top action this turn
-				if parent_hand.selected_cryptid.top_card_played:
-					print("Already used a top action this turn")
-					return
 				
-				# Reset all highlighting
+				# Reset highlighting, but preserve grayed out state for disabled cards
 				for card in parent_hand.get_children():
-					card.top_half_container.modulate = Color(1, 1, 1, 1)
+					if card is CardDialog:  # Make sure we're only affecting card dialogs
+						# Only reset non-disabled cards to white
+						if not card.top_half_container.disabled:
+							card.top_half_container.modulate = Color(1, 1, 1, 1)
+						if not card.bottom_half_container.disabled:
+							card.bottom_half_container.modulate = Color(1, 1, 1, 1)
 				
-				# Highlight this top half
+				# Highlight this top half only
 				top_half_container.modulate = Color(1, 1, 0, 1)
 				perform_action(card_resource.top_move.actions[0].action_types)
 				
 			# Check if bottom half is clicked
 			elif bottom_half_container.get_global_rect().has_point(event.global_position):
-				# Check if this half is disabled
+				# Only check if disabled, not whether an action was used
 				if bottom_half_container.disabled:
 					return
-					
-				# Check if the cryptid already used a bottom action this turn
-				if parent_hand.selected_cryptid.bottom_card_played:
-					print("Already used a bottom action this turn")
-					return
 				
-				# Reset all highlighting
+				# Reset highlighting, but preserve grayed out state for disabled cards
 				for card in parent_hand.get_children():
-					card.bottom_half_container.modulate = Color(1, 1, 1, 1)
+					if card is CardDialog:  # Make sure we're only affecting card dialogs
+						# Only reset non-disabled cards to white
+						if not card.top_half_container.disabled:
+							card.top_half_container.modulate = Color(1, 1, 1, 1)
+						if not card.bottom_half_container.disabled:
+							card.bottom_half_container.modulate = Color(1, 1, 1, 1)
 				
-				# Highlight this bottom half
+				# Highlight this bottom half only
 				bottom_half_container.modulate = Color(1, 1, 0, 1)
 				perform_action(card_resource.bottom_move.actions[0].action_types)
+
 
 func is_in_selected_cards() -> bool:
 	return self.get_parent().is_in_group("selected_card")
@@ -117,6 +118,23 @@ func display(card: Card):
 
 
 func perform_action(actions: Array[Action.ActionType]):
+	# Get parent hand and selected cryptid
+	var parent_hand = get_parent()
+	if not parent_hand.has_method("switch_cryptid_deck"):
+		return
+	
+	var selected_cryptid = parent_hand.selected_cryptid
+	if not selected_cryptid:
+		return
+	
+	# Check if the cryptid has already used a top/bottom action
+	# We'll allow the highlighting and selection even if an action was used,
+	# but the actual execution will be prevented in handle_move_action/handle_attack_action
+	if top_half_container.modulate == Color(1, 1, 0, 1) and selected_cryptid.top_card_played:
+		print("Warning: Top action already used this turn. Showing action but it won't be executed.")
+	elif bottom_half_container.modulate == Color(1, 1, 0, 1) and selected_cryptid.bottom_card_played:
+		print("Warning: Bottom action already used this turn. Showing action but it won't be executed.")
+	
 	action_types = actions
 	
 	# Reset any previous action states before starting a new one
@@ -124,6 +142,11 @@ func perform_action(actions: Array[Action.ActionType]):
 	tile_map_layer.attack_action_bool = false
 	tile_map_layer.delete_all_lines()
 	tile_map_layer.delete_all_indicators()
+	
+	# Hide the action selection menu while performing the action
+	var action_selection_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_selection_menu:
+		action_selection_menu.hide()
 	
 	for action_type in action_types:
 		match action_type:
@@ -151,12 +174,10 @@ func perform_action(actions: Array[Action.ActionType]):
 				immobilize_action()
 			_:
 				print("Unknown action type")
-				
-	# Mark this half as used
-	if top_half_container.modulate == Color(1, 1, 0, 1):
-		top_half_container.disabled = true
-	elif bottom_half_container.modulate == Color(1, 1, 0, 1):
-		bottom_half_container.disabled = true
+	
+	# Important: Don't disable the container here or mark actions as used
+	# This will be done in handle_move_action/handle_attack_action
+	# only when the action is successfully executed
 
 func move_action():
 	tile_map_layer.move_action_bool = true

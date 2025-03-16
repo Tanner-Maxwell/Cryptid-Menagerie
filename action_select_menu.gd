@@ -4,46 +4,93 @@ extends Control
 signal action_selected(action_type: int)
 
 # Enum for the action types
-enum ActionType { PICK_CARDS, SWAP, REST, CATCH, CARDS_PICKED, BATTLE_PHASE }
+enum ActionType { SWAP, REST, CATCH, BATTLE_PHASE, END_TURN }
 
 @onready var hand = %Hand
 @onready var tile_map_layer = %TileMapLayer
 
+# Direct references to buttons for more reliable access
+@onready var swap_button = $VBoxContainer/SwapButton
+@onready var rest_button = $VBoxContainer/RestButton
+@onready var catch_button = $VBoxContainer/CatchButton
+@onready var end_turn_button = $VBoxContainer/EndTurnButton
 
 func _ready():
+	# Print button references to verify we have the correct paths
+	print("Button references in action_select_menu:")
+	print("  swap_button =", swap_button != null)
+	print("  rest_button =", rest_button != null)
+	print("  catch_button =", catch_button != null)
+	print("  end_turn_button =", end_turn_button != null)
+	
 	# Connecting button signals to the respective functions
-	$VBoxContainer/PickCardButton.connect("pressed", Callable(self, "_on_pick_cards_pressed"))
 	$VBoxContainer/SwapButton.connect("pressed", Callable(self, "_on_swap_pressed"))
 	$VBoxContainer/RestButton.connect("pressed", Callable(self, "_on_rest_pressed"))
 	$VBoxContainer/CatchButton.connect("pressed", Callable(self, "_on_catch_pressed"))
-	%ConfirmCardButton.connect("pressed", Callable(self, "_on_confirm_card_pressed"))
+	$VBoxContainer/EndTurnButton.connect("pressed", Callable(self, "_on_end_turn_pressed"))
+
+func update_menu_visibility(cryptid: Cryptid):
+	if cryptid == null:
+		print("ERROR: Null cryptid passed to update_menu_visibility")
+		return
+		
+	print("Updating menu for cryptid: ", cryptid.name)
+	print("top_card_played: ", cryptid.top_card_played, ", bottom_card_played: ", cryptid.bottom_card_played)
+	
+	# Check if the cryptid has used a card action this turn
+	if cryptid.top_card_played or cryptid.bottom_card_played:
+		print("Card action used - hiding action buttons, showing only End Turn")
+		$VBoxContainer/SwapButton.hide()
+		$VBoxContainer/RestButton.hide()
+		$VBoxContainer/CatchButton.hide()
+		$VBoxContainer/EndTurnButton.show()
+	else:
+		print("No card action used - showing all action buttons")
+		$VBoxContainer/SwapButton.show()
+		$VBoxContainer/RestButton.show()
+		$VBoxContainer/CatchButton.show()
+		$VBoxContainer/EndTurnButton.show()
 
 # Function to display the action selection menu
 func prompt_player_for_action():
-	self.visible = true
+	print("MENU: prompt_player_for_action called")
+	
+	# Ensure we're visible first
+	show()
+	
+	# Update button visibility based on current cryptid
+	var selected_cryptid = null
+	if hand and hand.has_method("switch_cryptid_deck"):
+		selected_cryptid = hand.selected_cryptid
+		if selected_cryptid:
+			update_menu_visibility(selected_cryptid)
+		else:
+			print("ERROR: No selected_cryptid found in hand!")
+	else:
+		print("ERROR: hand reference invalid or missing switch_cryptid_deck method!")
 
+# Function to explicitly force-update the menu state
+func force_update():
+	if hand and hand.selected_cryptid:
+		update_menu_visibility(hand.selected_cryptid)
+	
 # Functions for each action button
-func _on_pick_cards_pressed():
-	self.visible = false
-	emit_signal("action_selected", ActionType.PICK_CARDS)
-	print("pick cards pressed")
-
 func _on_swap_pressed():
-	self.visible = false
+	hide()
 	emit_signal("action_selected", ActionType.SWAP)
 
 func _on_rest_pressed():
-	self.visible = false
+	hide()
 	emit_signal("action_selected", ActionType.REST)
 
 func _on_catch_pressed():
-	self.visible = false
+	hide()
 	emit_signal("action_selected", ActionType.CATCH)
 
-func _on_confirm_card_pressed():
-	if hand.highlighted_cards.size() == 2 and hand.selected_cryptid.completed_turn == false:
-		emit_signal("action_selected", ActionType.CARDS_PICKED)
-		if tile_map_layer.any_cryptid_not_completed():
-			emit_signal("action_selected", ActionType.BATTLE_PHASE)
-	
-	
+func _on_end_turn_pressed():
+	hide()
+	emit_signal("action_selected", ActionType.END_TURN)
+
+# Called when all player cryptids have completed their turns
+func trigger_battle_phase():
+	emit_signal("action_selected", ActionType.BATTLE_PHASE)
