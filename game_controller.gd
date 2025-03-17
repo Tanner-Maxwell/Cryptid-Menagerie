@@ -131,9 +131,10 @@ func battle_phase():
 		# After enemy turn, reset all turns and start a new round
 		reset_all_cryptid_turns()
 		transition(GameState.PLAYER_TURN)
+		hand.show()
 	
 func reset_all_cryptid_turns():
-	for cryptid_in_play in tile_map_layer.player_cryptids_in_play:
+	for cryptid_in_play in tile_map_layer.all_cryptids_in_play:
 		cryptid_in_play.cryptid.completed_turn = false
 		cryptid_in_play.cryptid.top_card_played = false
 		cryptid_in_play.cryptid.bottom_card_played = false

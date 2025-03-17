@@ -340,7 +340,7 @@ _bundled = {
 
 [sub_resource type="Resource" id="Resource_y06fg"]
 script = ExtResource("9_1osvm")
-name = "Fire Turtle"
+name = "Fire Turtle (enemy 3)"
 scene = SubResource("PackedScene_oggty")
 icon = SubResource("CompressedTexture2D_nipvo")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
@@ -374,7 +374,7 @@ _bundled = {
 
 [sub_resource type="Resource" id="Resource_3th1k"]
 script = ExtResource("9_1osvm")
-name = "Fire Turtle"
+name = "Fire Turtle (enemy 2)"
 scene = SubResource("PackedScene_ef451")
 icon = SubResource("CompressedTexture2D_asldo")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
@@ -386,13 +386,13 @@ bottom_card_played = false
 strength = 10
 knowledge = 10
 willpower = 10
-dexterity = 20
+dexterity = 22
 vigor = 25
 level = 3
 
 [sub_resource type="Resource" id="Resource_stun3"]
 script = ExtResource("9_1osvm")
-name = "Fire Turtle"
+name = "Fire Turtle (enemy 1)"
 scene = ExtResource("16_rcj1w")
 icon = ExtResource("14_c2v55")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])

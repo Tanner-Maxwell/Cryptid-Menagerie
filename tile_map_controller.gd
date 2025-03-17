@@ -2,10 +2,8 @@ extends TileMapLayer
 
 const MAIN_ATLAS_ID = 0
 
-@onready var cur_position = NodeBase.new()
-@onready var tar_position = NodeBase.new()
-@onready var enemy_position = NodeBase.new()
 @onready var a_star_hex_grid = AStar2D.new()
+@onready var a_star_hex_attack_grid = AStar2D.new()
 @onready var line_container = $LineContainer
 @onready var player_pos = map_to_local(Vector2i(-4, 1))
 @onready var selected_cryptid = $"PlayerTeam/Grove Starter"
@@ -47,12 +45,9 @@ var damage
 
 func _ready():
 	cur_position_cube = axial_to_cube(local_to_map(player_pos))
-	cur_position.Hex_Cords = Vector2i(-4, 1)
-	enemy_position.Hex_Cords = Vector2i(0, -3)
-	create_hex_map_a_star(cur_position.Hex_Cords)
-	show_coordinates_label(cur_position.Hex_Cords)
-	walkable_hexes.erase(cur_position.Hex_Cords)
-	walkable_hexes.erase(enemy_position.Hex_Cords)
+	var cur_position = Vector2i(-6, 1)
+	create_hex_map_a_star(cur_position)
+	show_coordinates_label(cur_position)
 	
 	#Place player and enemy teams on map
 	player_cryptids_in_play = initialize_starting_positions(player_starting_positions, player_team)
@@ -97,8 +92,9 @@ func initialize_starting_positions(starting_positions : Array, team):
 		
 		cryptid.position = map_to_local(starting_positions[cryptids_in_play.size()])
 		cryptid.hand = %Hand
-		walkable_hexes.erase(local_to_map(cryptid.position))
 		cryptids_in_play.append(cryptid)
+		var point = a_star_hex_grid.get_closest_point(positions, true)
+		a_star_hex_grid.set_point_disabled(point)
 	return cryptids_in_play
 
 func handle_right_click():
@@ -107,6 +103,7 @@ func handle_right_click():
 func handle_mouse_motion():
 	# Get the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
+	
 	
 	if selected_cryptid == null:
 		selected_cryptid = player_cryptids_in_play[0]
@@ -117,13 +114,23 @@ func handle_mouse_motion():
 		a_star_hex_grid.get_closest_point(local_to_map(get_local_mouse_position()))
 	)
 	
+	var attack_path = a_star_hex_attack_grid.get_id_path(
+		a_star_hex_attack_grid.get_closest_point(local_to_map(selected_cryptid.position)),
+		a_star_hex_attack_grid.get_closest_point(local_to_map(get_local_mouse_position()))
+	)
+	
+	
 	vector_path = []
 	point_path = []
+	var attack_vector_path = []
+	var attack_point_path = []
 	for point in path:
 		vector_path.append(map_to_local(a_star_hex_grid.get_point_position(point)))
 		point_path.append(a_star_hex_grid.get_point_position(point))
+	for point in attack_path:
+		attack_vector_path.append(map_to_local(a_star_hex_attack_grid.get_point_position(point)))
+		attack_point_path.append(a_star_hex_attack_grid.get_point_position(point))
 	delete_all_lines()
-	
 	# Handle move action visualization
 	if move_action_bool and walkable_hexes.find(local_to_map(get_local_mouse_position())) != -1:
 		draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), move_leftover, Color(0, 1, 0))
@@ -133,7 +140,7 @@ func handle_mouse_motion():
 		var attack_distance = point_path.size() - 1
 		if attack_distance <= attack_range:
 			var attack_color = Color(1, 0, 0)  # Red for attack
-			draw_lines_between_points(convert_vector2_array_to_vector2i_array(vector_path), attack_range, attack_color)
+			draw_lines_between_points(convert_vector2_array_to_vector2i_array(attack_vector_path), attack_range, attack_color)
 
 func handle_left_click(event):
 	var global_clicked = event.position
@@ -155,7 +162,7 @@ func handle_left_click(event):
 		handle_move_action(pos_clicked)
 	elif attack_action_bool:
 		print("Handling attack action")
-		handle_attack_action(pos_clicked)
+		handle_attack_action(pos_clicked) 
 	else:
 		print("No action type active")
 
@@ -315,9 +322,11 @@ func _input(event):
 func move_action_selected(current_card):
 	card_dialog = current_card
 	move_action_bool = false
-	
 	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
+	
+	var point = a_star_hex_grid.get_closest_point(local_to_map(selected_cryptid.position), true)
+	a_star_hex_grid.set_point_disabled(point, false)
 	if selected_cryptid == null:
 		print("ERROR: No selected cryptid found when selecting move action")
 		return
@@ -357,6 +366,10 @@ func attack_action_selected(current_card):
 	
 	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
+	
+	var point = a_star_hex_grid.get_closest_point(local_to_map(selected_cryptid.position), true)
+	a_star_hex_grid.set_point_disabled(point, false)
+	
 	if selected_cryptid == null:
 		print("ERROR: No selected cryptid found when selecting attack action")
 		return
@@ -431,13 +444,16 @@ func create_hex_map_a_star(start_pos):
 	walkable_hexes.append(start_pos)
 	var processed = {}
 	var id_counter = 0
-
+	a_star_hex_grid.clear()
+	a_star_hex_attack_grid.clear()
+	
 	while toSearch.size() > 0:
 		var current_node = toSearch.pop_front()
 		if current_node in processed:
 			continue
 
 		a_star_hex_grid.add_point(id_counter, Vector2(current_node.x, current_node.y))
+		a_star_hex_attack_grid.add_point(id_counter, Vector2(current_node.x, current_node.y))
 		processed[current_node] = id_counter
 		for neighbor in get_surrounding_cells(current_node):
 			show_coordinates_label(neighbor)
@@ -450,6 +466,7 @@ func create_hex_map_a_star(start_pos):
 		for neighbor in get_surrounding_cells(current_node):
 			if neighbor in processed:
 				a_star_hex_grid.connect_points(processed[current_node], processed[neighbor])
+				a_star_hex_attack_grid.connect_points(processed[current_node], processed[neighbor])
 				draw_line_between_points(map_to_local(current_node), map_to_local(neighbor))
 
 func draw_line_between_points(point_a, point_b):
@@ -678,11 +695,13 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 	
 	# First, make the original hex walkable again
 	walkable_hexes.append(start_pos)
-	
+	var point = a_star_hex_grid.get_closest_point(start_pos, true)
+	a_star_hex_grid.set_point_disabled(point, false)
 	# Remove walkability from the destination hex immediately
 	# so no other cryptid can move there during animation
 	walkable_hexes.erase(end_pos)
-	
+	point = a_star_hex_grid.get_closest_point(end_pos, true)
+	a_star_hex_grid.set_point_disabled(point)
 	# Create a temp variable to store the full path
 	var movement_path = vector_path.duplicate()
 	
