@@ -194,17 +194,17 @@ func next_cryptid_turn():
 	print("Switching to next cryptid's turn")
 	
 	# First ensure that player_cryptids_in_play are sorted by speed
-	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.player_cryptids_in_play)
+	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.all_cryptids_in_play)
 	
 	# Log the current speed order for debugging
 	print("Current cryptid speed order:")
-	for cryptid in tile_map_layer.player_cryptids_in_play:
+	for cryptid in tile_map_layer.all_cryptids_in_play:
 		print(cryptid.cryptid.name, " - Speed: ", cryptid.cryptid.speed)
 	
 	# Find the index of the current cryptid in player_cryptids_in_play
 	var current_index = -1
-	for i in range(tile_map_layer.player_cryptids_in_play.size()):
-		if tile_map_layer.player_cryptids_in_play[i].cryptid == selected_cryptid:
+	for i in range(tile_map_layer.all_cryptids_in_play.size()):
+		if tile_map_layer.all_cryptids_in_play[i].cryptid == selected_cryptid:
 			current_index = i
 			break
 	
@@ -217,25 +217,25 @@ func next_cryptid_turn():
 	# Find the next cryptid that hasn't completed their turn
 	# Start from the next index and loop around if necessary
 	var checked_count = 0
-	var next_index = (current_index + 1) % tile_map_layer.player_cryptids_in_play.size()
+	var next_index = (current_index + 1) % tile_map_layer.all_cryptids_in_play.size()
 	var next_cryptid = null
 	
 	# Loop through all cryptids starting from the next one and going in order
-	while checked_count < tile_map_layer.player_cryptids_in_play.size():
-		var candidate = tile_map_layer.player_cryptids_in_play[next_index].cryptid
+	while checked_count < tile_map_layer.all_cryptids_in_play.size():
+		var candidate = tile_map_layer.all_cryptids_in_play[next_index].cryptid
 		
 		if not candidate.completed_turn:
 			next_cryptid = candidate
 			break
 			
 		# Move to the next index, wrapping around if necessary
-		next_index = (next_index + 1) % tile_map_layer.player_cryptids_in_play.size()
+		next_index = (next_index + 1) % tile_map_layer.all_cryptids_in_play.size()
 		checked_count += 1
 	
 	if next_cryptid == null:
 		print("All cryptids have taken their turn, moving to battle phase")
 		# All cryptids have taken their turn, transition to the next phase
-		var game_controller = get_node("/root/Main/GameController")
+		var game_controller = %GameController
 		game_controller.battle_phase()
 		return
 	
@@ -244,7 +244,7 @@ func next_cryptid_turn():
 	selected_cryptid.currently_selected = true
 	switch_cryptid_deck(selected_cryptid)
 		# Force update action menu button state for the new cryptid
-	var action_menu = get_node("/root/Main/UIRoot/ActionSelectMenu")
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu:
 		# First ensure it's visible
 		action_menu.show()

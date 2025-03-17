@@ -493,7 +493,7 @@ func show_coordinates_label(hex_coords):
 	add_child(coordinates)
 	
 func any_cryptid_not_completed():
-	for cryptid_in_play in player_cryptids_in_play:
+	for cryptid_in_play in all_cryptids_in_play:
 		if cryptid_in_play.cryptid.completed_turn == false:
 			return true 
 	return false
@@ -501,10 +501,10 @@ func any_cryptid_not_completed():
 func currently_selected_cryptid():
 	# Debug which cryptids are in play
 	print("Checking for currently selected cryptid")
-	print("Number of player cryptids in play: ", player_cryptids_in_play.size())
+	print("Number of player cryptids in play: ", all_cryptids_in_play.size())
 	
 	# First check if any cryptid is marked as currently_selected
-	for player_cryptid in player_cryptids_in_play:
+	for player_cryptid in all_cryptids_in_play:
 		if player_cryptid.cryptid.currently_selected == true:
 			print("Found selected cryptid: ", player_cryptid.cryptid.name)
 			return player_cryptid
@@ -515,20 +515,20 @@ func currently_selected_cryptid():
 		print("No cryptid marked as selected, using hand.selected_cryptid: ", hand_node.selected_cryptid.name)
 		
 		# Find the cryptid in player_cryptids_in_play that matches hand.selected_cryptid
-		for player_cryptid in player_cryptids_in_play:
+		for player_cryptid in all_cryptids_in_play:
 			if player_cryptid.cryptid == hand_node.selected_cryptid:
 				print("Found matching cryptid in player_cryptids_in_play")
 				return player_cryptid
 		
 		# If we didn't find a match, just return the first cryptid
 		print("WARNING: No matching cryptid found, using first cryptid")
-		if player_cryptids_in_play.size() > 0:
-			return player_cryptids_in_play[0]
+		if all_cryptids_in_play.size() > 0:
+			return all_cryptids_in_play[0]
 	
 	# If all else fails, return the first cryptid if available
-	if player_cryptids_in_play.size() > 0:
+	if all_cryptids_in_play.size() > 0:
 		print("No selected cryptid found, defaulting to first cryptid")
-		return player_cryptids_in_play[0]
+		return all_cryptids_in_play[0]
 	
 	# If we get here, something is seriously wrong
 	print("CRITICAL ERROR: No cryptids in play!")
