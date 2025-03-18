@@ -113,7 +113,6 @@ func battle_phase():
 	print("Entering battle phase")
 	game_instructions.text = "Battle phase"
 	
-	hand.hide()
 	action_selection_menu.hide()
 	discarded_cards.show()
 	

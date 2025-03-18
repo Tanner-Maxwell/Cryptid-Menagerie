@@ -1,4 +1,4 @@
-[gd_scene load_steps=63 format=4 uid="uid://citawmf1hj211"]
+[gd_scene load_steps=83 format=4 uid="uid://citawmf1hj211"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="1_2lacv"]
 [ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_ot6rc"]
@@ -322,10 +322,89 @@ dexterity = 8
 vigor = 25
 level = 3
 
-[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_nipvo"]
+[sub_resource type="Resource" id="Resource_3d2rr"]
+script = ExtResource("12_5n0p1")
+action_types = Array[int]([1])
+range = 1
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_2k767"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_3rjur"]
+script = ExtResource("12_5n0p1")
+action_types = Array[int]([0])
+range = 1
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_atvuc"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
+name_prefix = "Test Card"
+name_suffix = "Card"
+card_side = 0
+elemental_type = Array[int]([0])
+
+[sub_resource type="Resource" id="Resource_rq8o3"]
+script = ExtResource("10_jbw6i")
+top_move = SubResource("Resource_atvuc")
+bottom_move = SubResource("Resource_2k767")
+
+[sub_resource type="Resource" id="Resource_tr5kk"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_qq66m"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
+name_prefix = "Test Card"
+name_suffix = "Card"
+card_side = 0
+elemental_type = Array[int]([0])
+
+[sub_resource type="Resource" id="Resource_5acol"]
+script = ExtResource("10_jbw6i")
+top_move = SubResource("Resource_qq66m")
+bottom_move = SubResource("Resource_tr5kk")
+
+[sub_resource type="Resource" id="Resource_uent4"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_vsl6u"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
+name_prefix = "Test Card"
+name_suffix = "Card"
+card_side = 0
+elemental_type = Array[int]([0])
+
+[sub_resource type="Resource" id="Resource_oclnh"]
+script = ExtResource("10_jbw6i")
+top_move = SubResource("Resource_vsl6u")
+bottom_move = SubResource("Resource_uent4")
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_wfi7k"]
 load_path = "res://.godot/imported/icon.svg-2194ec2d4d4006ba4bc754876170d4ab.ctex"
 
-[sub_resource type="PackedScene" id="PackedScene_oggty"]
+[sub_resource type="PackedScene" id="PackedScene_fb73x"]
 _bundled = {
 "conn_count": 0,
 "conns": PackedInt32Array(),
@@ -338,12 +417,12 @@ _bundled = {
 "version": 3
 }
 
-[sub_resource type="Resource" id="Resource_y06fg"]
+[sub_resource type="Resource" id="Resource_b8npm"]
 script = ExtResource("9_1osvm")
 name = "Fire Turtle (enemy 3)"
-scene = SubResource("PackedScene_oggty")
-icon = SubResource("CompressedTexture2D_nipvo")
-deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
+scene = SubResource("PackedScene_fb73x")
+icon = SubResource("CompressedTexture2D_wfi7k")
+deck = Array[ExtResource("10_jbw6i")]([SubResource("Resource_rq8o3"), SubResource("Resource_5acol"), SubResource("Resource_oclnh"), ExtResource("11_17rov")])
 discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
@@ -356,10 +435,73 @@ dexterity = 20
 vigor = 25
 level = 3
 
-[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_asldo"]
+[sub_resource type="Resource" id="Resource_3jifh"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_78j0b"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
+name_prefix = "Test Card"
+name_suffix = "Card"
+card_side = 0
+elemental_type = Array[int]([0])
+
+[sub_resource type="Resource" id="Resource_w32nb"]
+script = ExtResource("10_jbw6i")
+top_move = SubResource("Resource_78j0b")
+bottom_move = SubResource("Resource_3jifh")
+
+[sub_resource type="Resource" id="Resource_yvsdw"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_vnkwl"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
+name_prefix = "Test Card"
+name_suffix = "Card"
+card_side = 0
+elemental_type = Array[int]([0])
+
+[sub_resource type="Resource" id="Resource_l1h5a"]
+script = ExtResource("10_jbw6i")
+top_move = SubResource("Resource_vnkwl")
+bottom_move = SubResource("Resource_yvsdw")
+
+[sub_resource type="Resource" id="Resource_k5n64"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_qnbyi"]
+script = ExtResource("13_qv2a1")
+actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
+name_prefix = "Test Card"
+name_suffix = "Card"
+card_side = 0
+elemental_type = Array[int]([0])
+
+[sub_resource type="Resource" id="Resource_afyyh"]
+script = ExtResource("10_jbw6i")
+top_move = SubResource("Resource_qnbyi")
+bottom_move = SubResource("Resource_k5n64")
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_cowd6"]
 load_path = "res://.godot/imported/icon.svg-2194ec2d4d4006ba4bc754876170d4ab.ctex"
 
-[sub_resource type="PackedScene" id="PackedScene_ef451"]
+[sub_resource type="PackedScene" id="PackedScene_tpgo7"]
 _bundled = {
 "conn_count": 0,
 "conns": PackedInt32Array(),
@@ -372,12 +514,12 @@ _bundled = {
 "version": 3
 }
 
-[sub_resource type="Resource" id="Resource_3th1k"]
+[sub_resource type="Resource" id="Resource_m1ovu"]
 script = ExtResource("9_1osvm")
 name = "Fire Turtle (enemy 2)"
-scene = SubResource("PackedScene_ef451")
-icon = SubResource("CompressedTexture2D_asldo")
-deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
+scene = SubResource("PackedScene_tpgo7")
+icon = SubResource("CompressedTexture2D_cowd6")
+deck = Array[ExtResource("10_jbw6i")]([SubResource("Resource_w32nb"), SubResource("Resource_l1h5a"), SubResource("Resource_afyyh")])
 discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
@@ -386,7 +528,7 @@ bottom_card_played = false
 strength = 10
 knowledge = 10
 willpower = 10
-dexterity = 22
+dexterity = 26
 vigor = 25
 level = 3
 
@@ -395,7 +537,7 @@ script = ExtResource("9_1osvm")
 name = "Fire Turtle (enemy 1)"
 scene = ExtResource("16_rcj1w")
 icon = ExtResource("14_c2v55")
-deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
+deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov")])
 discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
@@ -447,7 +589,7 @@ _content = Array[ExtResource("9_1osvm")]([SubResource("Resource_20ouo"), SubReso
 [node name="EnemyTeam" type="Node2D" parent="TileMapLayer" groups=["enemy"]]
 unique_name_in_owner = true
 script = ExtResource("8_on72b")
-_content = Array[ExtResource("9_1osvm")]([SubResource("Resource_y06fg"), SubResource("Resource_3th1k"), SubResource("Resource_stun3"), ExtResource("11_ce42a"), ExtResource("11_ce42a"), ExtResource("11_ce42a")])
+_content = Array[ExtResource("9_1osvm")]([SubResource("Resource_b8npm"), SubResource("Resource_m1ovu"), SubResource("Resource_stun3"), ExtResource("11_ce42a"), ExtResource("11_ce42a"), ExtResource("11_ce42a")])
 
 [node name="GameController" type="Node2D" parent="TileMapLayer"]
 unique_name_in_owner = true
@@ -487,21 +629,21 @@ angle_limit = 22.5
 max_card_spread_angle = 6.0
 metadata/_edit_use_anchors_ = true
 
-[node name="DiscardCards" type="HBoxContainer" parent="UIRoot" groups=["selected_card"]]
+[node name="DiscardDialog" type="VBoxContainer" parent="UIRoot"]
+offset_left = 31.0
+offset_top = 427.0
+offset_right = 94.0
+offset_bottom = 467.0
+
+[node name="Label" type="Label" parent="UIRoot/DiscardDialog"]
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Discard:"
+
+[node name="DiscardCards" type="HBoxContainer" parent="UIRoot/DiscardDialog" groups=["selected_card"]]
 unique_name_in_owner = true
-anchors_preset = -1
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.521
-offset_left = -97.0
-offset_top = 181.0
-offset_right = 68.0
-offset_bottom = 233.392
-grow_horizontal = 2
-grow_vertical = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
+layout_mode = 2
+size_flags_horizontal = 8
 script = ExtResource("20_c4vra")
 
 [node name="Turn Order" type="VBoxContainer" parent="UIRoot"]

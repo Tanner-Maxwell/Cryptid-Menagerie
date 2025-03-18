@@ -45,7 +45,7 @@ var damage
 
 func _ready():
 	cur_position_cube = axial_to_cube(local_to_map(player_pos))
-	var cur_position = Vector2i(-6, 1)
+	var cur_position = Vector2i(-6, -1)
 	create_hex_map_a_star(cur_position)
 	show_coordinates_label(cur_position)
 	

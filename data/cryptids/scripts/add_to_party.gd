@@ -2,9 +2,13 @@ extends Node2D
 
 @onready var player = %Player
 @onready var hand = %Hand
+@onready var discard_cards = %DiscardCards
+
 @onready var turn_completed_ = $"TurnCompleted?"
 @onready var selected = $Selected
 @onready var player_team = %PlayerTeam
+var discard_cards_visible = false
+
 
 @export var cryptid:Cryptid
 var max_health : int
@@ -17,6 +21,9 @@ func _ready():
 	set_health_values(cryptid.health, cryptid.health)
 	update_health_bar()
 	hand = %Hand
+	discard_cards = get_tree().get_root().find_child("DiscardDialog", true, false)
+	if discard_cards == null:
+		print("ERROR: Could not find DiscardCards node in scene tree")
 	selected.modulate = Color(0, 0 , 0, 0)
 
 func _process(delta):
@@ -32,10 +39,18 @@ func _process(delta):
 		
 
 func _on_area_2d_input_event(viewport, event, shape_idx):
-	if event is InputEventMouse:
-		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and self.get_parent().is_in_group("player"):
-			#hand.switch_cryptid_deck(cryptid)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
+		# Toggle visibility of discard cards
+		discard_cards_visible = !discard_cards_visible
+		
+		if discard_cards_visible:
+			# Show discard cards - assuming this is already implemented
 			hand.switch_cryptid_discard_cards(cryptid)
+			discard_cards.show()
+		else:
+			# Hide discard cards
+			discard_cards.hide()
+			
 
 func set_health_values(_health: int, _max_health: int):
 	max_health = _max_health
