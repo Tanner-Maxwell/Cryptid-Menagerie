@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="Card" load_steps=8 format=3 uid="uid://cjdtdwe3w3uor"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="1_2g0nm"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="2_h46lt"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="3_c871r"]
+
+[sub_resource type="Resource" id="Resource_3d2rr"]
+script = ExtResource("1_2g0nm")
+action_types = Array[int]([1])
+range = 2
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_2k767"]
+script = ExtResource("2_h46lt")
+actions = Array[ExtResource("1_2g0nm")]([SubResource("Resource_3d2rr")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_3rjur"]
+script = ExtResource("1_2g0nm")
+action_types = Array[int]([0])
+range = 2
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_atvuc"]
+script = ExtResource("2_h46lt")
+actions = Array[ExtResource("1_2g0nm")]([SubResource("Resource_3rjur")])
+name_prefix = "Test Card"
+name_suffix = "Card"
+card_side = 0
+elemental_type = Array[int]([0])
+
+[resource]
+script = ExtResource("3_c871r")
+top_move = SubResource("Resource_atvuc")
+bottom_move = SubResource("Resource_2k767")

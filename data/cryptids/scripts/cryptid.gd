@@ -42,7 +42,7 @@ func calculate_stats():
 	var vigor_score = get_ability_score(vigor)
 	
 	# Calculate health based on vigor ability score and level
-	health = (10 + vigor_score) * level
+	health = (2 + vigor_score) * level
 	
 	# Speed is determined directly by the dexterity score
 	speed = dexterity_score
