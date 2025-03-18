@@ -196,6 +196,13 @@ func handle_move_action(pos_clicked):
 						card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 						card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 						selected_cryptid.cryptid.top_card_played = true
+						
+						# Mark the original card as discarded
+						if card_dialog.card_resource.original_card != null:
+							print("DEBUG: Marking original card as discarded from move action")
+							card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+						else:
+							print("ERROR: No original card reference found for move action")
 					
 		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.bottom_move.actions:
@@ -218,6 +225,13 @@ func handle_move_action(pos_clicked):
 						card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 						card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 						selected_cryptid.cryptid.bottom_card_played = true
+						
+						# Mark the original card as discarded
+						if card_dialog.card_resource.original_card != null:
+							print("DEBUG: Marking original card as discarded from move action")
+							card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+						else:
+							print("ERROR: No original card reference found for move action")
 		
 		# Only update the game state if a move was actually performed
 		if move_performed:
@@ -278,6 +292,14 @@ func handle_attack_action(pos_clicked):
 				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				selected_cryptid.cryptid.top_card_played = true
+				
+				# Mark the original card as discarded
+				if card_dialog.card_resource.original_card != null:
+					print("DEBUG: Marking original card as discarded from attack action")
+					card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+				else:
+					print("ERROR: No original card reference found for attack action")
+				
 			elif using_bottom_half:
 				print("Using bottom half of card")
 				card_dialog.top_half_container.disabled = true
@@ -285,6 +307,13 @@ func handle_attack_action(pos_clicked):
 				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				selected_cryptid.cryptid.bottom_card_played = true
+				
+				# Mark the original card as discarded
+				if card_dialog.card_resource.original_card != null:
+					print("DEBUG: Marking original card as discarded from attack action")
+					card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+				else:
+					print("ERROR: No original card reference found for attack action")
 			
 			# Play the attack animation
 			print("Starting attack animation")
@@ -517,13 +546,10 @@ func any_cryptid_not_completed():
 
 func currently_selected_cryptid():
 	# Debug which cryptids are in play
-	print("Checking for currently selected cryptid")
-	print("Number of player cryptids in play: ", all_cryptids_in_play.size())
 	
 	# First check if any cryptid is marked as currently_selected
 	for player_cryptid in all_cryptids_in_play:
 		if player_cryptid.cryptid.currently_selected == true:
-			print("Found selected cryptid: ", player_cryptid.cryptid.name)
 			return player_cryptid
 	
 	# If no cryptid is marked as currently_selected, check hand reference

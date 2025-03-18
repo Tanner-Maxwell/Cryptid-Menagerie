@@ -58,17 +58,17 @@ sources/0 = SubResource("TileSetAtlasSource_twunu")
 
 [sub_resource type="Resource" id="Resource_5288u"]
 script = ExtResource("12_5n0p1")
-action_types = Array[int]([1])
-range = 1
+action_types = Array[int]([0])
+range = 5
 amount = 3
 area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
 disabled = false
 
-[sub_resource type="Resource" id="Resource_xlq28"]
+[sub_resource type="Resource" id="Resource_fqmkn"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_5288u")])
 name_prefix = ""
-name_suffix = ""
+name_suffix = "fdfdf"
 card_side = 0
 elemental_type = Array[int]([])
 
@@ -80,49 +80,49 @@ amount = 3
 area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
 disabled = false
 
-[sub_resource type="Resource" id="Resource_58py4"]
+[sub_resource type="Resource" id="Resource_itxhm"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_r2em4")])
-name_prefix = "Test Card"
+name_prefix = "Test Card 1"
 name_suffix = "Card"
 card_side = 0
 elemental_type = Array[int]([0])
 
-[sub_resource type="Resource" id="Resource_n3r2e"]
+[sub_resource type="Resource" id="Resource_p4j7r"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_58py4")
-bottom_move = SubResource("Resource_xlq28")
+top_move = SubResource("Resource_itxhm")
+bottom_move = SubResource("Resource_fqmkn")
 
-[sub_resource type="Resource" id="Resource_ixknw"]
+[sub_resource type="Resource" id="Resource_8kdub"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_5288u")])
-name_prefix = ""
+name_prefix = "Test Card 5"
 name_suffix = ""
 card_side = 0
 elemental_type = Array[int]([])
 
 [sub_resource type="Resource" id="Resource_n203r"]
 script = ExtResource("12_5n0p1")
-action_types = Array[int]([0])
-range = 1
+action_types = Array[int]([1])
+range = 4
 amount = 4
 area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
 disabled = false
 
-[sub_resource type="Resource" id="Resource_evsu2"]
+[sub_resource type="Resource" id="Resource_t3nbw"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_n203r")])
-name_prefix = "Test Card"
+name_prefix = "Test Card 6"
 name_suffix = "Card"
 card_side = 0
 elemental_type = Array[int]([0])
 
-[sub_resource type="Resource" id="Resource_vr7df"]
+[sub_resource type="Resource" id="Resource_aw0op"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_evsu2")
-bottom_move = SubResource("Resource_ixknw")
+top_move = SubResource("Resource_t3nbw")
+bottom_move = SubResource("Resource_8kdub")
 
-[sub_resource type="Resource" id="Resource_bmgw5"]
+[sub_resource type="Resource" id="Resource_61wob"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_5288u")])
 name_prefix = ""
@@ -130,7 +130,7 @@ name_suffix = ""
 card_side = 0
 elemental_type = Array[int]([])
 
-[sub_resource type="Resource" id="Resource_kh0ag"]
+[sub_resource type="Resource" id="Resource_8h4qx"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_r2em4")])
 name_prefix = "Test Card"
@@ -138,12 +138,12 @@ name_suffix = "Card"
 card_side = 0
 elemental_type = Array[int]([0])
 
-[sub_resource type="Resource" id="Resource_kkrhe"]
+[sub_resource type="Resource" id="Resource_vxu6y"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_kh0ag")
-bottom_move = SubResource("Resource_bmgw5")
+top_move = SubResource("Resource_8h4qx")
+bottom_move = SubResource("Resource_61wob")
 
-[sub_resource type="Resource" id="Resource_0vlp6"]
+[sub_resource type="Resource" id="Resource_y02xb"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_5288u")])
 name_prefix = ""
@@ -151,7 +151,7 @@ name_suffix = ""
 card_side = 0
 elemental_type = Array[int]([])
 
-[sub_resource type="Resource" id="Resource_nqles"]
+[sub_resource type="Resource" id="Resource_oaji8"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_r2em4")])
 name_prefix = "Test Card"
@@ -159,12 +159,12 @@ name_suffix = "Card"
 card_side = 0
 elemental_type = Array[int]([0])
 
-[sub_resource type="Resource" id="Resource_5cn85"]
+[sub_resource type="Resource" id="Resource_hhajn"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_nqles")
-bottom_move = SubResource("Resource_0vlp6")
+top_move = SubResource("Resource_oaji8")
+bottom_move = SubResource("Resource_y02xb")
 
-[sub_resource type="Resource" id="Resource_5fqb6"]
+[sub_resource type="Resource" id="Resource_jidt2"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_5288u")])
 name_prefix = ""
@@ -172,7 +172,7 @@ name_suffix = ""
 card_side = 0
 elemental_type = Array[int]([])
 
-[sub_resource type="Resource" id="Resource_5kuq1"]
+[sub_resource type="Resource" id="Resource_lkshs"]
 script = ExtResource("13_qv2a1")
 actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_r2em4")])
 name_prefix = "Test Card"
@@ -180,18 +180,18 @@ name_suffix = "Card"
 card_side = 0
 elemental_type = Array[int]([0])
 
-[sub_resource type="Resource" id="Resource_mceyj"]
+[sub_resource type="Resource" id="Resource_jx4pa"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_5kuq1")
-bottom_move = SubResource("Resource_5fqb6")
+top_move = SubResource("Resource_lkshs")
+bottom_move = SubResource("Resource_jidt2")
 
 [sub_resource type="Resource" id="Resource_20ouo"]
 script = ExtResource("9_1osvm")
 name = "Grove Starterzzz"
 scene = ExtResource("15_3vyn4")
 icon = ExtResource("14_c2v55")
-deck = Array[ExtResource("10_jbw6i")]([SubResource("Resource_n3r2e"), SubResource("Resource_vr7df"), SubResource("Resource_kkrhe"), SubResource("Resource_5cn85"), SubResource("Resource_mceyj")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+deck = Array[ExtResource("10_jbw6i")]([SubResource("Resource_p4j7r"), SubResource("Resource_aw0op"), SubResource("Resource_vxu6y"), SubResource("Resource_hhajn"), SubResource("Resource_jx4pa")])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
 top_card_played = false
@@ -209,7 +209,7 @@ name = "Fire Turtle"
 scene = ExtResource("16_rcj1w")
 icon = ExtResource("14_c2v55")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
 top_card_played = false
@@ -256,7 +256,7 @@ name = "Grove Starter"
 scene = ExtResource("15_3vyn4")
 icon = ExtResource("14_c2v55")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), SubResource("Resource_4u70t"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
 top_card_played = false
@@ -274,7 +274,7 @@ name = "Grove Starter"
 scene = ExtResource("15_3vyn4")
 icon = ExtResource("14_c2v55")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), SubResource("Resource_4u70t"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = true
 top_card_played = false
@@ -292,7 +292,7 @@ name = "Grove Starter"
 scene = ExtResource("15_3vyn4")
 icon = ExtResource("14_c2v55")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), SubResource("Resource_4u70t"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
 top_card_played = false
@@ -310,7 +310,7 @@ name = "Fire Turtle"
 scene = ExtResource("16_rcj1w")
 icon = ExtResource("14_c2v55")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
 top_card_played = false
@@ -344,7 +344,7 @@ name = "Fire Turtle (enemy 3)"
 scene = SubResource("PackedScene_oggty")
 icon = SubResource("CompressedTexture2D_nipvo")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
 top_card_played = false
@@ -378,7 +378,7 @@ name = "Fire Turtle (enemy 2)"
 scene = SubResource("PackedScene_ef451")
 icon = SubResource("CompressedTexture2D_asldo")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
 top_card_played = false
@@ -396,7 +396,7 @@ name = "Fire Turtle (enemy 1)"
 scene = ExtResource("16_rcj1w")
 icon = ExtResource("14_c2v55")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
-selected_cards = Array[ExtResource("10_jbw6i")]([])
+discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
 top_card_played = false
@@ -487,7 +487,7 @@ angle_limit = 22.5
 max_card_spread_angle = 6.0
 metadata/_edit_use_anchors_ = true
 
-[node name="SelectedCards" type="HBoxContainer" parent="UIRoot" groups=["selected_card"]]
+[node name="DiscardCards" type="HBoxContainer" parent="UIRoot" groups=["selected_card"]]
 unique_name_in_owner = true
 anchors_preset = -1
 anchor_left = 0.5
@@ -582,3 +582,4 @@ position = Vector2(577, 330)
 scale = Vector2(-5.62239, 38.9907)
 
 [connection signal="pressed" from="UIRoot/AddCardButton" to="UIRoot/Hand" method="_on_button_pressed"]
+[connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/RestButton" to="UIRoot/Hand" method="rest_action"]

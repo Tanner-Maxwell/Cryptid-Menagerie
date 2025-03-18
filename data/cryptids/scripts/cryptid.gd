@@ -7,7 +7,7 @@ extends Resource
 @export var scene: PackedScene
 @export var icon: Texture2D
 @export var deck: Array[Card]
-@export var selected_cards: Array[Card]
+@export var discard: Array[Card]
 @export var completed_turn: bool
 @export var currently_selected: bool
 @export var top_card_played: bool

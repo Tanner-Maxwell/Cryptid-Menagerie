@@ -8,7 +8,7 @@ extends Control
 @export var current_highlighted_container = null
 @onready var tile_map_layer = %TileMapLayer
 @onready var cryptids_cards = %"Cryptids Cards"
-@onready var selected_cards_node = %SelectedCards
+@onready var discard_cards_node = %DiscardCards
 
 @onready var selected_cryptid
 
@@ -86,9 +86,13 @@ func can_highlight_more() -> bool:
 	return highlighted_cards.size() < max_highlighted_cards
 	
 func cards_selected(selected_cards: Array):
+	print("DEBUG: cards_selected called with " + str(selected_cards.size()) + " cards")
 	for cards_picked in selected_cards:
+		print("DEBUG: Removing card from deck: " + cards_picked.card_resource.to_string())
 		selected_cryptid.deck.erase(cards_picked.card_resource)
-		selected_cryptid.selected_cards.push_back(cards_picked.card_resource)
+		print("DEBUG: Adding card to discard: " + cards_picked.card_resource.to_string())
+		selected_cryptid.discard.push_back(cards_picked.card_resource)
+	print("DEBUG: After cards_selected - deck size: " + str(selected_cryptid.deck.size()) + ", discard size: " + str(selected_cryptid.discard.size()))
 	return selected_cryptid
 
 func switch_cryptid_deck(cryptid: Cryptid):
@@ -101,16 +105,30 @@ func switch_cryptid_deck(cryptid: Cryptid):
 		remove_child(child)
 		child.queue_free()
 	
+	# Debug: Print state of all cards before filtering
+	print("DEBUG: All cards state before building hand:")
+	for i in range(cryptid.deck.size()):
+		var card = cryptid.deck[i]
+		print("DEBUG: Card " + str(i) + " - state: " + str(card.current_state))
+	
 	# Create unique instances of each card
 	var base_card
+	var cards_added = 0
 	for card_resource in cryptid.deck:
-		# Create a unique copy of the card resource
-		var unique_card_resource = create_unique_card_instance(card_resource)
-		
-		# Instantiate the card dialog
-		base_card = card_dialog.instantiate()
-		base_card.card_resource = unique_card_resource
-		add_card(base_card)
+		# Only display cards that are in the deck state
+		if card_resource.current_state == Card.CardState.IN_DECK:
+			print("DEBUG: Adding card to hand - index: " + str(cards_added))
+			
+			# Create a unique copy of the card resource
+			var unique_card_resource = create_unique_card_instance(card_resource)
+			
+			# Instantiate the card dialog
+			base_card = card_dialog.instantiate()
+			base_card.card_resource = unique_card_resource
+			add_card(base_card)
+			cards_added += 1
+	
+	print("DEBUG: Total cards added to hand: " + str(cards_added))
 	
 	# Update the selected cryptid
 	if selected_cryptid:
@@ -120,26 +138,28 @@ func switch_cryptid_deck(cryptid: Cryptid):
 	
 	# Update card availability based on the new cryptid's state
 	update_card_availability()
-	
-	# Reset any active action states in the tile map
-	var tile_map = get_node("/root/VitaChrome/TileMapLayer")
-	if tile_map:
-		tile_map.move_action_bool = false
-		tile_map.attack_action_bool = false
-		tile_map.delete_all_lines()
-		tile_map.delete_all_indicators()
-		print("Reset action states in tile map")
 		
-func switch_cryptid_selected_cards(cryptid: Cryptid):
+func switch_cryptid_discard_cards(cryptid: Cryptid):
 	selected_cryptid = cryptid
 	highlighted_cards.clear()
-	for child in selected_cards_node.get_children():
-		selected_cards_node.remove_child(child)
+	for child in discard_cards_node.get_children():
+		discard_cards_node.remove_child(child)
+	
+	print("DEBUG: Building discard pile display:")
 	var base_card
-	for card_resource in cryptid.selected_cards:
-		base_card = card_dialog.instantiate()
-		base_card.card_resource = card_resource
-		selected_cards_node.add_child(base_card)
+	var cards_added = 0
+	for card_resource in cryptid.deck:
+		# Only display cards that are in the discard state
+		if card_resource.current_state == Card.CardState.IN_DISCARD:
+			print("DEBUG: Adding card to discard display - index: " + str(cards_added))
+			
+			base_card = card_dialog.instantiate()
+			base_card.card_resource = card_resource
+			discard_cards_node.add_child(base_card)
+			cards_added += 1
+	
+	print("DEBUG: Total cards added to discard display: " + str(cards_added))
+	
 	selected_cryptid.currently_selected = false
 	selected_cryptid = cryptid
 
@@ -173,22 +193,38 @@ func set_selected_bottom_card(card: CardDialog):
 	check_if_turn_complete()
 
 func check_if_turn_complete():
+	print("DEBUG: check_if_turn_complete called")
+	print("DEBUG: selected_top_card = " + str(selected_top_card))
+	print("DEBUG: selected_bottom_card = " + str(selected_bottom_card))
+	
 	if selected_top_card != null and selected_bottom_card != null:
+		print("DEBUG: Both cards selected")
+		
 		# Both top and bottom actions have been selected
 		# Make sure they're from different cards
 		if selected_top_card.card_resource != selected_bottom_card.card_resource:
+			print("DEBUG: Cards are different, completing turn")
 			selected_cryptid.top_card_played = true
 			selected_cryptid.bottom_card_played = true
-			# Add the used cards to the discard pile or remove from hand
+			
+			# Add the used cards to the discard pile
 			var cards_to_discard = [selected_top_card, selected_bottom_card]
+			print("DEBUG: Sending " + str(cards_to_discard.size()) + " cards to discard")
 			cards_selected(cards_to_discard)
+			
 			# Reset selections
 			selected_top_card = null
 			selected_bottom_card = null
+			
 			# Mark cryptid's turn as completed
 			selected_cryptid.completed_turn = true
+			
 			# Get next cryptid in turn order
 			next_cryptid_turn()
+		else:
+			print("DEBUG: Same card selected for both actions")
+	else:
+		print("DEBUG: Not all cards selected yet")
 
 func next_cryptid_turn():
 	print("Switching to next cryptid's turn")
@@ -242,6 +278,15 @@ func next_cryptid_turn():
 	# Set the new cryptid as selected and update the UI
 	selected_cryptid = next_cryptid
 	selected_cryptid.currently_selected = true
+	
+	# DEBUG: Print deck and discard contents
+	print("DEBUG: " + selected_cryptid.name + " deck size: " + str(selected_cryptid.deck.size()))
+	print("DEBUG: " + selected_cryptid.name + " discard size: " + str(selected_cryptid.discard.size()))
+	for i in range(selected_cryptid.deck.size()):
+		print("   Deck card " + str(i) + ": " + selected_cryptid.deck[i].to_string())
+	for i in range(selected_cryptid.discard.size()):
+		print("   Discard card " + str(i) + ": " + selected_cryptid.discard[i].to_string())
+	
 	switch_cryptid_deck(selected_cryptid)
 		# Force update action menu button state for the new cryptid
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
@@ -309,6 +354,12 @@ func create_unique_card_instance(card_template):
 	# Create a new card resource
 	var new_card = Card.new()
 	
+	# Store reference to original card
+	new_card.original_card = card_template
+	
+	# Copy the state
+	new_card.current_state = card_template.current_state
+	
 	# Duplicate the top move
 	var new_top_move = Move.new()
 	new_top_move.name_prefix = card_template.top_move.name_prefix
@@ -349,3 +400,17 @@ func create_unique_card_instance(card_template):
 	
 	return new_card
 
+# Add this to hand.gd or wherever your rest action is handled
+func rest_action():
+	# Reset all card states to IN_DECK
+	for card in selected_cryptid.deck:
+		card.current_state = Card.CardState.IN_DECK
+	
+	# Then refresh the hand
+	switch_cryptid_deck(selected_cryptid)
+	
+	# Mark the cryptid's turn as completed
+	selected_cryptid.completed_turn = true
+	
+	# Move to next cryptid's turn
+	next_cryptid_turn()

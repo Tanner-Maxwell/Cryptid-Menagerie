@@ -9,7 +9,7 @@ extends Node2D
 @onready var hand = %Hand
 @onready var turn_order = %"Turn Order"
 @onready var tile_map_layer = %TileMapLayer
-@onready var selected_cards = %SelectedCards
+@onready var discarded_cards = %DiscardCards
 
 enum GameState {
 	PLAYER_TURN,
@@ -115,7 +115,7 @@ func battle_phase():
 	
 	hand.hide()
 	action_selection_menu.hide()
-	selected_cards.show()
+	discarded_cards.show()
 	
 	# Check if all player cryptids have completed their turns
 	var all_completed = true
