@@ -13,7 +13,6 @@ const MAIN_ATLAS_ID = 0
 @onready var hand = %Hand
 @onready var turn_order = %"Turn Order"
 
-
 @onready var player_team = %PlayerTeam
 @onready var enemy_team = %EnemyTeam
 @onready var player_starting_positions = [Vector2i(-4, 1), Vector2i(-2, 1), Vector2i(0, 1)]
@@ -97,9 +96,28 @@ func initialize_starting_positions(starting_positions : Array, team):
 		var point = a_star_hex_grid.get_closest_point(positions, true)
 		a_star_hex_grid.set_point_disabled(point)
 	return cryptids_in_play
-
+	
 func handle_right_click():
-	pass
+	print("Right-click detected - cancelling current action")
+	
+	# Clear action states
+	move_action_bool = false
+	attack_action_bool = false
+	active_movement_card_part = ""
+	active_movement_card = null
+	
+	# Clean up visual elements
+	delete_all_lines()
+	delete_all_indicators()
+	remove_movement_indicator()
+	
+	# Re-enable eligible card halves
+	enable_all_card_halves()
+	
+	# Show the action menu again
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu:
+		action_menu.show()
 
 func handle_mouse_motion():
 	# Get the currently selected cryptid
@@ -197,7 +215,7 @@ func handle_move_action(pos_clicked):
 		var original_position = local_to_map(selected_cryptid.position)
 		
 		# Only subtract the actual distance moved, not the full allowed movement
-		move_leftover -= movement_distance
+		var remaining_movement = move_leftover - movement_distance
 		
 		if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.top_move.actions:
@@ -207,6 +225,11 @@ func handle_move_action(pos_clicked):
 					move_performed = (original_position != new_position)
 					
 					if move_performed:
+						# Set active card part ONLY when a move is actually performed
+						move_leftover = remaining_movement
+						active_movement_card_part = "top"
+						active_movement_card = card_dialog
+						
 						# Animate movement along the path
 						animate_movement_along_path(selected_cryptid, original_position, new_position)
 						
@@ -224,6 +247,13 @@ func handle_move_action(pos_clicked):
 								card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
 							else:
 								print("ERROR: No original card reference found for move action")
+						else:
+							# We have more movement left, disable other cards
+							# Disable bottom half of this card 
+							card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+							
+							# Disable top half of all other cards
+							disable_other_card_halves("top")
 					
 		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.bottom_move.actions:
@@ -233,6 +263,11 @@ func handle_move_action(pos_clicked):
 					move_performed = (original_position != new_position)
 					
 					if move_performed:
+						# Set active card part ONLY when a move is actually performed
+						move_leftover = remaining_movement
+						active_movement_card_part = "bottom"
+						active_movement_card = card_dialog
+						
 						# Animate movement along the path
 						animate_movement_along_path(selected_cryptid, original_position, new_position)
 						
@@ -250,6 +285,13 @@ func handle_move_action(pos_clicked):
 								card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
 							else:
 								print("ERROR: No original card reference found for move action")
+						else:
+							# We have more movement left, disable other cards
+							# Disable top half of this card
+							card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+							
+							# Disable bottom half of all other cards
+							disable_other_card_halves("bottom")
 		
 		# Only update the game state if a move was actually performed
 		if move_performed:
@@ -276,6 +318,9 @@ func handle_move_action(pos_clicked):
 		active_movement_card_part = ""  # Reset active card part
 		active_movement_card = null     # Reset active card
 		remove_movement_indicator()
+		
+		# Re-enable all cards
+		enable_all_card_halves()
 	else:
 		# Show remaining movement indicator
 		update_movement_indicator(selected_cryptid, move_leftover)
@@ -293,14 +338,28 @@ func attack_action_selected(current_card):
 	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
 	
-	var point = a_star_hex_grid.get_closest_point(local_to_map(selected_cryptid.position), true)
-	a_star_hex_grid.set_point_disabled(point, false)
-	
 	if selected_cryptid == null:
 		print("ERROR: No selected cryptid found when selecting attack action")
 		return
 		
 	delete_all_lines()
+	
+	# Only check active movement after the first attack has been made
+	if active_movement_card != null:
+		# If already in segmented movement, only allow continuing with the same card
+		if active_movement_card != current_card:
+			print("Cannot use a different card during active movement")
+			return
+		
+		# If already in a segmented movement, only allow continuing with the same card part
+		if (active_movement_card_part == "top" and 
+			card_dialog.top_half_container.modulate != Color(1, 1, 0, 1)):
+			print("Cannot use bottom part during active top movement")
+			return
+		elif (active_movement_card_part == "bottom" and 
+			card_dialog.bottom_half_container.modulate != Color(1, 1, 0, 1)):
+			print("Cannot use top part during active bottom movement")
+			return
 	
 	# Check for attack action in the card
 	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
@@ -309,6 +368,8 @@ func attack_action_selected(current_card):
 				attack_range = action.range
 				damage = action.amount
 				attack_action_bool = true
+				
+				# DON'T set active card/part until attack is actually performed
 				
 				# For debugging
 				print("Attack action selected: Range = ", attack_range, ", Damage = ", damage)
@@ -326,6 +387,8 @@ func attack_action_selected(current_card):
 				attack_range = action.range
 				damage = action.amount
 				attack_action_bool = true
+				
+				# DON'T set active card/part until attack is actually performed
 				
 				# For debugging
 				print("Attack action selected: Range = ", attack_range, ", Damage = ", damage)
@@ -362,9 +425,30 @@ func handle_attack_action(pos_clicked):
 	
 	var attack_performed = false
 	
-	# Only count as an attack if targeting an enemy cryptid
-	if target_cryptid != null and target_cryptid in enemy_cryptids_in_play:
-		print("Valid enemy target found")
+	# Check if the target is valid - player cryptids can attack enemy cryptids, and enemy cryptids can attack player cryptids
+	var valid_target = false
+	
+	# Get the attacking cryptid
+	selected_cryptid = currently_selected_cryptid()
+	
+	# Determine if this is a valid target based on attacker type
+	if target_cryptid != null:
+		if selected_cryptid in player_cryptids_in_play and target_cryptid in enemy_cryptids_in_play:
+			# Player attacking enemy - valid
+			valid_target = true
+			print("Valid target: Player attacking enemy")
+		elif selected_cryptid in enemy_cryptids_in_play and target_cryptid in player_cryptids_in_play:
+			# Enemy attacking player - valid
+			valid_target = true
+			print("Valid target: Enemy attacking player")
+		else:
+			# Same team attack - invalid
+			valid_target = false
+			print("Invalid target: Cannot attack your own team")
+	
+	# Only proceed if targeting a valid cryptid
+	if target_cryptid != null and valid_target:
+		print("Valid target found")
 		
 		# Calculate attack distance directly instead of relying on stored path
 		var current_pos = local_to_map(selected_cryptid.position)
@@ -381,13 +465,19 @@ func handle_attack_action(pos_clicked):
 		if attack_distance <= attack_range:
 			print("Target is within range")
 			
-			# Get the currently selected cryptid
-			selected_cryptid = currently_selected_cryptid()
 			print("Attacker:", selected_cryptid)
 			
 			# Store which card half was used for later
 			var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
 			var using_bottom_half = card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1)
+			
+			# Set active card part ONLY when an attack is actually performed
+			if using_top_half:
+				active_movement_card_part = "top"
+				active_movement_card = card_dialog
+			elif using_bottom_half:
+				active_movement_card_part = "bottom"
+				active_movement_card = card_dialog
 			
 			# Disable the card UI immediately to prevent multiple uses
 			if using_top_half:
@@ -397,6 +487,9 @@ func handle_attack_action(pos_clicked):
 				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				selected_cryptid.cryptid.top_card_played = true
+				
+				# Disable top half of all other cards
+				disable_other_card_halves("top")
 				
 				# Mark the original card as discarded
 				if card_dialog.card_resource.original_card != null:
@@ -412,6 +505,9 @@ func handle_attack_action(pos_clicked):
 				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				selected_cryptid.cryptid.bottom_card_played = true
+				
+				# Disable bottom half of all other cards
+				disable_other_card_halves("bottom")
 				
 				# Mark the original card as discarded
 				if card_dialog.card_resource.original_card != null:
@@ -429,14 +525,19 @@ func handle_attack_action(pos_clicked):
 		else:
 			print("Target out of range")
 	else:
-		print("Invalid attack: No enemy target at the selected position")
+		print("Invalid attack: No valid target at the selected position")
 	
 	# Reset action state if no attack was performed
 	if not attack_performed:
 		print("No attack performed - resetting action state")
 		attack_action_bool = false
+		active_movement_card_part = ""  # Reset active card part
+		active_movement_card = null     # Reset active card
 		delete_all_lines()
 		delete_all_indicators()
+		
+		# Re-enable all eligible card halves
+		enable_all_card_halves()
 
 
 func _input(event):
@@ -454,13 +555,6 @@ func _input(event):
 				handle_left_click(event)
 
 func move_action_selected(current_card):
-	# If already in segmented movement, only allow continuing with the same card
-	if move_leftover > 0 and active_movement_card != null:
-		# Only allow the same card to continue movement
-		if active_movement_card != current_card:
-			print("Cannot use a different card during active movement")
-			return
-	
 	card_dialog = current_card
 	move_action_bool = false
 	# Make sure we have the currently selected cryptid
@@ -476,11 +570,14 @@ func move_action_selected(current_card):
 		
 	delete_all_lines()
 	
-	# If already in a segmented movement, only allow continuing with the same card part
-	if move_leftover > 0 and active_movement_card_part != "":
-		print("Already in segmented movement with " + active_movement_card_part + " part")
+	# Only check active movement after the first move has been made
+	if active_movement_card != null:
+		# If already in segmented movement, only allow continuing with the same card
+		if active_movement_card != current_card:
+			print("Cannot use a different card during active movement")
+			return
 		
-		# Only allow continuing with the same part
+		# If already in a segmented movement, only allow continuing with the same card part
 		if (active_movement_card_part == "top" and 
 			card_dialog.top_half_container.modulate != Color(1, 1, 0, 1)):
 			print("Cannot use bottom part during active top movement")
@@ -496,8 +593,8 @@ func move_action_selected(current_card):
 			if action.action_types == [0] and action.amount > 0:
 				move_leftover = action.amount
 				move_action_bool = true
-				active_movement_card_part = "top"
-				active_movement_card = current_card
+				
+				# DON'T set active card/part until a move is actually performed
 				
 				# For debugging
 				print("Move action selected: Distance = ", move_leftover)
@@ -510,8 +607,8 @@ func move_action_selected(current_card):
 			if action.action_types == [0] and action.amount > 0:
 				move_leftover = action.amount
 				move_action_bool = true
-				active_movement_card_part = "bottom"
-				active_movement_card = current_card
+				
+				# DON'T set active card/part until a move is actually performed
 				
 				# For debugging
 				print("Move action selected: Distance = ", move_leftover)
@@ -722,6 +819,9 @@ func delete_all_indicators():
 func reset_action_modes():
 	move_action_bool = false
 	attack_action_bool = false
+	active_movement_card_part = ""
+	active_movement_card = null
+	move_leftover = 0
 	delete_all_lines()
 	delete_all_indicators()
 	remove_movement_indicator()
@@ -1080,3 +1180,88 @@ func get_active_movement_card():
 
 func is_movement_in_progress():
 	return move_leftover > 0 and active_movement_card != null
+
+func enable_all_card_halves():
+	# Get all cards in the hand
+	var cards = hand.get_children()
+	
+	for card in cards:
+		if card.get_script() and card.get_script().resource_path.ends_with("card_dialog.gd"):
+			# Don't enable cards that should be disabled
+			if not selected_cryptid.cryptid.top_card_played:
+				card.top_half_container.modulate = Color(1, 1, 1, 1)
+			if not selected_cryptid.cryptid.bottom_card_played:
+				card.bottom_half_container.modulate = Color(1, 1, 1, 1)
+
+func disable_other_card_halves(active_card_half):
+	# Get all cards in the hand
+	var cards = hand.get_children()
+	
+	print("Disabling other card halves, active half: ", active_card_half)
+	
+	for card in cards:
+		if card.get_script() and card.get_script().resource_path.ends_with("card_dialog.gd"):
+			# Skip the active card
+			if card == card_dialog:
+				print("Skipping active card")
+				continue
+				
+			# Disable the appropriate half based on active_card_half
+			if active_card_half == "top":
+				print("Disabling top half of other card: ", card.card_resource.top_move.name_prefix)
+				card.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				# Don't change mouse filter to allow viewing
+			elif active_card_half == "bottom":
+				print("Disabling bottom half of other card: ", card.card_resource.bottom_move.name_suffix)
+				card.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				# Don't change mouse filter to allow viewing
+
+func reset_for_new_cryptid():
+	# Reset all action states for a new cryptid's turn
+	reset_action_modes()
+	
+	# Make sure the hand is updated correctly
+	hand.update_card_availability()
+
+func finish_movement():
+	# Only do something if there's movement in progress
+	if move_action_bool and move_leftover > 0:
+		print("Finishing movement early with " + str(move_leftover) + " movement left")
+		
+		# Mark the card part as used
+		if active_movement_card_part == "top":
+			selected_cryptid.cryptid.top_card_played = true
+			
+			# Mark the original card as discarded
+			if card_dialog.card_resource.original_card != null:
+				card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+		
+		elif active_movement_card_part == "bottom":
+			selected_cryptid.cryptid.bottom_card_played = true
+			
+			# Mark the original card as discarded
+			if card_dialog.card_resource.original_card != null:
+				card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+		
+		# Reset movement state
+		move_action_bool = false
+		move_leftover = 0
+		active_movement_card_part = ""
+		active_movement_card = null
+		
+		# Clean up visuals
+		remove_movement_indicator()
+		delete_all_lines()
+		
+		# Re-enable cards
+		enable_all_card_halves()
+		
+		# Update UI
+		hand.update_card_availability()
+		
+		# Check if turn is complete
+		if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+			selected_cryptid.cryptid.completed_turn = true
+			hand.next_cryptid_turn()
+	else:
+		print("No movement in progress to finish")

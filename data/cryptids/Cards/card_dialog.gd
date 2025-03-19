@@ -51,6 +51,18 @@ func _gui_input(event):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
 		if self.get_parent().is_in_group("hand"):
 			var parent_hand = self.get_parent()
+			var tile_map_layer = get_tree().get_nodes_in_group("map")[0]
+			
+			# Check if there's an active movement in progress
+			if tile_map_layer.is_movement_in_progress():
+				# If this is a different card than the active one, finish the current movement
+				if tile_map_layer.get_active_movement_card() != self:
+					tile_map_layer.finish_movement()
+				# If this is the same card but different half, also finish movement
+				elif (tile_map_layer.get_active_movement_card_part() == "top" and 
+					  bottom_half_container.get_global_rect().has_point(event.global_position)) or (tile_map_layer.get_active_movement_card_part() == "bottom" and 
+					  top_half_container.get_global_rect().has_point(event.global_position)):
+					tile_map_layer.finish_movement()
 			
 			# Check if top half is clicked
 			if top_half_container.get_global_rect().has_point(event.global_position):

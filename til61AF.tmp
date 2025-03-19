@@ -661,5 +661,4 @@ scale = Vector2(-5.62239, 38.9907)
 
 [connection signal="pressed" from="UIRoot/AddCardButton" to="UIRoot/Hand" method="_on_button_pressed"]
 [connection signal="pressed" from="UIRoot/BackButton" to="UIRoot/Hand" method="clear_card_selections"]
-[connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/DoneMoving" to="TileMapLayer" method="finish_movement"]
 [connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/RestButton" to="UIRoot/Hand" method="rest_action"]

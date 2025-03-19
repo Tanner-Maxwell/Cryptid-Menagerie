@@ -283,6 +283,8 @@ func next_cryptid_turn():
 	selected_cryptid = next_cryptid
 	selected_cryptid.currently_selected = true
 	
+	tile_map_layer.reset_for_new_cryptid()
+	
 	# DEBUG: Print deck and discard contents
 	print("DEBUG: " + selected_cryptid.name + " deck size: " + str(selected_cryptid.deck.size()))
 	print("DEBUG: " + selected_cryptid.name + " discard size: " + str(selected_cryptid.discard.size()))

@@ -14,6 +14,7 @@ enum ActionType { SWAP, REST, CATCH, BATTLE_PHASE, END_TURN }
 @onready var rest_button = $VBoxContainer/RestButton
 @onready var catch_button = $VBoxContainer/CatchButton
 @onready var end_turn_button = $VBoxContainer/EndTurnButton
+@onready var done_moving_button = $VBoxContainer/DoneMoving
 
 func _ready():
 	# Print button references to verify we have the correct paths
@@ -28,6 +29,7 @@ func _ready():
 	$VBoxContainer/RestButton.connect("pressed", Callable(self, "_on_rest_pressed"))
 	$VBoxContainer/CatchButton.connect("pressed", Callable(self, "_on_catch_pressed"))
 	$VBoxContainer/EndTurnButton.connect("pressed", Callable(self, "_on_end_turn_pressed"))
+	$VBoxContainer/DoneMoving.connect("pressed", Callable(self, "_on_done_moving_pressed"))
 
 func update_menu_visibility(cryptid: Cryptid):
 	if cryptid == null:
@@ -37,6 +39,12 @@ func update_menu_visibility(cryptid: Cryptid):
 	print("Updating menu for cryptid: ", cryptid.name)
 	print("top_card_played: ", cryptid.top_card_played, ", bottom_card_played: ", cryptid.bottom_card_played)
 	
+	# Show/hide the DoneMoving button based on active movement
+	if tile_map_layer.move_action_bool and tile_map_layer.move_leftover > 0:
+		$VBoxContainer/DoneMoving.show()
+	else:
+		$VBoxContainer/DoneMoving.hide()
+	
 	# Check if the cryptid has used a card action this turn
 	if cryptid.top_card_played or cryptid.bottom_card_played:
 		print("Card action used - hiding action buttons, showing only End Turn")
@@ -44,7 +52,7 @@ func update_menu_visibility(cryptid: Cryptid):
 		$VBoxContainer/RestButton.hide()
 		$VBoxContainer/CatchButton.hide()
 		$VBoxContainer/EndTurnButton.show()
-	else:
+	elif !tile_map_layer.move_action_bool:
 		print("No card action used - showing all action buttons")
 		$VBoxContainer/SwapButton.show()
 		$VBoxContainer/RestButton.show()
@@ -94,3 +102,11 @@ func _on_end_turn_pressed():
 # Called when all player cryptids have completed their turns
 func trigger_battle_phase():
 	emit_signal("action_selected", ActionType.BATTLE_PHASE)
+
+
+func _on_DoneMoving_pressed():
+	# Get the tile map controller
+	var tile_map_layer = get_tree().get_nodes_in_group("map")[0]
+	hide()
+	# Call the finish_movement function
+	tile_map_layer.finish_movement()
