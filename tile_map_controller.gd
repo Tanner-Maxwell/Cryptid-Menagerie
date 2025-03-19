@@ -39,6 +39,7 @@ var cur_position_cube
 var move_leftover = 0
 var attack_range = 2
 var path
+var attack_path
 var vector_path = []
 var point_path = []
 var damage
@@ -114,7 +115,7 @@ func handle_mouse_motion():
 		a_star_hex_grid.get_closest_point(local_to_map(get_local_mouse_position()))
 	)
 	
-	var attack_path = a_star_hex_attack_grid.get_id_path(
+	attack_path = a_star_hex_attack_grid.get_id_path(
 		a_star_hex_attack_grid.get_closest_point(local_to_map(selected_cryptid.position)),
 		a_star_hex_attack_grid.get_closest_point(local_to_map(get_local_mouse_position()))
 	)
@@ -137,7 +138,7 @@ func handle_mouse_motion():
 	
 	# Handle attack action visualization
 	if attack_action_bool:
-		var attack_distance = point_path.size() - 1
+		var attack_distance = attack_point_path.size() - 1
 		if attack_distance <= attack_range:
 			var attack_color = Color(1, 0, 0)  # Red for attack
 			draw_lines_between_points(convert_vector2_array_to_vector2i_array(attack_vector_path), attack_range, attack_color)
@@ -286,7 +287,7 @@ func handle_attack_action(pos_clicked):
 		
 		if valid_target:
 			print("Valid target on opposite team found")
-			var attack_distance = path.size() - 1
+			var attack_distance = attack_path.size() - 1
 			print("Attack distance:", attack_distance)
 			print("Attack range:", attack_range)
 			
@@ -411,8 +412,6 @@ func attack_action_selected(current_card):
 	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
 	
-	var point = a_star_hex_grid.get_closest_point(local_to_map(selected_cryptid.position), true)
-	a_star_hex_grid.set_point_disabled(point, false)
 	
 	if selected_cryptid == null:
 		print("ERROR: No selected cryptid found when selecting attack action")
@@ -654,7 +653,8 @@ func handle_cryptid_defeat(defeated_cryptid):
 	
 	# Make hex walkable again
 	walkable_hexes.append(local_to_map(defeated_cryptid.position))
-	
+	var point = a_star_hex_grid.get_closest_point(local_to_map(defeated_cryptid.position), true)
+	a_star_hex_grid.set_point_disabled(point, false)
 	# Visual effect for defeat
 	defeated_cryptid.modulate = Color(1, 0, 0, 0.5)  # Red fade
 	
