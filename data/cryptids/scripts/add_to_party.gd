@@ -40,11 +40,20 @@ func _process(delta):
 
 func _on_area_2d_input_event(viewport, event, shape_idx):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
+		# Get reference to tile map to check if actions are in progress
+		var tile_map = get_tree().get_nodes_in_group("map")[0]
+		
+		# Don't toggle discard cards if an action is in progress
+		if tile_map.move_action_bool or tile_map.attack_action_bool:
+			# We're in the middle of an action, don't show/hide discard
+			print("Action in progress, ignoring discard toggle")
+			return
+			
 		# Toggle visibility of discard cards
 		discard_cards_visible = !discard_cards_visible
 		
 		if discard_cards_visible:
-			# Show discard cards - assuming this is already implemented
+			# Show discard cards
 			hand.switch_cryptid_discard_cards(cryptid)
 			discard_cards.show()
 		else:

@@ -23,6 +23,10 @@ var max_highlighted_cards = 2
 var selected_top_card: CardDialog = null
 var selected_bottom_card: CardDialog = null
 
+func _input(event):
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_ESCAPE:
+			clear_card_selections()
 
 func _ready():
 	selected_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
@@ -414,3 +418,31 @@ func rest_action():
 	
 	# Move to next cryptid's turn
 	next_cryptid_turn()
+	
+func clear_card_selections():
+	print("Clearing all card selections")
+	
+	# Reset the selected cards
+	selected_top_card = null
+	selected_bottom_card = null
+	
+	# Reset all card highlighting
+	for child in self.get_children():
+		if child is CardDialog:
+			# Reset modulate for non-disabled cards
+			if not child.top_half_container.disabled:
+				child.top_half_container.modulate = Color(1, 1, 1, 1)
+			if not child.bottom_half_container.disabled:
+				child.bottom_half_container.modulate = Color(1, 1, 1, 1)
+	
+	# Reset any action booleans in the tile map
+	if tile_map_layer:
+		tile_map_layer.move_action_bool = false
+		tile_map_layer.attack_action_bool = false
+		tile_map_layer.delete_all_lines()
+		tile_map_layer.delete_all_indicators()
+	
+	# Show the action menu again
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu:
+		action_menu.show()

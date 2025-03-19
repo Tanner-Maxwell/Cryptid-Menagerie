@@ -266,65 +266,80 @@ func handle_attack_action(pos_clicked):
 	
 	var attack_performed = false
 	
-	# Only count as an attack if targeting an enemy cryptid
-	if target_cryptid != null and target_cryptid in enemy_cryptids_in_play:
-		print("Valid enemy target found")
-		var attack_distance = path.size() - 1
-		print("Attack distance:", attack_distance)
-		print("Attack range:", attack_range)
+	# Get the currently selected cryptid
+	selected_cryptid = currently_selected_cryptid()
+	print("Attacker:", selected_cryptid)
+	
+	if target_cryptid != null:
+		# Determine if attacker and target are on opposite teams
+		var valid_target = false
 		
-		if attack_distance <= attack_range:
-			print("Target is within range")
+		# Check if attacker is in player team and target is in enemy team
+		if selected_cryptid in player_cryptids_in_play and target_cryptid in enemy_cryptids_in_play:
+			valid_target = true
+			print("Valid target: Player attacking enemy")
+		
+		# Check if attacker is in enemy team and target is in player team
+		elif selected_cryptid in enemy_cryptids_in_play and target_cryptid in player_cryptids_in_play:
+			valid_target = true
+			print("Valid target: Enemy attacking player")
+		
+		if valid_target:
+			print("Valid target on opposite team found")
+			var attack_distance = path.size() - 1
+			print("Attack distance:", attack_distance)
+			print("Attack range:", attack_range)
 			
-			# Get the currently selected cryptid
-			selected_cryptid = currently_selected_cryptid()
-			print("Attacker:", selected_cryptid)
-			
-			# Store which card half was used for later
-			var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
-			var using_bottom_half = card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1)
-			
-			# Disable the card UI immediately to prevent multiple uses
-			if using_top_half:
-				print("Using top half of card")
-				card_dialog.top_half_container.disabled = true
-				card_dialog.bottom_half_container.disabled = true
-				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				selected_cryptid.cryptid.top_card_played = true
+			if attack_distance <= attack_range:
+				print("Target is within range")
 				
-				# Mark the original card as discarded
-				if card_dialog.card_resource.original_card != null:
-					print("DEBUG: Marking original card as discarded from attack action")
-					card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
-				else:
-					print("ERROR: No original card reference found for attack action")
+				# Store which card half was used for later
+				var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
+				var using_bottom_half = card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1)
 				
-			elif using_bottom_half:
-				print("Using bottom half of card")
-				card_dialog.top_half_container.disabled = true
-				card_dialog.bottom_half_container.disabled = true
-				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				selected_cryptid.cryptid.bottom_card_played = true
+				# Disable the card UI immediately to prevent multiple uses
+				if using_top_half:
+					print("Using top half of card")
+					card_dialog.top_half_container.disabled = true
+					card_dialog.bottom_half_container.disabled = true
+					card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+					card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+					selected_cryptid.cryptid.top_card_played = true
+					
+					# Mark the original card as discarded
+					if card_dialog.card_resource.original_card != null:
+						print("DEBUG: Marking original card as discarded from attack action")
+						card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+					else:
+						print("ERROR: No original card reference found for attack action")
+					
+				elif using_bottom_half:
+					print("Using bottom half of card")
+					card_dialog.top_half_container.disabled = true
+					card_dialog.bottom_half_container.disabled = true
+					card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+					card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+					selected_cryptid.cryptid.bottom_card_played = true
+					
+					# Mark the original card as discarded
+					if card_dialog.card_resource.original_card != null:
+						print("DEBUG: Marking original card as discarded from attack action")
+						card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+					else:
+						print("ERROR: No original card reference found for attack action")
 				
-				# Mark the original card as discarded
-				if card_dialog.card_resource.original_card != null:
-					print("DEBUG: Marking original card as discarded from attack action")
-					card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
-				else:
-					print("ERROR: No original card reference found for attack action")
-			
-			# Play the attack animation
-			print("Starting attack animation")
-			animate_attack(selected_cryptid, target_cryptid)
-			
-			attack_performed = true
-			print("Attack performed successfully")
+				# Play the attack animation
+				print("Starting attack animation")
+				animate_attack(selected_cryptid, target_cryptid)
+				
+				attack_performed = true
+				print("Attack performed successfully")
+			else:
+				print("Target out of range")
 		else:
-			print("Target out of range")
+			print("Invalid attack: Target is on the same team")
 	else:
-		print("Invalid attack: No enemy target at the selected position")
+		print("Invalid attack: No target cryptid at the selected position")
 	
 	# Reset action state if no attack was performed
 	if not attack_performed:
@@ -955,3 +970,4 @@ func _on_attack_tween_finished(params):
 	
 	# Apply damage and continue with game logic
 	apply_delayed_damage(params)
+

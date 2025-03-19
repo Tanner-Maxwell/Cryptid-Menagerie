@@ -552,9 +552,9 @@ metadata/_edit_use_anchors_ = true
 
 [node name="DiscardDialog" type="VBoxContainer" parent="UIRoot"]
 offset_left = 31.0
-offset_top = 427.0
+offset_top = 400.0
 offset_right = 94.0
-offset_bottom = 467.0
+offset_bottom = 440.0
 
 [node name="Label" type="Label" parent="UIRoot/DiscardDialog"]
 layout_mode = 2
@@ -583,11 +583,19 @@ text = "Turn Order:"
 label_settings = SubResource("LabelSettings_7qv3a")
 
 [node name="AddCardButton" type="Button" parent="UIRoot"]
+visible = false
 offset_left = 69.0
 offset_top = 574.0
 offset_right = 148.0
 offset_bottom = 605.0
 text = "Add Card to Hand"
+
+[node name="BackButton" type="Button" parent="UIRoot"]
+offset_left = 31.0
+offset_top = 605.0
+offset_right = 76.0
+offset_bottom = 636.0
+text = "Back"
 
 [node name="ActionSelectMenu" type="Control" parent="UIRoot"]
 unique_name_in_owner = true
@@ -645,4 +653,5 @@ position = Vector2(577, 330)
 scale = Vector2(-5.62239, 38.9907)
 
 [connection signal="pressed" from="UIRoot/AddCardButton" to="UIRoot/Hand" method="_on_button_pressed"]
+[connection signal="pressed" from="UIRoot/BackButton" to="UIRoot/Hand" method="clear_card_selections"]
 [connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/RestButton" to="UIRoot/Hand" method="rest_action"]
