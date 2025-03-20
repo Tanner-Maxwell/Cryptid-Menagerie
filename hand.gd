@@ -230,19 +230,18 @@ func check_if_turn_complete():
 	else:
 		print("DEBUG: Not all cards selected yet")
 
-# Updated next_cryptid_turn function for hand.gd
 func next_cryptid_turn():
 	print("Switching to next cryptid's turn")
 	
-	# First ensure that all_cryptids_in_play are sorted by speed
+	# First ensure that player_cryptids_in_play are sorted by speed
 	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.all_cryptids_in_play)
 	
 	# Log the current speed order for debugging
 	print("Current cryptid speed order:")
 	for cryptid in tile_map_layer.all_cryptids_in_play:
-		print(cryptid.cryptid.name, " - Speed: ", cryptid.cryptid.speed, " - Completed: ", cryptid.cryptid.completed_turn)
+		print(cryptid.cryptid.name, " - Speed: ", cryptid.cryptid.speed)
 	
-	# Find the index of the current cryptid in all_cryptids_in_play
+	# Find the index of the current cryptid in player_cryptids_in_play
 	var current_index = -1
 	for i in range(tile_map_layer.all_cryptids_in_play.size()):
 		if tile_map_layer.all_cryptids_in_play[i].cryptid == selected_cryptid:
@@ -274,10 +273,10 @@ func next_cryptid_turn():
 		checked_count += 1
 	
 	if next_cryptid == null:
-		print("All cryptids have taken their turn, moving to round phase")
+		print("All cryptids have taken their turn, moving to battle phase")
 		# All cryptids have taken their turn, transition to the next phase
 		var game_controller = %GameController
-		game_controller.round_phase()  # Using renamed round_phase
+		game_controller.battle_phase()
 		return
 	
 	# Set the new cryptid as selected and update the UI
@@ -294,35 +293,36 @@ func next_cryptid_turn():
 	for i in range(selected_cryptid.discard.size()):
 		print("   Discard card " + str(i) + ": " + selected_cryptid.discard[i].to_string())
 	
-	# Switch to the new cryptid's deck
 	switch_cryptid_deck(selected_cryptid)
-	
-	# Check if the new cryptid is an enemy or player
-	var is_enemy = false
-	for enemy_cryptid in tile_map_layer.enemy_cryptids_in_play:
-		if enemy_cryptid.cryptid == selected_cryptid:
-			is_enemy = true
-			break
-	
-	# Get the game controller to handle state transitions
-	var game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
-	
-	if is_enemy:
-		print("Next cryptid is an enemy: " + selected_cryptid.name)
-		if game_controller:
-			# Transition to enemy turn
-			game_controller.transition(game_controller.GameState.ENEMY_TURN)
+		# Force update action menu button state for the new cryptid
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu:
+		# First ensure it's visible
+		action_menu.show()
+		
+		# Get direct references to the buttons
+		var swap_button = action_menu.get_node("VBoxContainer/SwapButton")
+		var rest_button = action_menu.get_node("VBoxContainer/RestButton")
+		var catch_button = action_menu.get_node("VBoxContainer/CatchButton")
+		var end_turn_button = action_menu.get_node("VBoxContainer/EndTurnButton")
+		
+		# Check if this cryptid has already used a card action
+		if selected_cryptid.top_card_played or selected_cryptid.bottom_card_played:
+			print("NEW TURN - Cryptid has used card action, hiding action buttons")
+			
+			# Hide action buttons, show only end turn
+			if swap_button: swap_button.hide()
+			if rest_button: rest_button.hide()
+			if catch_button: catch_button.hide()
+			if end_turn_button: end_turn_button.show()
 		else:
-			print("ERROR: Could not find game controller")
-	else:
-		print("Next cryptid is a player: " + selected_cryptid.name)
-		# Show the action menu for the player cryptid
-		if game_controller:
-			# Transition to player turn
-			game_controller.transition(game_controller.GameState.PLAYER_TURN)
-		else:
-			print("ERROR: Could not find game controller")
-
+			print("NEW TURN - Cryptid has not used card action, showing all buttons")
+			
+			# Show all buttons
+			if swap_button: swap_button.show()
+			if rest_button: rest_button.show()
+			if catch_button: catch_button.show()
+			if end_turn_button: end_turn_button.show()
 	
 func check_turn_completion():
 	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
