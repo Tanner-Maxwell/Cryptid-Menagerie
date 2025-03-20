@@ -1,9 +1,10 @@
-[gd_scene load_steps=81 format=4 uid="uid://citawmf1hj211"]
+[gd_scene load_steps=82 format=4 uid="uid://citawmf1hj211"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="1_2lacv"]
 [ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_ot6rc"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/main.gd" id="1_w6ofy"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/tile_map_controller.gd" id="2_ouj6u"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Cards/enemy_ai_controller.gd" id="2_t7gji"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/enemy.gd" id="3_r8k8k"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/player.gd" id="4_gk3sd"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/ui_root.gd" id="6_giclu"]
@@ -483,6 +484,10 @@ outline_color = Color(0, 0, 0, 1)
 
 [node name="VitaChrome" type="Node2D"]
 script = ExtResource("1_w6ofy")
+
+[node name="EnemyAIController" type="Node2D" parent="."]
+unique_name_in_owner = true
+script = ExtResource("2_t7gji")
 
 [node name="Player" type="Node2D" parent="." groups=["player"]]
 unique_name_in_owner = true
