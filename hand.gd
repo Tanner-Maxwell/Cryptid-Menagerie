@@ -425,8 +425,6 @@ func clear_card_selections():
 	print("Clearing all card selections")
 	
 	# Reset the selected cards
-	selected_top_card = null
-	selected_bottom_card = null
 	
 	# Reset all card highlighting
 	for child in self.get_children():

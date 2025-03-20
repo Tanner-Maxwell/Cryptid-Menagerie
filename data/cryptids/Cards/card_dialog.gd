@@ -229,24 +229,35 @@ func paralyze_action():
 func immobilize_action():
 	pass
 
-#func move_action_selected():
-	#var move_action_bool = false
-	#delete_all_lines()
-	#if card_dialog.current_highlighted_container == card_dialog.top_half_container:
-		#for action in card_dialog.card_resource.top_move.actions:
-			#if action.action_types == [0] and action.amount > 0:
-				#move_leftover = action.amount
-				#move_action_bool = true
-				#break
-	#elif card_dialog.current_highlighted_container == card_dialog.bottom_half_container:
-		#for action in card_dialog.card_resource.bottom_move.actions:
-			#if action.action_types == [0] and action.amount > 0:
-				#move_leftover = action.amount
-				#move_action_bool = true
-				#break
-
 func _on_mouse_entered():
 	self.z_index += 2
 
 func _on_mouse_exited():
 	self.z_index -= 2
+
+func update_move_action_display(card_half, remaining_amount):
+	# Store the original amount so we can restore it later
+	var move_actions = card_resource.top_move.actions if card_half == "top" else card_resource.bottom_move.actions
+	
+	for action in move_actions:
+		if action.action_types == [0]:  # Move action
+			# Update the amount in the action
+			var original_amount = action.amount
+			action.amount = remaining_amount
+			action.amount = remaining_amount
+			
+			# Clear and rebuild the card half
+			var container = top_half_container if card_half == "top" else bottom_half_container
+			
+			# Remove all existing action slots
+			for child in container.get_children():
+				container.remove_child(child)
+				child.queue_free()
+			
+			# Re-add the action slots with updated values
+			for action_to_add in move_actions:
+				var slot = action_slot.instantiate()
+				container.add_child(slot)
+				slot.add_action(action_to_add)
+			
+			break

@@ -30,6 +30,7 @@ var current_tween = null
 @onready var blank_cryptid = preload("res://Cryptid-Menagerie/data/cryptids/blank_cryptid.tscn")
 @onready var current_card
 
+var original_move_amount = 0
 var active_movement_card_part = ""
 var move_action_bool = false
 var attack_action_bool = false
@@ -94,7 +95,7 @@ func initialize_starting_positions(starting_positions : Array, team):
 		cryptid.hand = %Hand
 		cryptids_in_play.append(cryptid)
 		var point = a_star_hex_grid.get_closest_point(positions, true)
-		a_star_hex_grid.set_point_disabled(point)
+		a_star_hex_grid.set_point_disabled(point, true)
 	return cryptids_in_play
 	
 func handle_right_click():
@@ -254,6 +255,10 @@ func handle_move_action(pos_clicked):
 							
 							# Disable top half of all other cards
 							disable_other_card_halves("top")
+							
+							# Update card display to show remaining movement
+							if card_dialog.has_method("update_move_action_display"):
+								card_dialog.update_move_action_display("top", move_leftover)
 					
 		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 			for action in card_dialog.card_resource.bottom_move.actions:
@@ -292,6 +297,10 @@ func handle_move_action(pos_clicked):
 							
 							# Disable bottom half of all other cards
 							disable_other_card_halves("bottom")
+							
+							# Update card display to show remaining movement
+							if card_dialog.has_method("update_move_action_display"):
+								card_dialog.update_move_action_display("bottom", move_leftover)
 		
 		# Only update the game state if a move was actually performed
 		if move_performed:
@@ -555,6 +564,13 @@ func _input(event):
 				handle_left_click(event)
 
 func move_action_selected(current_card):
+	# If already in segmented movement, only allow continuing with the same card
+	if move_leftover > 0 and active_movement_card != null:
+		# Only allow the same card to continue movement
+		if active_movement_card != current_card:
+			print("Cannot use a different card during active movement")
+			return
+	
 	card_dialog = current_card
 	move_action_bool = false
 	# Make sure we have the currently selected cryptid
@@ -570,14 +586,11 @@ func move_action_selected(current_card):
 		
 	delete_all_lines()
 	
-	# Only check active movement after the first move has been made
-	if active_movement_card != null:
-		# If already in segmented movement, only allow continuing with the same card
-		if active_movement_card != current_card:
-			print("Cannot use a different card during active movement")
-			return
+	# If already in a segmented movement, only allow continuing with the same card part
+	if move_leftover > 0 and active_movement_card_part != "":
+		print("Already in segmented movement with " + active_movement_card_part + " part")
 		
-		# If already in a segmented movement, only allow continuing with the same card part
+		# Only allow continuing with the same part
 		if (active_movement_card_part == "top" and 
 			card_dialog.top_half_container.modulate != Color(1, 1, 0, 1)):
 			print("Cannot use bottom part during active top movement")
@@ -591,10 +604,11 @@ func move_action_selected(current_card):
 	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
 		for action in card_dialog.card_resource.top_move.actions:
 			if action.action_types == [0] and action.amount > 0:
-				move_leftover = action.amount
+				# Only set move_leftover if we're not already in a segmented move
+				if active_movement_card == null:
+					original_move_amount = action.amount
+					move_leftover = action.amount
 				move_action_bool = true
-				
-				# DON'T set active card/part until a move is actually performed
 				
 				# For debugging
 				print("Move action selected: Distance = ", move_leftover)
@@ -605,10 +619,11 @@ func move_action_selected(current_card):
 	if card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 		for action in card_dialog.card_resource.bottom_move.actions:
 			if action.action_types == [0] and action.amount > 0:
-				move_leftover = action.amount
+				# Only set move_leftover if we're not already in a segmented move
+				if active_movement_card == null:
+					original_move_amount = action.amount
+					move_leftover = action.amount
 				move_action_bool = true
-				
-				# DON'T set active card/part until a move is actually performed
 				
 				# For debugging
 				print("Move action selected: Distance = ", move_leftover)
@@ -1234,14 +1249,24 @@ func finish_movement():
 			
 			# Mark the original card as discarded
 			if card_dialog.card_resource.original_card != null:
+				print("DEBUG: Marking original card as discarded from move action")
 				card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+				
+				# Reset the card display to its original amount
+				if card_dialog.has_method("update_move_action_display"):
+					card_dialog.update_move_action_display("top", original_move_amount)
 		
 		elif active_movement_card_part == "bottom":
 			selected_cryptid.cryptid.bottom_card_played = true
 			
 			# Mark the original card as discarded
 			if card_dialog.card_resource.original_card != null:
+				print("DEBUG: Marking original card as discarded from move action")
 				card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+				
+				# Reset the card display to its original amount
+				if card_dialog.has_method("update_move_action_display"):
+					card_dialog.update_move_action_display("bottom", original_move_amount)
 		
 		# Reset movement state
 		move_action_bool = false

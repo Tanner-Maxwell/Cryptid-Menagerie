@@ -616,6 +616,7 @@ offset_bottom = 365.0
 
 [node name="EndTurnButton" type="Button" parent="UIRoot/ActionSelectMenu/VBoxContainer"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_vertical = 3
 text = "End Turn"
