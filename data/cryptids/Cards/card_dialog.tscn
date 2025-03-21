@@ -1996,7 +1996,7 @@ mouse_filter = 2
 alignment = 2
 script = ExtResource("4_qup3f")
 
-[node name="TopElement" type="TextureRect" parent="VBoxContainer"]
+[node name="TopElement" type="TextureRect" parent="VBoxContainer/TopHalfContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(20, 10)
 layout_mode = 2

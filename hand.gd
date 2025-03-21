@@ -418,7 +418,8 @@ func check_turn_completion():
 			# All cryptids have taken their turn, move to battle phase
 			get_node("/root/Main/GameController").battle_phase()
 			
-# Enhance update_card_availability to handle both half states properly
+# Update this function in hand.gd
+
 func update_card_availability():
 	print("DEBUG: Updating card availability")
 	
@@ -433,24 +434,38 @@ func update_card_availability():
 	# Process all cards in the hand
 	for card in get_children():
 		if card is CardDialog:
+			# Check if this specific card has been fully disabled
+			var fully_disabled = card.has_meta("fully_disabled") and card.get_meta("fully_disabled") == true
+			
+			# Get the card containers
+			var vbox = card.get_node_or_null("VBoxContainer")
+			if not vbox:
+				continue
+				
+			var top_half_container = vbox.get_node_or_null("TopHalfContainer")
+			var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
+			
+			if not top_half_container or not bottom_half_container:
+				continue
+			
 			# Handle top half availability
-			if selected_cryptid.top_card_played:
-				card.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				card.top_half_container.disabled = true
+			if selected_cryptid.top_card_played or fully_disabled:
+				top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				top_half_container.disabled = true
 				print("DEBUG: Disabled top half for card")
 			else:
-				card.top_half_container.modulate = Color(1, 1, 1, 1)
-				card.top_half_container.disabled = false
+				top_half_container.modulate = Color(1, 1, 1, 1)
+				top_half_container.disabled = false
 				print("DEBUG: Enabled top half for card")
 			
 			# Handle bottom half availability
-			if selected_cryptid.bottom_card_played:
-				card.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				card.bottom_half_container.disabled = true
+			if selected_cryptid.bottom_card_played or fully_disabled:
+				bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				bottom_half_container.disabled = true
 				print("DEBUG: Disabled bottom half for card")
 			else:
-				card.bottom_half_container.modulate = Color(1, 1, 1, 1)
-				card.bottom_half_container.disabled = false
+				bottom_half_container.modulate = Color(1, 1, 1, 1)
+				bottom_half_container.disabled = false
 				print("DEBUG: Enabled bottom half for card")
 				
 	# If both actions have been used, check if turn is complete

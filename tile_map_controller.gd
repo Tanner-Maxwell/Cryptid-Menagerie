@@ -253,35 +253,14 @@ func handle_move_action(pos_clicked):
 							
 							# Mark top action as used only if we've used all movement
 							if move_leftover <= 0:
-								card_dialog.top_half_container.disabled = true
-								card_dialog.bottom_half_container.disabled = true
-								card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-								card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								# Mark only the top half as used for action economy
 								selected_cryptid.cryptid.top_card_played = true
 								
-								# Mark the original card as discarded
-								if card_dialog.card_resource.original_card != null:
-									print("DEBUG: Marking original card as discarded from move action")
-									card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
-									
-									# Also add to discard pile if not there
-									if not selected_cryptid.cryptid.discard.has(card_dialog.card_resource.original_card):
-										selected_cryptid.cryptid.discard.push_back(card_dialog.card_resource.original_card)
-									
-									# If card is still in deck, remove it
-									if selected_cryptid.cryptid.deck.has(card_dialog.card_resource.original_card):
-										selected_cryptid.cryptid.deck.erase(card_dialog.card_resource.original_card)
-								else:
-									print("DEBUG: No original card reference found for move action")
-									card_dialog.card_resource.current_state = Card.CardState.IN_DISCARD
-									
-									# Also add to discard pile if not there
-									if not selected_cryptid.cryptid.discard.has(card_dialog.card_resource):
-										selected_cryptid.cryptid.discard.push_back(card_dialog.card_resource)
-									
-									# If card is still in deck, remove it
-									if selected_cryptid.cryptid.deck.has(card_dialog.card_resource):
-										selected_cryptid.cryptid.deck.erase(card_dialog.card_resource)
+								# But visually disable both halves
+								disable_entire_card(card_dialog)
+								
+								# Discard the card
+								discard_card(card_dialog, selected_cryptid.cryptid)
 								
 								# Make sure to update the hand's UI
 								if hand and hand.has_method("update_card_availability"):
@@ -318,35 +297,14 @@ func handle_move_action(pos_clicked):
 							
 							# Mark bottom action as used only if we've used all movement
 							if move_leftover <= 0:
-								card_dialog.top_half_container.disabled = true
-								card_dialog.bottom_half_container.disabled = true
-								card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-								card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								# Mark only the bottom half as used for action economy
 								selected_cryptid.cryptid.bottom_card_played = true
 								
-								# Mark the original card as discarded
-								if card_dialog.card_resource.original_card != null:
-									print("DEBUG: Marking original card as discarded from move action")
-									card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
-									
-									# Also add to discard pile if not there
-									if not selected_cryptid.cryptid.discard.has(card_dialog.card_resource.original_card):
-										selected_cryptid.cryptid.discard.push_back(card_dialog.card_resource.original_card)
-									
-									# If card is still in deck, remove it
-									if selected_cryptid.cryptid.deck.has(card_dialog.card_resource.original_card):
-										selected_cryptid.cryptid.deck.erase(card_dialog.card_resource.original_card)
-								else:
-									print("DEBUG: No original card reference found for move action")
-									card_dialog.card_resource.current_state = Card.CardState.IN_DISCARD
-									
-									# Also add to discard pile if not there
-									if not selected_cryptid.cryptid.discard.has(card_dialog.card_resource):
-										selected_cryptid.cryptid.discard.push_back(card_dialog.card_resource)
-									
-									# If card is still in deck, remove it
-									if selected_cryptid.cryptid.deck.has(card_dialog.card_resource):
-										selected_cryptid.cryptid.deck.erase(card_dialog.card_resource)
+								# But visually disable both halves
+								disable_entire_card(card_dialog)
+								
+								# Discard the card
+								discard_card(card_dialog, selected_cryptid.cryptid)
 								
 								# Make sure to update the hand's UI
 								if hand and hand.has_method("update_card_availability"):
@@ -416,102 +374,138 @@ func handle_move_action(pos_clicked):
 	delete_all_lines()
 
 
+# Updated attack_action_selected based on the correct node structure
+# Updated attack_action_selected function
 func attack_action_selected(current_card):
+	print("\n---------- ATTACK ACTION SELECTED DEBUG ----------")
 	card_dialog = current_card
 	
-	# Important: Reset ALL action booleans first
-	move_action_bool = false  # Explicitly disable movement
+	# Reset action states
+	move_action_bool = false
 	attack_action_bool = false
+	
+	# Debug info
+	print("Selected card:", card_dialog)
 	
 	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
-	
 	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found when selecting attack action")
+		print("ERROR: No selected cryptid found")
 		return
-		
+	
+	print("Selected cryptid:", selected_cryptid.cryptid.name)
+	print("Top card played:", selected_cryptid.cryptid.top_card_played)
+	print("Bottom card played:", selected_cryptid.cryptid.bottom_card_played)
+	
+	# Clear visual indicators
 	delete_all_lines()
 	
-	# Only check active movement after the first attack has been made
-	if active_movement_card != null:
-		# If already in segmented movement, only allow continuing with the same card
-		if active_movement_card != current_card:
-			print("Cannot use a different card during active movement")
-			return
-		
-		# If already in a segmented movement, only allow continuing with the same card part
-		if (active_movement_card_part == "top" and 
-			card_dialog.top_half_container.modulate != Color(1, 1, 0, 1)):
-			print("Cannot use bottom part during active top movement")
-			return
-		elif (active_movement_card_part == "bottom" and 
-			card_dialog.bottom_half_container.modulate != Color(1, 1, 0, 1)):
-			print("Cannot use top part during active bottom movement")
-			return
+	# Get the VBoxContainer first
+	var vbox = card_dialog.get_node_or_null("VBoxContainer")
+	if not vbox:
+		print("ERROR: VBoxContainer not found")
+		return
 	
-	# Check for attack action in the card
-	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-		for action in card_dialog.card_resource.top_move.actions:
-			if action.action_types == [1]:  # Attack action type
-				attack_range = action.range
-				damage = action.amount
-				attack_action_bool = true
-				
-				# DON'T set active card/part until attack is actually performed
-				
-				# For debugging
-				print("Attack action selected: Range = ", attack_range, ", Damage = ", damage)
-				print("Selected cryptid position: ", local_to_map(selected_cryptid.position))
-				
-				# Store the current card for reference
-				current_card = card_dialog
-				
-				# Add this to ensure the attack action is active
-				print("Attack action bool set to: ", attack_action_bool)
-				break
-	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-		for action in card_dialog.card_resource.bottom_move.actions:
-			if action.action_types == [1]:  # Attack action type
-				attack_range = action.range
-				damage = action.amount
-				attack_action_bool = true
-				
-				# DON'T set active card/part until attack is actually performed
-				
-				# For debugging
-				print("Attack action selected: Range = ", attack_range, ", Damage = ", damage)
-				print("Selected cryptid position: ", local_to_map(selected_cryptid.position))
-				
-				# Store the current card for reference
-				current_card = card_dialog
-				
-				# Add this to ensure the attack action is active
-				print("Attack action bool set to: ", attack_action_bool)
-				break
-				
-	# If we failed to set attack_action_bool, print an error
+	# Now get the correct container nodes using the exact path
+	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
+	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
+	
+	print("Top half container found:", top_half_container != null)
+	print("Bottom half container found:", bottom_half_container != null)
+	
+	if not top_half_container or not bottom_half_container:
+		print("ERROR: Container nodes not found")
+		return
+	
+	# Check which half is currently highlighted
+	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
+	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
+	
+	print("Top half highlighted:", top_highlighted)
+	print("Bottom half highlighted:", bottom_highlighted)
+	
+	# Check for attack action based on our findings
+	var found_attack = false
+	
+	# Debug the card resource
+	print("\n--- CARD RESOURCE ANALYSIS ---")
+	if card_dialog.get("card_resource") != null:
+		var card_resource = card_dialog.card_resource
+		print("Card resource found")
+		
+		# Check top move actions
+		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
+			print("Checking top move actions")
+			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
+				for action in card_resource.top_move.actions:
+					print("Action type:", action.action_types)
+					if 1 in action.action_types:  # Attack action type (1)
+						print("Found attack action in top half")
+						attack_range = action.range
+						damage = action.amount
+						attack_action_bool = true
+						active_movement_card_part = "top"
+						found_attack = true
+						break
+		
+		# Check bottom move actions
+		if not found_attack and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
+			print("Checking bottom move actions")
+			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
+				for action in card_resource.bottom_move.actions:
+					print("Action type:", action.action_types)
+					if 1 in action.action_types:  # Attack action type (1)
+						print("Found attack action in bottom half")
+						attack_range = action.range
+						damage = action.amount
+						attack_action_bool = true
+						active_movement_card_part = "bottom"
+						found_attack = true
+						break
+	else:
+		print("ERROR: card_resource not found")
+	print("--- END CARD RESOURCE ANALYSIS ---\n")
+	
+	# Provide detailed feedback
 	if not attack_action_bool:
-		print("ERROR: Failed to activate attack action - no attack action found in selected card")
-		# Check what actions are in the card
-		if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-			print("Top half actions:")
-			for action in card_dialog.card_resource.top_move.actions:
-				print("Action type: ", action.action_types)
-		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-			print("Bottom half actions:")
-			for action in card_dialog.card_resource.bottom_move.actions:
-				print("Action type: ", action.action_types)
+		print("ERROR: Failed to activate attack action")
+		
+		if selected_cryptid.cryptid.top_card_played and top_highlighted:
+			print("Top action already used this turn")
+		elif selected_cryptid.cryptid.bottom_card_played and bottom_highlighted:
+			print("Bottom action already used this turn")
+		else:
+			print("No valid attack action found in the selected card half")
+	else:
+		print("Successfully activated attack action with range:", attack_range)
+		
+		# Store references for handle_attack_action
+		if active_movement_card_part == "top":
+			card_dialog.top_half_container = top_half_container
+			disable_other_cards_exact("top")
+		elif active_movement_card_part == "bottom":
+			card_dialog.bottom_half_container = bottom_half_container
+			disable_other_cards_exact("bottom")
+	
+	print("---------- END ATTACK ACTION SELECTED DEBUG ----------\n")
+
+# Add this helper function for more reliable color comparison
+func _is_color_close(color1, color2, tolerance = 0.1):
+	return (
+		abs(color1.r - color2.r) < tolerance and
+		abs(color1.g - color2.g) < tolerance and
+		abs(color1.b - color2.b) < tolerance and
+		abs(color1.a - color2.a) < tolerance
+	)
 
 func handle_attack_action(pos_clicked):
-	print("In handle_attack_action...")
+	print("\n---------- HANDLE ATTACK ACTION DEBUG ----------")
 	
 	var target_cryptid = get_cryptid_at_position(pos_clicked)
 	print("Target position:", pos_clicked)
 	print("Target cryptid:", target_cryptid)
 	
 	var attack_performed = false
-	
-	# Check if the target is valid - player cryptids can attack enemy cryptids, and enemy cryptids can attack player cryptids
 	var valid_target = false
 	
 	# Get the attacking cryptid
@@ -520,15 +514,12 @@ func handle_attack_action(pos_clicked):
 	# Determine if this is a valid target based on attacker type
 	if target_cryptid != null:
 		if selected_cryptid in player_cryptids_in_play and target_cryptid in enemy_cryptids_in_play:
-			# Player attacking enemy - valid
 			valid_target = true
 			print("Valid target: Player attacking enemy")
 		elif selected_cryptid in enemy_cryptids_in_play and target_cryptid in player_cryptids_in_play:
-			# Enemy attacking player - valid
 			valid_target = true
 			print("Valid target: Enemy attacking player")
 		else:
-			# Same team attack - invalid
 			valid_target = false
 			print("Invalid target: Cannot attack your own team")
 	
@@ -536,7 +527,7 @@ func handle_attack_action(pos_clicked):
 	if target_cryptid != null and valid_target:
 		print("Valid target found")
 		
-		# Calculate attack distance directly instead of relying on stored path
+		# Calculate attack distance
 		var current_pos = local_to_map(selected_cryptid.position)
 		var target_pos = local_to_map(target_cryptid.position)
 		var attack_path = a_star_hex_attack_grid.get_id_path(
@@ -545,48 +536,36 @@ func handle_attack_action(pos_clicked):
 		)
 		var attack_distance = attack_path.size() - 1
 		
-		print("Attack distance:", attack_distance)
-		print("Attack range:", attack_range)
+		print("Attack distance:", attack_distance, "Attack range:", attack_range)
 		
 		if attack_distance <= attack_range:
 			print("Target is within range")
 			
-			print("Attacker:", selected_cryptid)
+			# Get the top and bottom containers from the card dialog
+			var top_half_container = null
+			var bottom_half_container = null
 			
-			# Safely check card_dialog state - avoid accessing properties that might be freed
+			if is_instance_valid(card_dialog):
+				var vbox = card_dialog.get_node_or_null("VBoxContainer")
+				if vbox:
+					top_half_container = vbox.get_node_or_null("TopHalfContainer")
+					bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
+			
+			# Determine which half is being used
 			var using_top_half = false
 			var using_bottom_half = false
 			
-			if is_instance_valid(card_dialog) and card_dialog.has_method("display"):  # Check if card_dialog is valid
-				if card_dialog.has_node("TopHalfContainer"):  # Check if the node exists
-					var top_container = card_dialog.get_node("TopHalfContainer")
-					using_top_half = top_container.modulate == Color(1, 1, 0, 1)
-				
-				if card_dialog.has_node("BottomHalfContainer"):  # Check if the node exists
-					var bottom_container = card_dialog.get_node("BottomHalfContainer")
-					using_bottom_half = bottom_container.modulate == Color(1, 1, 0, 1)
-			else:
-				# If card_dialog is invalid, we must be in an AI-controlled attack
-				# In this case, we need to determine top/bottom from other context
-				print("AI attack detected - card_dialog is not valid")
-				# Use the current action type to determine which half is being used
-				# Check if there's an active movement card part set
-				if active_movement_card_part == "top":
-					using_top_half = true
-				elif active_movement_card_part == "bottom":
-					using_bottom_half = true
-				else:
-					# Default to top if we can't determine
-					print("Warning: Unable to determine card half, defaulting to top")
-					using_top_half = true
-			
-			# Set active card part ONLY when an attack is actually performed
-			if using_top_half:
-				active_movement_card_part = "top"
+			if top_half_container and is_yellow_highlighted(top_half_container.modulate):
+				using_top_half = true
 				print("Using top half for attack")
-			elif using_bottom_half:
-				active_movement_card_part = "bottom"
+			elif bottom_half_container and is_yellow_highlighted(bottom_half_container.modulate):
+				using_bottom_half = true
 				print("Using bottom half for attack")
+			else:
+				# If we can't determine from color, use active_movement_card_part
+				print("Cannot determine from color, using active_movement_card_part:", active_movement_card_part)
+				using_top_half = active_movement_card_part == "top"
+				using_bottom_half = active_movement_card_part == "bottom"
 			
 			# Play the attack animation
 			print("Starting attack animation")
@@ -594,6 +573,48 @@ func handle_attack_action(pos_clicked):
 			
 			attack_performed = true
 			print("Attack performed successfully")
+			
+			# Process card state changes immediately
+			if attack_performed:
+				# Mark only the appropriate half as "played" for action economy
+				if using_top_half:
+					selected_cryptid.cryptid.top_card_played = true
+					print("Marked top half as played for action economy")
+				elif using_bottom_half:
+					selected_cryptid.cryptid.bottom_card_played = true
+					print("Marked bottom half as played for action economy")
+				
+				# But visually disable the entire card
+				disable_entire_card(card_dialog)
+				
+				# Discard the card
+				discard_card(card_dialog, selected_cryptid.cryptid)
+				
+				# Disable other cards with the selected half
+				if using_top_half:
+					disable_other_cards_exact("top")
+				elif using_bottom_half:
+					disable_other_cards_exact("bottom")
+				
+				# Update hand to reflect changes
+				var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+				if hand_node and hand_node.has_method("update_card_availability"):
+					hand_node.update_card_availability()
+				
+				# Check if turn is complete
+				if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+					selected_cryptid.cryptid.completed_turn = true
+					print("Marked cryptid's turn as complete")
+					
+					# Move to next cryptid
+					if hand and hand.has_method("next_cryptid_turn"):
+						hand.next_cryptid_turn()
+				
+				# Show the action menu again with updated button state
+				var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+				if action_menu and action_menu.has_method("update_menu_visibility"):
+					action_menu.update_menu_visibility(selected_cryptid.cryptid)
+					action_menu.show()
 		else:
 			print("Target out of range")
 	else:
@@ -603,11 +624,82 @@ func handle_attack_action(pos_clicked):
 	if not attack_performed:
 		print("No attack performed - resetting action state")
 		attack_action_bool = false
-		active_movement_card_part = ""  # Reset active card part
-		active_movement_card = null     # Reset active card
+		active_movement_card_part = ""
+		active_movement_card = null
 		delete_all_lines()
 		delete_all_indicators()
+	
+	print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
+	return attack_performed
 
+
+# Add this more verbose version of disable_other_card_halves for debugging
+func disable_other_card_halves_debug(active_card_half):
+	print("\n---------- DISABLE OTHER CARD HALVES DEBUG ----------")
+	print("Active card half:", active_card_half)
+	
+	# Get all cards in the hand
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if not hand_node:
+		print("ERROR: Hand node not found!")
+		# Try alternate methods
+		hand_node = hand
+		if not hand_node:
+			print("ERROR: Hand reference also not valid!")
+			return
+	
+	print("Found hand node:", hand_node)
+	var cards = hand_node.get_children()
+	print("Found", cards.size(), "children in hand")
+	
+	var valid_card_count = 0
+	
+	for card in cards:
+		if not is_instance_valid(card):
+			print("WARNING: Invalid card instance, skipping")
+			continue
+			
+		print("Processing card:", card)
+		
+		# Check if this is a card dialog by script path
+		var is_card_dialog = false
+		if card.get_script():
+			var script_path = card.get_script().resource_path
+			print("Card script path:", script_path)
+			is_card_dialog = script_path.ends_with("card_dialog.gd")
+		else:
+			print("WARNING: Card has no script")
+		
+		if is_card_dialog:
+			valid_card_count += 1
+			print("Found valid card dialog")
+			
+			# Skip the active card
+			if card == card_dialog:
+				print("Skipping active card")
+				continue
+			
+			# Check if the card has the required containers
+			var has_top_container = card.has_node("TopHalfContainer")
+			var has_bottom_container = card.has_node("BottomHalfContainer")
+			
+			print("Has top container:", has_top_container)
+			print("Has bottom container:", has_bottom_container)
+			
+			# Disable the appropriate half
+			if active_card_half == "top" and has_top_container:
+				var top_container = card.get_node("TopHalfContainer")
+				print("Disabling top half of other card")
+				top_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				top_container.disabled = true
+			elif active_card_half == "bottom" and has_bottom_container:
+				var bottom_container = card.get_node("BottomHalfContainer")
+				print("Disabling bottom half of other card")
+				bottom_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				bottom_container.disabled = true
+	
+	print("Processed", valid_card_count, "valid card dialogs")
+	print("---------- END DISABLE OTHER CARD HALVES DEBUG ----------\n")
 
 func _input(event):
 	if movement_in_progress:
@@ -1197,20 +1289,28 @@ func apply_delayed_damage(params):
 	delete_all_lines()
 	delete_all_indicators()
 
-# Function called when attack tween completes
 func _on_attack_tween_finished(params):
 	print("Attack animation finished")
 	
 	# Reset movement flag
 	movement_in_progress = false
-	print("Reset movement_in_progress to false")
 	
 	# Re-enable input
 	set_process_input(true)
-	print("Re-enabled input processing")
 	
-	# Apply damage and continue with game logic
-	apply_delayed_damage(params)
+	# Apply damage
+	var target_cryptid = params[0]
+	var damage_amount = params[1]
+	
+	print("Applying", damage_amount, "damage to", target_cryptid)
+	apply_damage(target_cryptid, damage_amount)
+	
+	# IMPORTANT: Reset attack_action_bool here
+	attack_action_bool = false
+	
+	# Clean up visuals
+	delete_all_lines()
+	delete_all_indicators()
 
 func update_movement_indicator(cryptid, movement_left):
 	# Remove any existing movement indicators first
@@ -1268,9 +1368,15 @@ func enable_all_card_halves():
 			if not selected_cryptid.cryptid.bottom_card_played:
 				card.bottom_half_container.modulate = Color(1, 1, 1, 1)
 
+# Also add this enhanced disable_other_card_halves function
 func disable_other_card_halves(active_card_half):
 	# Get all cards in the hand
-	var cards = hand.get_children()
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if not hand_node:
+		print("ERROR: Hand node not found")
+		return
+		
+	var cards = hand_node.get_children()
 	
 	print("Disabling other card halves, active half: ", active_card_half)
 	
@@ -1283,13 +1389,13 @@ func disable_other_card_halves(active_card_half):
 				
 			# Disable the appropriate half based on active_card_half
 			if active_card_half == "top":
-				print("Disabling top half of other card: ", card.card_resource.top_move.name_prefix)
+				print("Disabling top half of other card")
 				card.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				# Don't change mouse filter to allow viewing
+				card.top_half_container.disabled = true
 			elif active_card_half == "bottom":
-				print("Disabling bottom half of other card: ", card.card_resource.bottom_move.name_suffix)
+				print("Disabling bottom half of other card")
 				card.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				# Don't change mouse filter to allow viewing
+				card.bottom_half_container.disabled = true
 
 func reset_for_new_cryptid():
 	# Reset all action states for a new cryptid's turn
@@ -1350,3 +1456,235 @@ func finish_movement():
 			hand.next_cryptid_turn()
 	else:
 		print("No movement in progress to finish")
+
+# Helper function to check if a color is yellowish (highlighted)
+func is_yellow_highlighted(color):
+	# Check if the color is predominantly yellow (high red and green, low blue)
+	return color.r > 0.7 and color.g > 0.7 and color.b < 0.5
+
+# Helper function to print the node tree - simple implementation
+func print_node_tree(node, indent = 0):
+	var indent_str = ""
+	for i in range(indent):
+		indent_str += "  "
+	
+	print(indent_str + node.name + " (" + node.get_class() + ")")
+	
+	# Print properties for containers that might be relevant
+	if node is Control:
+		print(indent_str + "  modulate: " + str(node.modulate))
+		# Check for disabled property without using has_variable
+		if node.get("disabled") != null:
+			print(indent_str + "  disabled: " + str(node.disabled))
+	
+	# Recursively print children
+	for child in node.get_children():
+		print_node_tree(child, indent + 1)
+
+# A simplified version that doesn't rely on specific container names
+func disable_other_cards_simplified(active_card_half):
+	print("\n---------- DISABLE OTHER CARDS ----------")
+	print("Active card half: " + active_card_half)
+	
+	# Get all cards in the hand
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if not hand_node:
+		print("ERROR: Hand node not found!")
+		hand_node = hand  # Try the direct reference
+		if not hand_node:
+			print("ERROR: Hand reference also not valid!")
+			return
+	
+	print("Found hand node: " + str(hand_node))
+	var cards = hand_node.get_children()
+	print("Found " + str(cards.size()) + " children in hand")
+	
+	# Process each card
+	for card in cards:
+		if not is_instance_valid(card):
+			continue
+			
+		# Skip the active card
+		if card == card_dialog:
+			print("Skipping active card")
+			continue
+		
+		print("Processing card: " + str(card))
+		
+		# Disable the appropriate halves based on position
+		var top_containers = []
+		var bottom_containers = []
+		
+		for child in card.get_children():
+			if child is Control:
+				if "top" in child.name.to_lower() or child.position.y < card.size.y / 2:
+					top_containers.append(child)
+				else:
+					bottom_containers.append(child)
+		
+		# Disable the appropriate containers
+		if active_card_half == "top" and top_containers.size() > 0:
+			for container in top_containers:
+				print("Disabling top container: " + container.name)
+				container.modulate = Color(0.5, 0.5, 0.5, 1)
+				if container.get("disabled") != null:
+					container.disabled = true
+				
+		elif active_card_half == "bottom" and bottom_containers.size() > 0:
+			for container in bottom_containers:
+				print("Disabling bottom container: " + container.name)
+				container.modulate = Color(0.5, 0.5, 0.5, 1)
+				if container.get("disabled") != null:
+					container.disabled = true
+	
+	print("---------- END DISABLE OTHER CARDS ----------\n")
+
+# Function to disable other cards based on the exact node structure
+func disable_other_cards_exact(active_card_half):
+	print("\n---------- DISABLE OTHER CARDS (EXACT) ----------")
+	print("Active card half:", active_card_half)
+	
+	# Get all cards in the hand
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if not hand_node:
+		print("ERROR: Hand node not found!")
+		hand_node = hand  # Try the direct reference
+		if not hand_node:
+			print("ERROR: Hand reference also not valid!")
+			return
+	
+	print("Found hand node:", hand_node)
+	var cards = hand_node.get_children()
+	print("Found", cards.size(), "children in hand")
+	
+	# First handle the active card's unused half
+	if is_instance_valid(card_dialog):
+		print("Handling active card:", card_dialog)
+		
+		var vbox = card_dialog.get_node_or_null("VBoxContainer")
+		if vbox:
+			var top_container = vbox.get_node_or_null("TopHalfContainer")
+			var bottom_container = vbox.get_node_or_null("BottomHalfContainer")
+			
+			if active_card_half == "top" and bottom_container:
+				print("Disabling bottom container of active card")
+				bottom_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				if bottom_container.get("disabled") != null:
+					bottom_container.disabled = true
+			elif active_card_half == "bottom" and top_container:
+				print("Disabling top container of active card")
+				top_container.modulate = Color(0.5, 0.5, 0.5, 1)
+				if top_container.get("disabled") != null:
+					top_container.disabled = true
+	
+	# Then process the other cards
+	for card in cards:
+		if not is_instance_valid(card):
+			continue
+			
+		# Skip the active card since we already handled it
+		if card == card_dialog:
+			print("Skipping active card for other processing")
+			continue
+		
+		print("Processing card:", card)
+		
+		# Get the VBoxContainer
+		var vbox = card.get_node_or_null("VBoxContainer")
+		if not vbox:
+			print("WARNING: VBoxContainer not found in card, skipping")
+			continue
+		
+		# Get the top and bottom containers
+		var top_container = vbox.get_node_or_null("TopHalfContainer")
+		var bottom_container = vbox.get_node_or_null("BottomHalfContainer")
+		
+		# Check if we found them
+		if not top_container or not bottom_container:
+			print("WARNING: Half containers not found in card, skipping")
+			continue
+		
+		# Disable the appropriate half
+		if active_card_half == "top" and top_container:
+			print("Disabling top container of other card:", top_container.name)
+			top_container.modulate = Color(0.5, 0.5, 0.5, 1)
+			if top_container.get("disabled") != null:
+				top_container.disabled = true
+		elif active_card_half == "bottom" and bottom_container:
+			print("Disabling bottom container of other card:", bottom_container.name)
+			bottom_container.modulate = Color(0.5, 0.5, 0.5, 1)
+			if bottom_container.get("disabled") != null:
+				bottom_container.disabled = true
+	
+	print("---------- END DISABLE OTHER CARDS (EXACT) ----------\n")
+
+# Function to disable the entire card visually while preserving action economy
+func disable_entire_card(card_dialog):
+	if not is_instance_valid(card_dialog):
+		print("ERROR: Invalid card dialog")
+		return
+	
+	print("Disabling entire card visually")
+	
+	# Get the top and bottom containers
+	var vbox = card_dialog.get_node_or_null("VBoxContainer")
+	if not vbox:
+		print("ERROR: VBoxContainer not found")
+		return
+	
+	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
+	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
+	
+	# Disable both halves visually
+	if top_half_container:
+		top_half_container.disabled = true
+		top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+		print("Visually disabled top half of card")
+	
+	if bottom_half_container:
+		bottom_half_container.disabled = true
+		bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+		print("Visually disabled bottom half of card")
+	
+	# Mark card as fully disabled with metadata
+	if not card_dialog.has_meta("fully_disabled"):
+		card_dialog.set_meta("fully_disabled", true)
+
+# Function to handle card discard logic
+func discard_card(card_dialog, cryptid):
+	if not is_instance_valid(card_dialog) or not card_dialog.card_resource:
+		print("ERROR: Invalid card dialog or card resource")
+		return
+	
+	# Ensure we work with the original card
+	var original_card = null
+	if card_dialog.card_resource.original_card != null:
+		original_card = card_dialog.card_resource.original_card
+		print("Using original card reference for discard")
+	else:
+		original_card = card_dialog.card_resource
+		print("Using direct card resource for discard")
+	
+	# Mark card state as discarded
+	original_card.current_state = Card.CardState.IN_DISCARD
+	print("Marked card state as IN_DISCARD")
+	
+	# Add to discard pile if not already there
+	if not cryptid.discard.has(original_card):
+		cryptid.discard.push_back(original_card)
+		print("Added card to discard pile - discard size: " + str(cryptid.discard.size()))
+	
+	# Remove from deck if still there
+	if cryptid.deck.has(original_card):
+		cryptid.deck.erase(original_card)
+		print("Removed card from deck - deck size: " + str(cryptid.deck.size()))
+	
+	# Print confirmation
+	print("Discard pile now has " + str(cryptid.discard.size()) + " cards")
+	print("Deck now has " + str(cryptid.deck.size()) + " cards")
+	
+	# Force refresh of hand to show updated deck/discard state
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.has_method("switch_cryptid_discard_cards"):
+		print("Refreshing discard display")
+		hand_node.switch_cryptid_discard_cards(cryptid)
