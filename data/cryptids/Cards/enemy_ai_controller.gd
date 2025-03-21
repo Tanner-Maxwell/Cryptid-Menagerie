@@ -87,8 +87,16 @@ func take_enemy_turn(enemy_cryptid):
 					print("AI: Still waiting for movement to finish...")
 
 			# Add a safety delay to ensure any animation state is fully reset
-			await get_tree().create_timer(0.5).timeout
+			await get_tree().create_timer(1.5).timeout
 			
+			# After waiting for movement to complete
+			print("AI: Movement finished, cryptid at position:", tile_map_layer.local_to_map(enemy_cryptid.position))
+
+			# IMPORTANT: Check for attack opportunities AFTER moving
+			if !top_action_used or !bottom_action_used:
+				print("AI: Checking for attack opportunities after moving")
+				var post_move_attack = find_attack_target(enemy_cryptid)
+
 			# IMPORTANT: Re-get the enemy position AFTER movement
 			enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
 			print("AI: New position after move:", move_result.move_target)
@@ -194,6 +202,8 @@ func show_end_turn_button_for_enemy():
 # Find closest player cryptid that can be attacked
 func find_attack_target(enemy_cryptid):
 	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
+	print("AI: Checking attack options from", enemy_pos)
+	
 	var closest_target = null
 	var closest_distance = 999
 	
@@ -206,16 +216,25 @@ func find_attack_target(enemy_cryptid):
 	if top_used and bottom_used:
 		return null
 	
-	# Temporarily store original values
-	var original_attack_bool = tile_map_layer.attack_action_bool
+	# Store original action state
 	var original_move_bool = tile_map_layer.move_action_bool
-	var original_attack_range = tile_map_layer.attack_range
+	var original_attack_bool = tile_map_layer.attack_action_bool
+	
+	# Set up for attack calculation
+	tile_map_layer.move_action_bool = false
+	tile_map_layer.attack_action_bool = true
 	
 	# Examine each player cryptid
 	for player_cryptid in tile_map_layer.player_cryptids_in_play:
 		var player_pos = tile_map_layer.local_to_map(player_cryptid.position)
 		
-		print("AI: Checking attack options from", enemy_pos, "to", player_pos)
+		# Get the actual path through the A* grid
+		var path = tile_map_layer.a_star_hex_grid.get_id_path(
+			tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
+			tile_map_layer.a_star_hex_grid.get_closest_point(player_pos)
+		)
+		
+		print("AI: Checking player", player_cryptid.cryptid.name, "at position", player_pos)
 		
 		# Check cards for attacks
 		for card in enemy_cryptid.cryptid.deck:
@@ -229,19 +248,8 @@ func find_attack_target(enemy_cryptid):
 					if action.action_types.has(1):  # Attack action
 						var attack_range = action.range
 						
-						# Set up the attack mode and calculate path
-						tile_map_layer.attack_action_bool = true
-						tile_map_layer.move_action_bool = false
-						tile_map_layer.attack_range = attack_range
-						
-						# Get attack path
-						var attack_path = tile_map_layer.a_star_hex_attack_grid.get_id_path(
-							tile_map_layer.a_star_hex_attack_grid.get_closest_point(enemy_pos),
-							tile_map_layer.a_star_hex_attack_grid.get_closest_point(player_pos)
-						)
-						
-						# Calculate distance
-						var attack_distance = attack_path.size() - 1
+						# Calculate attack distance
+						var attack_distance = path.size() - 1
 						
 						print("AI: Card", card.top_move.name_prefix, "attack range:", attack_range, "actual distance:", attack_distance)
 						
@@ -265,19 +273,8 @@ func find_attack_target(enemy_cryptid):
 					if action.action_types.has(1):  # Attack action
 						var attack_range = action.range
 						
-						# Set up the attack mode and calculate path
-						tile_map_layer.attack_action_bool = true
-						tile_map_layer.move_action_bool = false
-						tile_map_layer.attack_range = attack_range
-						
-						# Get attack path
-						var attack_path = tile_map_layer.a_star_hex_attack_grid.get_id_path(
-							tile_map_layer.a_star_hex_attack_grid.get_closest_point(enemy_pos),
-							tile_map_layer.a_star_hex_attack_grid.get_closest_point(player_pos)
-						)
-						
-						# Calculate distance
-						var attack_distance = attack_path.size() - 1
+						# Calculate attack distance
+						var attack_distance = path.size() - 1
 						
 						print("AI: Card", card.bottom_move.name_suffix, "attack range:", attack_range, "actual distance:", attack_distance)
 						
@@ -295,10 +292,9 @@ func find_attack_target(enemy_cryptid):
 									"target_pos": player_pos
 								}
 	
-	# Restore original values
-	tile_map_layer.attack_action_bool = original_attack_bool
+	# Restore original state
 	tile_map_layer.move_action_bool = original_move_bool
-	tile_map_layer.attack_range = original_attack_range
+	tile_map_layer.attack_action_bool = original_attack_bool
 	
 	return closest_target
 
