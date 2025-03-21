@@ -89,14 +89,47 @@ func unhighlight_card(card: CardDialog):
 func can_highlight_more() -> bool:
 	return highlighted_cards.size() < max_highlighted_cards
 	
+# Replace the cards_selected function with this improved version:
 func cards_selected(selected_cards: Array):
 	print("DEBUG: cards_selected called with " + str(selected_cards.size()) + " cards")
 	for cards_picked in selected_cards:
-		print("DEBUG: Removing card from deck: " + cards_picked.card_resource.to_string())
-		selected_cryptid.deck.erase(cards_picked.card_resource)
-		print("DEBUG: Adding card to discard: " + cards_picked.card_resource.to_string())
-		selected_cryptid.discard.push_back(cards_picked.card_resource)
-	print("DEBUG: After cards_selected - deck size: " + str(selected_cryptid.deck.size()) + ", discard size: " + str(selected_cryptid.discard.size()))
+		print("DEBUG: Processing card: " + cards_picked.card_resource.to_string())
+		
+		# First check if we have an original card reference
+		if cards_picked.card_resource.original_card != null:
+			# Update the original card's state to IN_DISCARD
+			cards_picked.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+			print("DEBUG: Updated original card state to IN_DISCARD")
+		else:
+			# If no original reference, update this card's state directly
+			cards_picked.card_resource.current_state = Card.CardState.IN_DISCARD
+			print("DEBUG: Updated direct card state to IN_DISCARD")
+		
+		# Remove card from deck only if it's still there
+		if selected_cryptid.deck.has(cards_picked.card_resource.original_card or cards_picked.card_resource):
+			if cards_picked.card_resource.original_card != null:
+				selected_cryptid.deck.erase(cards_picked.card_resource.original_card)
+				print("DEBUG: Removed original card from deck")
+			else:
+				selected_cryptid.deck.erase(cards_picked.card_resource)
+				print("DEBUG: Removed card from deck")
+		
+		# Add card to discard if not already there
+		if cards_picked.card_resource.original_card != null:
+			if not selected_cryptid.discard.has(cards_picked.card_resource.original_card):
+				selected_cryptid.discard.push_back(cards_picked.card_resource.original_card)
+				print("DEBUG: Added original card to discard")
+		else:
+			if not selected_cryptid.discard.has(cards_picked.card_resource):
+				selected_cryptid.discard.push_back(cards_picked.card_resource)
+				print("DEBUG: Added card to discard")
+	
+	print("DEBUG: After cards_selected - deck size: " + str(selected_cryptid.deck.size()) + 
+		  ", discard size: " + str(selected_cryptid.discard.size()))
+	
+	# Make sure to update card availability after modifying card states
+	update_card_availability()
+	
 	return selected_cryptid
 
 func switch_cryptid_deck(cryptid: Cryptid):
@@ -196,6 +229,7 @@ func set_selected_bottom_card(card: CardDialog):
 	selected_bottom_card = card
 	check_if_turn_complete()
 
+# Add a more robust check_if_turn_complete function:
 func check_if_turn_complete():
 	print("DEBUG: check_if_turn_complete called")
 	print("DEBUG: selected_top_card = " + str(selected_top_card))
@@ -384,25 +418,46 @@ func check_turn_completion():
 			# All cryptids have taken their turn, move to battle phase
 			get_node("/root/Main/GameController").battle_phase()
 			
+# Enhance update_card_availability to handle both half states properly
 func update_card_availability():
-	# Gray out all top halves if a top action has been used
-	if selected_cryptid.top_card_played:
-		for card in get_children():
-			if card is CardDialog:
+	print("DEBUG: Updating card availability")
+	
+	# Ensure we're working with the selected cryptid
+	if not selected_cryptid:
+		print("DEBUG: No selected cryptid!")
+		return
+	
+	print("DEBUG: Top card played: " + str(selected_cryptid.top_card_played))
+	print("DEBUG: Bottom card played: " + str(selected_cryptid.bottom_card_played))
+	
+	# Process all cards in the hand
+	for card in get_children():
+		if card is CardDialog:
+			# Handle top half availability
+			if selected_cryptid.top_card_played:
 				card.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				card.top_half_container.disabled = true
-	
-	# Gray out all bottom halves if a bottom action has been used
-	if selected_cryptid.bottom_card_played:
-		for card in get_children():
-			if card is CardDialog:
+				print("DEBUG: Disabled top half for card")
+			else:
+				card.top_half_container.modulate = Color(1, 1, 1, 1)
+				card.top_half_container.disabled = false
+				print("DEBUG: Enabled top half for card")
+			
+			# Handle bottom half availability
+			if selected_cryptid.bottom_card_played:
 				card.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				card.bottom_half_container.disabled = true
+				print("DEBUG: Disabled bottom half for card")
+			else:
+				card.bottom_half_container.modulate = Color(1, 1, 1, 1)
+				card.bottom_half_container.disabled = false
+				print("DEBUG: Enabled bottom half for card")
 				
 	# If both actions have been used, check if turn is complete
 	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
 		selected_cryptid.completed_turn = true
-		
+		print("DEBUG: Marked cryptid's turn as complete")
+
 
 func create_unique_card_instance(card_template):
 	# Create a new card resource

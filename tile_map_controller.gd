@@ -15,7 +15,7 @@ const MAIN_ATLAS_ID = 0
 
 @onready var player_team = %PlayerTeam
 @onready var enemy_team = %EnemyTeam
-@onready var player_starting_positions = [Vector2i(-4, 1), Vector2i(-2, 1), Vector2i(0, 1)]
+@onready var player_starting_positions = [Vector2i(-4, -1), Vector2i(-2, 1), Vector2i(0, 1)]
 @onready var enemy_starting_positions = [Vector2i(-4, -3), Vector2i(-2, -3), Vector2i(0, -3)]
 
 var active_movement_card = null
@@ -263,12 +263,34 @@ func handle_move_action(pos_clicked):
 								if card_dialog.card_resource.original_card != null:
 									print("DEBUG: Marking original card as discarded from move action")
 									card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+									
+									# Also add to discard pile if not there
+									if not selected_cryptid.cryptid.discard.has(card_dialog.card_resource.original_card):
+										selected_cryptid.cryptid.discard.push_back(card_dialog.card_resource.original_card)
+									
+									# If card is still in deck, remove it
+									if selected_cryptid.cryptid.deck.has(card_dialog.card_resource.original_card):
+										selected_cryptid.cryptid.deck.erase(card_dialog.card_resource.original_card)
 								else:
-									print("ERROR: No original card reference found for move action")
+									print("DEBUG: No original card reference found for move action")
+									card_dialog.card_resource.current_state = Card.CardState.IN_DISCARD
+									
+									# Also add to discard pile if not there
+									if not selected_cryptid.cryptid.discard.has(card_dialog.card_resource):
+										selected_cryptid.cryptid.discard.push_back(card_dialog.card_resource)
+									
+									# If card is still in deck, remove it
+									if selected_cryptid.cryptid.deck.has(card_dialog.card_resource):
+										selected_cryptid.cryptid.deck.erase(card_dialog.card_resource)
+								
+								# Make sure to update the hand's UI
+								if hand and hand.has_method("update_card_availability"):
+									hand.update_card_availability()
 							else:
 								# We have more movement left, disable other cards
 								# Disable bottom half of this card 
 								card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								card_dialog.bottom_half_container.disabled = true
 								
 								# Disable top half of all other cards
 								disable_other_card_halves("top")
@@ -306,12 +328,34 @@ func handle_move_action(pos_clicked):
 								if card_dialog.card_resource.original_card != null:
 									print("DEBUG: Marking original card as discarded from move action")
 									card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+									
+									# Also add to discard pile if not there
+									if not selected_cryptid.cryptid.discard.has(card_dialog.card_resource.original_card):
+										selected_cryptid.cryptid.discard.push_back(card_dialog.card_resource.original_card)
+									
+									# If card is still in deck, remove it
+									if selected_cryptid.cryptid.deck.has(card_dialog.card_resource.original_card):
+										selected_cryptid.cryptid.deck.erase(card_dialog.card_resource.original_card)
 								else:
-									print("ERROR: No original card reference found for move action")
+									print("DEBUG: No original card reference found for move action")
+									card_dialog.card_resource.current_state = Card.CardState.IN_DISCARD
+									
+									# Also add to discard pile if not there
+									if not selected_cryptid.cryptid.discard.has(card_dialog.card_resource):
+										selected_cryptid.cryptid.discard.push_back(card_dialog.card_resource)
+									
+									# If card is still in deck, remove it
+									if selected_cryptid.cryptid.deck.has(card_dialog.card_resource):
+										selected_cryptid.cryptid.deck.erase(card_dialog.card_resource)
+								
+								# Make sure to update the hand's UI
+								if hand and hand.has_method("update_card_availability"):
+									hand.update_card_availability()
 							else:
 								# We have more movement left, disable other cards
 								# Disable top half of this card
 								card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								card_dialog.top_half_container.disabled = true
 								
 								# Disable bottom half of all other cards
 								disable_other_card_halves("bottom")
