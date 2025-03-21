@@ -458,8 +458,6 @@ func attack_action_selected(current_card):
 			for action in card_dialog.card_resource.bottom_move.actions:
 				print("Action type: ", action.action_types)
 
-# Similar changes for attack action
-# In tile_map_controller.gd, update the handle_attack_action function:
 func handle_attack_action(pos_clicked):
 	print("In handle_attack_action...")
 	
@@ -511,54 +509,40 @@ func handle_attack_action(pos_clicked):
 			
 			print("Attacker:", selected_cryptid)
 			
-			# Store which card half was used for later
-			var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
-			var using_bottom_half = card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1)
+			# Safely check card_dialog state - avoid accessing properties that might be freed
+			var using_top_half = false
+			var using_bottom_half = false
+			
+			if is_instance_valid(card_dialog) and card_dialog.has_method("display"):  # Check if card_dialog is valid
+				if card_dialog.has_node("TopHalfContainer"):  # Check if the node exists
+					var top_container = card_dialog.get_node("TopHalfContainer")
+					using_top_half = top_container.modulate == Color(1, 1, 0, 1)
+				
+				if card_dialog.has_node("BottomHalfContainer"):  # Check if the node exists
+					var bottom_container = card_dialog.get_node("BottomHalfContainer")
+					using_bottom_half = bottom_container.modulate == Color(1, 1, 0, 1)
+			else:
+				# If card_dialog is invalid, we must be in an AI-controlled attack
+				# In this case, we need to determine top/bottom from other context
+				print("AI attack detected - card_dialog is not valid")
+				# Use the current action type to determine which half is being used
+				# Check if there's an active movement card part set
+				if active_movement_card_part == "top":
+					using_top_half = true
+				elif active_movement_card_part == "bottom":
+					using_bottom_half = true
+				else:
+					# Default to top if we can't determine
+					print("Warning: Unable to determine card half, defaulting to top")
+					using_top_half = true
 			
 			# Set active card part ONLY when an attack is actually performed
 			if using_top_half:
 				active_movement_card_part = "top"
-				active_movement_card = card_dialog
+				print("Using top half for attack")
 			elif using_bottom_half:
 				active_movement_card_part = "bottom"
-				active_movement_card = card_dialog
-			
-			# Disable the card UI immediately to prevent multiple uses
-			if using_top_half:
-				print("Using top half of card")
-				card_dialog.top_half_container.disabled = true
-				card_dialog.bottom_half_container.disabled = true
-				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				selected_cryptid.cryptid.top_card_played = true
-				
-				# Disable top half of all other cards
-				disable_other_card_halves("top")
-				
-				# Mark the original card as discarded
-				if card_dialog.card_resource.original_card != null:
-					print("DEBUG: Marking original card as discarded from attack action")
-					card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
-				else:
-					print("ERROR: No original card reference found for attack action")
-				
-			elif using_bottom_half:
-				print("Using bottom half of card")
-				card_dialog.top_half_container.disabled = true
-				card_dialog.bottom_half_container.disabled = true
-				card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				selected_cryptid.cryptid.bottom_card_played = true
-				
-				# Disable bottom half of all other cards
-				disable_other_card_halves("bottom")
-				
-				# Mark the original card as discarded
-				if card_dialog.card_resource.original_card != null:
-					print("DEBUG: Marking original card as discarded from attack action")
-					card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
-				else:
-					print("ERROR: No original card reference found for attack action")
+				print("Using bottom half for attack")
 			
 			# Play the attack animation
 			print("Starting attack animation")
@@ -579,9 +563,6 @@ func handle_attack_action(pos_clicked):
 		active_movement_card = null     # Reset active card
 		delete_all_lines()
 		delete_all_indicators()
-		
-		# Re-enable all eligible card halves
-		enable_all_card_halves()
 
 
 func _input(event):

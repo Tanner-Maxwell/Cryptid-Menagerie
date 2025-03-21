@@ -16,8 +16,6 @@ func _ready():
 	hand = get_node("/root/VitaChrome/UIRoot/Hand")
 
 # Main function to handle an enemy cryptid's turn
-# Main function to handle an enemy cryptid's turn
-# Main function to handle an enemy cryptid's turn
 func take_enemy_turn(enemy_cryptid):
 	print("AI: Taking turn for enemy cryptid: ", enemy_cryptid.cryptid.name)
 	
@@ -36,58 +34,117 @@ func take_enemy_turn(enemy_cryptid):
 		print("AI: Cryptid already completed turn, skipping")
 		return
 	
-	# Basic decision tree based on prioritization rules
+	# Initialize action flags
+	var top_action_used = enemy_cryptid.cryptid.top_card_played
+	var bottom_action_used = enemy_cryptid.cryptid.bottom_card_played
 	
-	# 1. Check if we can attack a player cryptid
-	var attack_target = find_attack_target(enemy_cryptid)
-	if attack_target:
-		print("AI: Found attack target:", attack_target.target.cryptid.name)
-		perform_attack(enemy_cryptid, attack_target)
+	# First phase: See if we can attack without moving
+	if !top_action_used or !bottom_action_used:
+		print("AI: Looking for immediate attack opportunities")
+		var attack_target = find_attack_target(enemy_cryptid)
 		
-		# After attacking, check if we can move (retreat)
-		if !enemy_cryptid.cryptid.completed_turn:
-			var retreat_target = find_retreat_position(enemy_cryptid)
-			if retreat_target:
+		if attack_target:
+			print("AI: Found immediate attack target:", attack_target.target.cryptid.name)
+			perform_attack(enemy_cryptid, attack_target)
+			
+			# Update which action we used
+			if attack_target.is_top:
+				top_action_used = true
+			else:
+				bottom_action_used = true
+				
+			# Wait for animations to complete
+			await get_tree().create_timer(1.0).timeout
+		else:
+			print("AI: No immediate attack targets found")
+	
+	# Second phase: See if we can move to attack range
+	if !top_action_used or !bottom_action_used:
+		print("AI: Looking for move-to-attack opportunities")
+		var move_attack_result = find_move_to_attack(enemy_cryptid)
+		
+		if move_attack_result:
+			print("AI: Found move to attack position")
+			perform_move(enemy_cryptid, move_attack_result.move_target)
+			
+			# Update which action we used
+			if move_attack_result.move_target.is_top:
+				top_action_used = true
+			else:
+				bottom_action_used = true
+				
+			# Wait for animations to complete
+			await get_tree().create_timer(1.0).timeout
+			
+			# If we can attack after moving, and we have an action left, do so
+			if move_attack_result.can_attack_after_move and (!top_action_used or !bottom_action_used):
+				print("AI: Attempting attack after move")
+				# Find new attack targets from our new position
+				var post_move_attack = find_attack_target(enemy_cryptid)
+				if post_move_attack:
+					# Make sure we're not trying to use the same half twice
+					if (post_move_attack.is_top and !top_action_used) or (!post_move_attack.is_top and !bottom_action_used):
+						print("AI: Attacking after move")
+						perform_attack(enemy_cryptid, post_move_attack)
+						
+						# Update which action we used
+						if post_move_attack.is_top:
+							top_action_used = true
+						else:
+							bottom_action_used = true
+							
+						# Wait for animations to complete
+						await get_tree().create_timer(1.0).timeout
+				else:
+					print("AI: No valid attack targets after moving")
+		else:
+			print("AI: No viable move-to-attack options found")
+	
+	# Third phase: If we've attacked but not moved, consider retreat
+	if (top_action_used or bottom_action_used) and (!top_action_used or !bottom_action_used):
+		print("AI: Considering retreat after attack")
+		var retreat_target = find_retreat_position(enemy_cryptid)
+		if retreat_target:
+			# Check if we have the right action type available
+			if (retreat_target.is_top and !top_action_used) or (!retreat_target.is_top and !bottom_action_used):
 				print("AI: Retreating after attack")
 				perform_move(enemy_cryptid, retreat_target)
-		
-		# Mark actions as used but don't end turn - let player press the button
-		enemy_cryptid.cryptid.top_card_played = true
-		enemy_cryptid.cryptid.bottom_card_played = true
-		
-		# Show end turn button
-		show_end_turn_button_for_enemy()
-		return
+				
+				# Update which action we used
+				if retreat_target.is_top:
+					top_action_used = true
+				else:
+					bottom_action_used = true
+					
+				# Wait for animations to complete
+				await get_tree().create_timer(1.0).timeout
 	
-	# 2. Check if we can move to attack range
-	var move_attack_result = find_move_to_attack(enemy_cryptid)
-	if move_attack_result:
-		print("AI: Moving to attack position")
-		perform_move(enemy_cryptid, move_attack_result.move_target)
-		
-		# If we can attack after moving, do so
-		if move_attack_result.can_attack_after_move and !enemy_cryptid.cryptid.completed_turn:
-			print("AI: Attacking after move")
-			perform_attack(enemy_cryptid, move_attack_result.attack_info)
-		
-		# Mark actions as used but don't end turn - let player press the button
-		enemy_cryptid.cryptid.top_card_played = true
-		enemy_cryptid.cryptid.bottom_card_played = true
-		
-		# Show end turn button
-		show_end_turn_button_for_enemy()
-		return
+	# Fourth phase: If we still have actions left and haven't found a good move,
+	# consider resting to restore cards
+	if !top_action_used and !bottom_action_used:
+		print("AI: No good options, resting to restore cards")
+		game_controller.perform_rest(enemy_cryptid)
+		top_action_used = true
+		bottom_action_used = true
+	elif !top_action_used or !bottom_action_used:
+		print("AI: Still have an unused action, but no good options")
+		# We have one action left but nothing good to do with it
+		# Just mark it as used so we end the turn
+		top_action_used = true
+		bottom_action_used = true
 	
-	# 3. If no good attack options, rest to restore cards
-	print("AI: No good options, resting")
-	game_controller.perform_rest()
+	# Mark the cryptid's turn as completed
+	enemy_cryptid.cryptid.top_card_played = top_action_used
+	enemy_cryptid.cryptid.bottom_card_played = bottom_action_used
+	enemy_cryptid.cryptid.completed_turn = true
 	
-	# Mark actions as used but don't end turn - let player press the button
-	enemy_cryptid.cryptid.top_card_played = true
-	enemy_cryptid.cryptid.bottom_card_played = true
+	print("AI: Ending turn for cryptid:", enemy_cryptid.cryptid.name)
 	
 	# Show end turn button
 	show_end_turn_button_for_enemy()
+	
+	# Restore the previously selected cryptid
+	tile_map_layer.selected_cryptid = previous_selected
 
 # Show the end turn button and wait for player to press it
 func show_end_turn_button_for_enemy():
@@ -440,7 +497,141 @@ func get_hexes_at_distance(center, distance):
 	
 	return result
 
-
+# Find a position to retreat to after attacking
+func find_retreat_position(enemy_cryptid):
+	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
+	print("AI: Calculating retreat from position", enemy_pos)
+	
+	# Check if top/bottom actions already used
+	var top_used = enemy_cryptid.cryptid.top_card_played
+	var bottom_used = enemy_cryptid.cryptid.bottom_card_played
+	
+	# Find move cards that we can use for retreat
+	var move_cards = []
+	for card in enemy_cryptid.cryptid.deck:
+		# Skip cards that aren't in the deck
+		if card.current_state != Card.CardState.IN_DECK:
+			continue
+			
+		# Check top of card for moves if top action not used yet
+		if !top_used:
+			for action in card.top_move.actions:
+				if action.action_types.has(0):  # Move action
+					move_cards.append({
+						"card": card,
+						"is_top": true,
+						"range": action.amount
+					})
+		
+		# Check bottom of card for moves if bottom action not used yet
+		if !bottom_used:
+			for action in card.bottom_move.actions:
+				if action.action_types.has(0):  # Move action
+					move_cards.append({
+						"card": card,
+						"is_top": false,
+						"range": action.amount
+					})
+	
+	print("AI: Found", move_cards.size(), "available move cards for retreat")
+	if move_cards.size() == 0:
+		return null
+		
+	# Find all player cryptids and their positions
+	var player_positions = []
+	for player_cryptid in tile_map_layer.player_cryptids_in_play:
+		player_positions.append(tile_map_layer.local_to_map(player_cryptid.position))
+	
+	print("AI: Player positions for retreat calculation:", player_positions)
+	
+	# Store original movement state
+	var original_move_bool = tile_map_layer.move_action_bool
+	var original_attack_bool = tile_map_layer.attack_action_bool
+	
+	# Set up for movement calculation
+	tile_map_layer.move_action_bool = true
+	tile_map_layer.attack_action_bool = false
+	
+	# Find the best retreat position
+	var best_retreat_pos = null
+	var best_retreat_score = -999
+	var best_retreat_move = null
+	
+	# Sort move cards by range (longer range first)
+	move_cards.sort_custom(Callable(self, "sort_by_move_range"))
+	
+	# For each move card
+	for move_info in move_cards:
+		print("AI: Testing retreat card with range", move_info.range)
+		tile_map_layer.move_leftover = move_info.range
+		
+		# Get all potential retreat hexes
+		var retreat_options = []
+		for walkable_hex in tile_map_layer.walkable_hexes:
+			# Skip hexes that are already occupied
+			var occupied = false
+			for cryptid in tile_map_layer.all_cryptids_in_play:
+				if tile_map_layer.local_to_map(cryptid.position) == walkable_hex:
+					occupied = true
+					break
+			
+			if occupied or walkable_hex in player_positions:
+				continue
+			
+			# Check if we can reach this hex
+			var move_path = tile_map_layer.a_star_hex_grid.get_id_path(
+				tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
+				tile_map_layer.a_star_hex_grid.get_closest_point(walkable_hex)
+			)
+			
+			var move_distance = move_path.size() - 1
+			
+			# Only consider positions we can actually reach
+			if move_distance <= move_info.range:
+				# Calculate safety score - the farther from all players, the better
+				var safety_score = 0
+				for player_pos in player_positions:
+					var approach_path = tile_map_layer.a_star_hex_grid.get_id_path(
+						tile_map_layer.a_star_hex_grid.get_closest_point(walkable_hex),
+						tile_map_layer.a_star_hex_grid.get_closest_point(player_pos)
+					)
+					
+					var distance_to_player = approach_path.size() - 1
+					safety_score += distance_to_player  # Higher is better
+				
+				print("AI: Retreat position", walkable_hex, "has safety score", safety_score)
+				
+				retreat_options.append({
+					"position": walkable_hex,
+					"safety_score": safety_score,
+					"move_distance": move_distance
+				})
+		
+		# Find the best retreat option for this card
+		for option in retreat_options:
+			if option.safety_score > best_retreat_score:
+				best_retreat_score = option.safety_score
+				best_retreat_pos = option.position
+				best_retreat_move = {
+					"position": option.position,
+					"card": move_info.card,
+					"is_top": move_info.is_top,
+					"range": move_info.range,
+					"move_distance": option.move_distance
+				}
+				
+				print("AI: New best retreat at", option.position, "with safety score", option.safety_score)
+	
+	# Restore original movement state
+	tile_map_layer.move_action_bool = original_move_bool
+	tile_map_layer.attack_action_bool = original_attack_bool
+	
+	if best_retreat_move:
+		print("AI: Final retreat position is", best_retreat_move.position, "with safety score", best_retreat_score)
+	else:
+		print("AI: No viable retreat positions found")
+		
+	return best_retreat_move
 # Find the closest player cryptid - fixed version
 func find_closest_player_cryptid(enemy_pos):
 	var closest_player = null
@@ -490,95 +681,6 @@ func find_closest_player_cryptid(enemy_pos):
 		"cryptid": closest_player,
 		"distance": closest_player_distance
 	}
-
-# Find a position to retreat to after attacking
-func find_retreat_position(enemy_cryptid):
-	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
-	var best_retreat_pos = null
-	var best_safety_score = -999
-	
-	# Check if top action already used
-	var top_used = enemy_cryptid.cryptid.top_card_played
-	# Check if bottom action already used
-	var bottom_used = enemy_cryptid.cryptid.bottom_card_played
-	
-	# If both actions used, can't move
-	if top_used and bottom_used:
-		return null
-	
-	# Find move cards
-	var move_cards = []
-	for card in enemy_cryptid.cryptid.deck:
-		# Skip cards that aren't in the deck
-		if card.current_state != Card.CardState.IN_DECK:
-			continue
-			
-		# Check top of card for moves if top action not used yet
-		if !top_used:
-			for action in card.top_move.actions:
-				if action.action_types.has(0):  # Move action
-					move_cards.append({
-						"card": card,
-						"is_top": true,
-						"range": action.amount
-					})
-		
-		# Check bottom of card for moves if bottom action not used yet
-		if !bottom_used:
-			for action in card.bottom_move.actions:
-				if action.action_types.has(0):  # Move action
-					move_cards.append({
-						"card": card,
-						"is_top": false,
-						"range": action.amount
-					})
-	
-	# If no move cards available, can't retreat
-	if move_cards.size() == 0:
-		return null
-	
-	# Choose the move card with the highest range
-	var best_move_card = null
-	var best_move_range = 0
-	for move_info in move_cards:
-		if move_info.range > best_move_range:
-			best_move_range = move_info.range
-			best_move_card = move_info
-	
-	# For each walkable hex within move range
-	for walkable_hex in tile_map_layer.walkable_hexes:
-		# Skip hexes that are already occupied
-		var occupied = false
-		for cryptid in tile_map_layer.all_cryptids_in_play:
-			if tile_map_layer.local_to_map(cryptid.position) == walkable_hex:
-				occupied = true
-				break
-		
-		if occupied:
-			continue
-			
-		# Calculate if we can move to this hex
-		var move_path_result = tile_map_layer.calculate_path(enemy_pos, walkable_hex)
-		if move_path_result.path_length <= best_move_range and move_path_result.is_valid_move:
-			# Calculate safety score (distance from player cryptids)
-			var safety_score = 0
-			for player_cryptid in tile_map_layer.player_cryptids_in_play:
-				var player_pos = tile_map_layer.local_to_map(player_cryptid.position)
-				var player_path_result = tile_map_layer.calculate_path(walkable_hex, player_pos)
-				safety_score += player_path_result.path_length
-			
-			# Prefer positions farther from players
-			if safety_score > best_safety_score:
-				best_safety_score = safety_score
-				best_retreat_pos = {
-					"position": walkable_hex,
-					"card": best_move_card.card,
-					"is_top": best_move_card.is_top,
-					"range": best_move_card.range,
-					"path_result": move_path_result
-				}
-	
-	return best_retreat_pos
 
 # Perform an attack action
 func perform_attack(enemy_cryptid, attack_info):
