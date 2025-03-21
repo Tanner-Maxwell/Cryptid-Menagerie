@@ -222,28 +222,19 @@ func find_attack_target(enemy_cryptid):
 	
 	return closest_target
 
-# Find a move that gets us in range to attack
 func find_move_to_attack(enemy_cryptid):
-	# At the beginning of find_move_to_attack
-	var enemy_world_pos = enemy_cryptid.position
-	var enemy_pos = tile_map_layer.local_to_map(enemy_world_pos)
-	print("AI: Enemy cryptid:", enemy_cryptid.cryptid.name)
-	print("AI: Enemy world position:", enemy_world_pos)
-	print("AI: Enemy grid position:", enemy_pos)
-
-	# Second set of debug lines - check grid positions
-	print("AI: Checking grid positions:")
-	print("AI: Enemy at", enemy_pos, "- walkable:", enemy_pos in tile_map_layer.walkable_hexes)
-	for player_cryptid in tile_map_layer.player_cryptids_in_play:
-		var player_pos = tile_map_layer.local_to_map(player_cryptid.position)
-		print("AI:", player_cryptid.cryptid.name, "at", player_pos, "- walkable:", player_pos in tile_map_layer.walkable_hexes)
-	
-	# Rest of the function continues here...
+	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
 	print("AI: Enemy position is", enemy_pos)
+	
+	# IMPORTANT: Enable the hex occupied by this cryptid on the grid
+	var point = tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos, true)
+	tile_map_layer.a_star_hex_grid.set_point_disabled(point, false)
+	print("AI: Enabled hex at", enemy_pos, "for movement")
+	
 	# Check if actions already used
 	var top_used = enemy_cryptid.cryptid.top_card_played
 	var bottom_used = enemy_cryptid.cryptid.bottom_card_played
-
+	
 	# If both actions used, can't move
 	if top_used and bottom_used:
 		return null
@@ -279,7 +270,15 @@ func find_move_to_attack(enemy_cryptid):
 	if move_cards.size() == 0:
 		return null
 	
-	# Find the closest player cryptid
+	# Store original action state
+	var original_move_bool = tile_map_layer.move_action_bool
+	var original_attack_bool = tile_map_layer.attack_action_bool
+	
+	# Set up for path calculation
+	tile_map_layer.move_action_bool = true
+	tile_map_layer.attack_action_bool = false
+	
+	# Find the closest player cryptid using A* path distance
 	var closest_player = null
 	var closest_player_distance = 999
 	
@@ -292,40 +291,27 @@ func find_move_to_attack(enemy_cryptid):
 	for player_cryptid in tile_map_layer.player_cryptids_in_play:
 		var player_pos = tile_map_layer.local_to_map(player_cryptid.position)
 		
-		# Use cube distance - more reliable for hex grids
-		var enemy_cube = tile_map_layer.axial_to_cube(enemy_pos)
-		var player_cube = tile_map_layer.axial_to_cube(player_pos)
-		var distance = tile_map_layer.cube_distance(enemy_cube, player_cube)
+		# Get the actual path through the A* grid
+		var path = tile_map_layer.a_star_hex_grid.get_id_path(
+			tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
+			tile_map_layer.a_star_hex_grid.get_closest_point(player_pos)
+		)
 		
-		# Calculate our own cube distance directly
-		var direct_distance = (abs(enemy_cube.x - player_cube.x) + 
-							   abs(enemy_cube.y - player_cube.y) + 
-							   abs(enemy_cube.z - player_cube.z)) / 2
-							   
-		# Also calculate Manhattan distance as a sanity check
-		var manhattan_distance = abs(enemy_pos.x - player_pos.x) + abs(enemy_pos.y - player_pos.y)
+		# Calculate the actual path distance
+		var path_distance = path.size() - 1
 		
-		print("AI: Distance to", player_cryptid.cryptid.name, "at", player_pos, 
-			  "from", enemy_pos, "is cube:", distance, 
-			  "direct:", direct_distance, 
-			  "manhattan:", manhattan_distance,
-			  "enemy_cube:", enemy_cube,
-			  "player_cube:", player_cube)
+		print("AI: Path distance to", player_cryptid.cryptid.name, "at", player_pos, "is", path_distance)
 		
-		if direct_distance < closest_player_distance:  # Using direct calculation for reliability
-			closest_player_distance = direct_distance
+		if path_distance < closest_player_distance:
+			closest_player_distance = path_distance
 			closest_player = player_cryptid
-			print("AI: New closest player:", player_cryptid.cryptid.name, "at distance", direct_distance)
+			print("AI: New closest player:", player_cryptid.cryptid.name, "at distance", path_distance)
 	
 	if closest_player:
 		print("AI: Final closest player is", closest_player.cryptid.name, 
 			  "at position", tile_map_layer.local_to_map(closest_player.position), 
 			  "with distance", closest_player_distance)
-	else:
-		print("AI: No player cryptids found!")
-		return null
-	
-	if closest_player:
+		
 		var player_pos = tile_map_layer.local_to_map(closest_player.position)
 		var best_move = null
 		var best_distance_to_player = closest_player_distance
@@ -337,56 +323,78 @@ func find_move_to_attack(enemy_cryptid):
 		for move_info in move_cards:
 			print("AI: Testing move card with range", move_info.range)
 			
-			# CRITICAL: Use a much smaller search radius to guarantee we only find truly reachable positions
-			var max_range = move_info.range
+			# Set up for movement calculation
+			tile_map_layer.move_action_bool = true
+			tile_map_layer.attack_action_bool = false
+			tile_map_layer.move_leftover = move_info.range
 			
-			# For each possible distance
-			for distance in range(1, max_range + 1):
-				# Get all hexes at exactly this distance from the enemy
-				var move_targets = get_hexes_at_distance(enemy_pos, distance)
+			# Get all walkable hexes
+			var potential_targets = []
+			for walkable_hex in tile_map_layer.walkable_hexes:
+				# Skip hexes that are already occupied
+				var occupied = false
+				for cryptid in tile_map_layer.all_cryptids_in_play:
+					if tile_map_layer.local_to_map(cryptid.position) == walkable_hex:
+						occupied = true
+						break
 				
-				# Sort them by distance to player (closest first)
-				for target in move_targets:
-					# Skip if occupied
-					var occupied = false
-					for cryptid in tile_map_layer.all_cryptids_in_play:
-						if tile_map_layer.local_to_map(cryptid.position) == target:
-							occupied = true
-							break
-					
-					if occupied or target == player_pos:
-						continue
-					
-					# Double-check that this target is actually reachable
-					var move_path = tile_map_layer.a_star_hex_grid.get_id_path(
-						tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
-						tile_map_layer.a_star_hex_grid.get_closest_point(target)
+				if occupied or walkable_hex == player_pos:
+					continue
+				
+				# Calculate if we can reach this position
+				var move_path = tile_map_layer.a_star_hex_grid.get_id_path(
+					tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
+					tile_map_layer.a_star_hex_grid.get_closest_point(walkable_hex)
+				)
+				
+				var move_distance = move_path.size() - 1
+				
+				# Only consider positions we can actually reach
+				if move_distance <= move_info.range:
+					# Calculate distance from this hex to the player
+					var approach_path = tile_map_layer.a_star_hex_grid.get_id_path(
+						tile_map_layer.a_star_hex_grid.get_closest_point(walkable_hex),
+						tile_map_layer.a_star_hex_grid.get_closest_point(player_pos)
 					)
 					
-					var actual_move_distance = move_path.size() - 1
+					var approach_distance = approach_path.size() - 1
 					
-					# If it's reachable, check how close it gets us to the player
-					if actual_move_distance <= max_range:
-						var target_cube = tile_map_layer.axial_to_cube(target)
-						var player_cube = tile_map_layer.axial_to_cube(player_pos)
-						var distance_to_player = (abs(target_cube.x - player_cube.x) + 
-												 abs(target_cube.y - player_cube.y) + 
-												 abs(target_cube.z - player_cube.z)) / 2
-						
-						print("AI: Position", target, "is", actual_move_distance, "moves away, distance to player:", distance_to_player)
-						
-						# If this is better than our current best
-						if distance_to_player < best_distance_to_player:
-							best_distance_to_player = distance_to_player
-							best_move = {
-								"position": target,
-								"card": move_info.card,
-								"is_top": move_info.is_top,
-								"range": move_info.range,
-								"move_distance": actual_move_distance
-							}
-							
-							print("AI: New best move to", target, "with distance to player", distance_to_player)
+					print("AI: Position", walkable_hex, "is", move_distance, "moves away, distance to player:", approach_distance)
+					
+					potential_targets.append({
+						"position": walkable_hex,
+						"move_distance": move_distance,
+						"player_distance": approach_distance
+					})
+			
+			# Sort potential targets by closest to player
+			potential_targets.sort_custom(Callable(self, "sort_by_player_distance"))
+			
+			# Check the best positions
+			for target in potential_targets:
+				if target.player_distance < best_distance_to_player:
+					best_distance_to_player = target.player_distance
+					best_move = {
+						"position": target.position,
+						"card": move_info.card,
+						"is_top": move_info.is_top,
+						"range": move_info.range,
+						"move_distance": target.move_distance
+					}
+					
+					print("AI: New best move to", target.position, "with distance to player", target.player_distance)
+					
+					# If we found a position that gets us right next to the player, we're done
+					if target.player_distance == 1:
+						break
+			
+			# If we found a position that gets us right next to the player, we're done
+			if best_distance_to_player == 1:
+				break
+		
+		# Restore original movement state
+		tile_map_layer.move_action_bool = original_move_bool
+		tile_map_layer.attack_action_bool = original_attack_bool
 		
 		# If we found a better move
 		if best_move and best_distance_to_player < closest_player_distance:
@@ -398,12 +406,22 @@ func find_move_to_attack(enemy_cryptid):
 				"move_target": best_move,
 				"can_attack_after_move": false
 			}
+	else:
+		print("AI: No player cryptids found!")
+		# Restore original movement state
+		tile_map_layer.move_action_bool = original_move_bool
+		tile_map_layer.attack_action_bool = original_attack_bool
 	
 	return null
 
 # Helper to sort move cards by range
 func sort_by_move_range(a, b):
 	return a.range > b.range
+
+# Helper to sort positions by distance to player
+func sort_by_player_distance(a, b):
+	return a.player_distance < b.player_distance
+
 
 # Get all hexes at a specific distance from a center hex
 func get_hexes_at_distance(center, distance):
