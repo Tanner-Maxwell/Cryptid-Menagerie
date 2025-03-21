@@ -10,6 +10,8 @@ extends Node2D
 @onready var turn_order = %"Turn Order"
 @onready var tile_map_layer = %TileMapLayer
 @onready var discarded_cards = %DiscardCards
+@onready var enemy_ai_controller = $EnemyAIController
+
 
 enum GameState {
 	PLAYER_TURN,

@@ -120,18 +120,9 @@ func handle_right_click():
 	if action_menu:
 		action_menu.show()
 
-func handle_mouse_motion():
-	# Get the currently selected cryptid
-	selected_cryptid = currently_selected_cryptid()
-	
-	if selected_cryptid == null:
-		selected_cryptid = player_cryptids_in_play[0]
-	
+# New function that can be called programmatically
+func calculate_path(current_pos: Vector2i, target_pos: Vector2i):
 	# Calculate paths
-	var current_pos = local_to_map(selected_cryptid.position)
-	var target_pos = local_to_map(get_local_mouse_position())
-	
-	# Clear previous paths
 	vector_path = []
 	point_path = []
 	var attack_vector_path = []
@@ -179,6 +170,29 @@ func handle_mouse_motion():
 			var attack_color = Color(1, 0, 0)  # Red for attack
 			draw_lines_between_points(convert_vector2_array_to_vector2i_array(attack_vector_path), attack_range, attack_color)
 			
+	# Return relevant data for the AI to use
+	return {
+		"vector_path": vector_path,
+		"point_path": point_path,
+		"path_length": point_path.size() - 1 if point_path.size() > 0 else 0,
+		"is_valid_move": move_action_bool and point_path.size() > 0 and point_path.size() - 1 <= move_leftover and target_pos in walkable_hexes,
+		"is_valid_attack": attack_action_bool and attack_point_path.size() > 0 and attack_point_path.size() - 1 <= attack_range
+	}
+
+# Update the original function to use the new one
+func handle_mouse_motion():
+	# Get the currently selected cryptid
+	selected_cryptid = currently_selected_cryptid()
+	
+	if selected_cryptid == null:
+		selected_cryptid = player_cryptids_in_play[0]
+	
+	# Calculate paths using our new function
+	var current_pos = local_to_map(selected_cryptid.position)
+	var target_pos = local_to_map(get_local_mouse_position())
+	
+	calculate_path(current_pos, target_pos)
+			
 func handle_left_click(event):
 	var global_clicked = event.position
 	selected_cryptid = currently_selected_cryptid()
@@ -218,95 +232,111 @@ func handle_move_action(pos_clicked):
 		# Only subtract the actual distance moved, not the full allowed movement
 		var remaining_movement = move_leftover - movement_distance
 		
-		if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-			for action in card_dialog.card_resource.top_move.actions:
-				if action.action_types == [0]:
-					# Verify the move is actually changing position
-					var new_position = pos_clicked
-					move_performed = (original_position != new_position)
-					
-					if move_performed:
-						# Set active card part ONLY when a move is actually performed
-						move_leftover = remaining_movement
-						active_movement_card_part = "top"
-						active_movement_card = card_dialog
+		# Safely check if card_dialog is still valid
+		if is_instance_valid(card_dialog) and card_dialog.has_method("update_move_action_display"):
+			# Check top half
+			if card_dialog.top_half_container and card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
+				for action in card_dialog.card_resource.top_move.actions:
+					if action.action_types == [0]:
+						# Verify the move is actually changing position
+						var new_position = pos_clicked
+						move_performed = (original_position != new_position)
 						
-						# Animate movement along the path
-						animate_movement_along_path(selected_cryptid, original_position, new_position)
-						
-						# Mark top action as used only if we've used all movement
-						if move_leftover <= 0:
-							card_dialog.top_half_container.disabled = true
-							card_dialog.bottom_half_container.disabled = true
-							card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-							card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-							selected_cryptid.cryptid.top_card_played = true
+						if move_performed:
+							# Set active card part ONLY when a move is actually performed
+							move_leftover = remaining_movement
+							active_movement_card_part = "top"
+							active_movement_card = card_dialog
 							
-							# Mark the original card as discarded
-							if card_dialog.card_resource.original_card != null:
-								print("DEBUG: Marking original card as discarded from move action")
-								card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+							# Animate movement along the path
+							animate_movement_along_path(selected_cryptid, original_position, new_position)
+							
+							# Mark top action as used only if we've used all movement
+							if move_leftover <= 0:
+								card_dialog.top_half_container.disabled = true
+								card_dialog.bottom_half_container.disabled = true
+								card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								selected_cryptid.cryptid.top_card_played = true
+								
+								# Mark the original card as discarded
+								if card_dialog.card_resource.original_card != null:
+									print("DEBUG: Marking original card as discarded from move action")
+									card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+								else:
+									print("ERROR: No original card reference found for move action")
 							else:
-								print("ERROR: No original card reference found for move action")
-						else:
-							# We have more movement left, disable other cards
-							# Disable bottom half of this card 
-							card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-							
-							# Disable top half of all other cards
-							disable_other_card_halves("top")
-							
-							# Update card display to show remaining movement
-							if card_dialog.has_method("update_move_action_display"):
-								card_dialog.update_move_action_display("top", move_leftover)
-					
-		elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-			for action in card_dialog.card_resource.bottom_move.actions:
-				if action.action_types == [0]:
-					# Verify the move is actually changing position
-					var new_position = pos_clicked
-					move_performed = (original_position != new_position)
-					
-					if move_performed:
-						# Set active card part ONLY when a move is actually performed
-						move_leftover = remaining_movement
-						active_movement_card_part = "bottom"
-						active_movement_card = card_dialog
+								# We have more movement left, disable other cards
+								# Disable bottom half of this card 
+								card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								
+								# Disable top half of all other cards
+								disable_other_card_halves("top")
+								
+								# Update card display to show remaining movement
+								if card_dialog.has_method("update_move_action_display"):
+									card_dialog.update_move_action_display("top", move_leftover)
+			
+			# Check bottom half
+			elif card_dialog.bottom_half_container and card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
+				for action in card_dialog.card_resource.bottom_move.actions:
+					if action.action_types == [0]:
+						# Verify the move is actually changing position
+						var new_position = pos_clicked
+						move_performed = (original_position != new_position)
 						
-						# Animate movement along the path
-						animate_movement_along_path(selected_cryptid, original_position, new_position)
-						
-						# Mark bottom action as used only if we've used all movement
-						if move_leftover <= 0:
-							card_dialog.top_half_container.disabled = true
-							card_dialog.bottom_half_container.disabled = true
-							card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-							card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-							selected_cryptid.cryptid.bottom_card_played = true
+						if move_performed:
+							# Set active card part ONLY when a move is actually performed
+							move_leftover = remaining_movement
+							active_movement_card_part = "bottom"
+							active_movement_card = card_dialog
 							
-							# Mark the original card as discarded
-							if card_dialog.card_resource.original_card != null:
-								print("DEBUG: Marking original card as discarded from move action")
-								card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+							# Animate movement along the path
+							animate_movement_along_path(selected_cryptid, original_position, new_position)
+							
+							# Mark bottom action as used only if we've used all movement
+							if move_leftover <= 0:
+								card_dialog.top_half_container.disabled = true
+								card_dialog.bottom_half_container.disabled = true
+								card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								selected_cryptid.cryptid.bottom_card_played = true
+								
+								# Mark the original card as discarded
+								if card_dialog.card_resource.original_card != null:
+									print("DEBUG: Marking original card as discarded from move action")
+									card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+								else:
+									print("ERROR: No original card reference found for move action")
 							else:
-								print("ERROR: No original card reference found for move action")
-						else:
-							# We have more movement left, disable other cards
-							# Disable top half of this card
-							card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-							
-							# Disable bottom half of all other cards
-							disable_other_card_halves("bottom")
-							
-							# Update card display to show remaining movement
-							if card_dialog.has_method("update_move_action_display"):
-								card_dialog.update_move_action_display("bottom", move_leftover)
+								# We have more movement left, disable other cards
+								# Disable top half of this card
+								card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+								
+								# Disable bottom half of all other cards
+								disable_other_card_halves("bottom")
+								
+								# Update card display to show remaining movement
+								if card_dialog.has_method("update_move_action_display"):
+									card_dialog.update_move_action_display("bottom", move_leftover)
+		# Handle the case where card_dialog is not valid - AI controlled cryptids
+		else:
+			print("Card dialog not valid - likely AI controlled move")
+			
+			# For AI moves, we still need to perform the movement
+			var new_position = pos_clicked
+			move_performed = (original_position != new_position)
+			
+			if move_performed:
+				move_leftover = remaining_movement
+				
+				# Animate movement along the path
+				animate_movement_along_path(selected_cryptid, original_position, new_position)
+				
+				# For AI, we'll rely on the AI to track card usage
 		
 		# Only update the game state if a move was actually performed
 		if move_performed:
-			# Update all cards to show availability
-			hand.update_card_availability()
-			
 			# Now show the action menu again with updated button state
 			var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 			if action_menu and action_menu.has_method("update_menu_visibility"):
@@ -316,7 +346,11 @@ func handle_move_action(pos_clicked):
 			# Check if turn is complete
 			if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
 				selected_cryptid.cryptid.completed_turn = true
-				hand.next_cryptid_turn()
+				
+				# Check if the hand reference is valid before calling next_cryptid_turn
+				var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+				if hand_node and hand_node.has_method("next_cryptid_turn"):
+					hand_node.next_cryptid_turn()
 	else:
 		print("Invalid move: Clicked on a non-walkable hex or insufficient movement points")
 		print("Required movement: ", movement_distance, ", Available movement: ", move_leftover)
@@ -328,8 +362,9 @@ func handle_move_action(pos_clicked):
 		active_movement_card = null     # Reset active card
 		remove_movement_indicator()
 		
-		# Re-enable all cards
-		enable_all_card_halves()
+		# Re-enable all cards if card_dialog is valid
+		if is_instance_valid(card_dialog):
+			enable_all_card_halves()
 	else:
 		# Show remaining movement indicator
 		update_movement_indicator(selected_cryptid, move_leftover)
