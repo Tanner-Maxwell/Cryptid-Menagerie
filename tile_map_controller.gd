@@ -371,6 +371,7 @@ func handle_move_action(pos_clicked):
 		# Show remaining movement indicator
 		update_movement_indicator(selected_cryptid, move_leftover)
 		
+	force_update_discard_display()	
 	delete_all_lines()
 
 
@@ -628,7 +629,8 @@ func handle_attack_action(pos_clicked):
 		active_movement_card = null
 		delete_all_lines()
 		delete_all_indicators()
-	
+		
+	force_update_discard_display()
 	print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
 	return attack_performed
 
@@ -1650,41 +1652,73 @@ func disable_entire_card(card_dialog):
 	if not card_dialog.has_meta("fully_disabled"):
 		card_dialog.set_meta("fully_disabled", true)
 
-# Function to handle card discard logic
 func discard_card(card_dialog, cryptid):
 	if not is_instance_valid(card_dialog) or not card_dialog.card_resource:
 		print("ERROR: Invalid card dialog or card resource")
 		return
 	
-	# Ensure we work with the original card
+	# Print current state before any changes
+	print("BEFORE DISCARD - Deck size: " + str(cryptid.deck.size()) + ", Discard size: " + str(cryptid.discard.size()))
+	
+	# Get the original card resource
 	var original_card = null
 	if card_dialog.card_resource.original_card != null:
 		original_card = card_dialog.card_resource.original_card
-		print("Using original card reference for discard")
+		print("Using original card reference for discard: " + str(original_card))
 	else:
 		original_card = card_dialog.card_resource
-		print("Using direct card resource for discard")
+		print("Using direct card resource for discard: " + str(original_card))
 	
-	# Mark card state as discarded
+	# Mark the card as discarded without removing from hand
 	original_card.current_state = Card.CardState.IN_DISCARD
-	print("Marked card state as IN_DISCARD")
+	print("Marked card state as IN_DISCARD: " + str(original_card.current_state))
 	
-	# Add to discard pile if not already there
-	if not cryptid.discard.has(original_card):
+	# Check if card is already in discard pile to avoid duplicates
+	var already_in_discard = false
+	for card in cryptid.discard:
+		if card == original_card:
+			already_in_discard = true
+			print("Card already in discard pile")
+			break
+	
+	# Only add if not already in discard
+	if not already_in_discard:
 		cryptid.discard.push_back(original_card)
-		print("Added card to discard pile - discard size: " + str(cryptid.discard.size()))
+		print("Added card to discard pile")
 	
-	# Remove from deck if still there
-	if cryptid.deck.has(original_card):
-		cryptid.deck.erase(original_card)
-		print("Removed card from deck - deck size: " + str(cryptid.deck.size()))
+	# IMPORTANT: We are NOT removing the card from the deck anymore
+	# This keeps the card available in the hand but still marked as discarded
 	
-	# Print confirmation
-	print("Discard pile now has " + str(cryptid.discard.size()) + " cards")
-	print("Deck now has " + str(cryptid.deck.size()) + " cards")
+	# Print current state after changes
+	print("AFTER DISCARD - Deck size: " + str(cryptid.deck.size()) + ", Discard size: " + str(cryptid.discard.size()))
 	
-	# Force refresh of hand to show updated deck/discard state
+	# List all cards in discard pile for debugging
+	print("Cards in discard pile:")
+	for i in range(cryptid.discard.size()):
+		print("  Discard card " + str(i) + ": " + str(cryptid.discard[i]))
+	
+	# Force refresh the discard UI to reflect changes
 	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
 	if hand_node and hand_node.has_method("switch_cryptid_discard_cards"):
 		print("Refreshing discard display")
 		hand_node.switch_cryptid_discard_cards(cryptid)
+
+# Also add this function to force update the discard pile at the end of a turn
+func force_update_discard_display():
+	print("Forcing discard pile update")
+	
+	# Get the selected cryptid
+	var cryptid = selected_cryptid.cryptid
+	if not cryptid:
+		print("ERROR: No selected cryptid")
+		return
+	
+	# Force refresh the discard display
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand") 
+	if hand_node and hand_node.has_method("switch_cryptid_discard_cards"):
+		print("Forcing discard display refresh")
+		hand_node.switch_cryptid_discard_cards(cryptid)
+		
+		# Also try to refresh the UI more generally
+		if hand_node.has_method("update_card_availability"):
+			hand_node.update_card_availability()
