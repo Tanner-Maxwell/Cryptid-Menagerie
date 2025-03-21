@@ -12,9 +12,11 @@ func _ready():
 	
 	# Get references to key game objects
 	tile_map_layer = get_tree().get_nodes_in_group("map")[0]
-	game_controller = get_node("/root/VitaChrome/GameController")
+	game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
 	hand = get_node("/root/VitaChrome/UIRoot/Hand")
 
+# Main function to handle an enemy cryptid's turn
+# Main function to handle an enemy cryptid's turn
 # Main function to handle an enemy cryptid's turn
 func take_enemy_turn(enemy_cryptid):
 	print("AI: Taking turn for enemy cryptid: ", enemy_cryptid.cryptid.name)
@@ -23,10 +25,15 @@ func take_enemy_turn(enemy_cryptid):
 	var previous_selected = tile_map_layer.selected_cryptid
 	tile_map_layer.selected_cryptid = enemy_cryptid
 	
+	# IMPORTANT: Enable the hex occupied by this cryptid on the grid
+	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
+	var point = tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos, true)
+	tile_map_layer.a_star_hex_grid.set_point_disabled(point, false)
+	print("AI: Enabled hex at", enemy_pos, "for movement")
+	
 	# Check if this cryptid has already completed its turn
 	if enemy_cryptid.cryptid.completed_turn:
 		print("AI: Cryptid already completed turn, skipping")
-		end_turn(enemy_cryptid)
 		return
 	
 	# Basic decision tree based on prioritization rules
@@ -44,7 +51,12 @@ func take_enemy_turn(enemy_cryptid):
 				print("AI: Retreating after attack")
 				perform_move(enemy_cryptid, retreat_target)
 		
-		end_turn(enemy_cryptid)
+		# Mark actions as used but don't end turn - let player press the button
+		enemy_cryptid.cryptid.top_card_played = true
+		enemy_cryptid.cryptid.bottom_card_played = true
+		
+		# Show end turn button
+		show_end_turn_button_for_enemy()
 		return
 	
 	# 2. Check if we can move to attack range
@@ -58,17 +70,47 @@ func take_enemy_turn(enemy_cryptid):
 			print("AI: Attacking after move")
 			perform_attack(enemy_cryptid, move_attack_result.attack_info)
 		
-		end_turn(enemy_cryptid)
+		# Mark actions as used but don't end turn - let player press the button
+		enemy_cryptid.cryptid.top_card_played = true
+		enemy_cryptid.cryptid.bottom_card_played = true
+		
+		# Show end turn button
+		show_end_turn_button_for_enemy()
 		return
 	
 	# 3. If no good attack options, rest to restore cards
 	print("AI: No good options, resting")
-	perform_rest(enemy_cryptid)
-	end_turn(enemy_cryptid)
+	game_controller.perform_rest()
 	
-	# Restore the previously selected cryptid
-	tile_map_layer.selected_cryptid = previous_selected
+	# Mark actions as used but don't end turn - let player press the button
+	enemy_cryptid.cryptid.top_card_played = true
+	enemy_cryptid.cryptid.bottom_card_played = true
+	
+	# Show end turn button
+	show_end_turn_button_for_enemy()
 
+# Show the end turn button and wait for player to press it
+func show_end_turn_button_for_enemy():
+	print("AI: Showing end turn button for enemy")
+	
+	# Get the action menu
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu:
+		# Hide all other buttons
+		for child in action_menu.get_node("VBoxContainer").get_children():
+			if child.name != "EndTurnButton":
+				child.hide()
+		
+		# Show only the end turn button
+		var end_turn_button = action_menu.get_node("VBoxContainer/EndTurnButton")
+		if end_turn_button:
+			end_turn_button.show()
+			action_menu.show()
+	
+	# Add a label or instruction for clarity
+	var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+	if game_instructions:
+		game_instructions.text = "AI has completed its actions. Press End Turn to continue."
 # Find closest player cryptid that can be attacked
 func find_attack_target(enemy_cryptid):
 	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
@@ -182,15 +224,27 @@ func find_attack_target(enemy_cryptid):
 
 # Find a move that gets us in range to attack
 func find_move_to_attack(enemy_cryptid):
-	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
+	# At the beginning of find_move_to_attack
+	var enemy_world_pos = enemy_cryptid.position
+	var enemy_pos = tile_map_layer.local_to_map(enemy_world_pos)
+	print("AI: Enemy cryptid:", enemy_cryptid.cryptid.name)
+	print("AI: Enemy world position:", enemy_world_pos)
+	print("AI: Enemy grid position:", enemy_pos)
+
+	# Second set of debug lines - check grid positions
+	print("AI: Checking grid positions:")
+	print("AI: Enemy at", enemy_pos, "- walkable:", enemy_pos in tile_map_layer.walkable_hexes)
+	for player_cryptid in tile_map_layer.player_cryptids_in_play:
+		var player_pos = tile_map_layer.local_to_map(player_cryptid.position)
+		print("AI:", player_cryptid.cryptid.name, "at", player_pos, "- walkable:", player_pos in tile_map_layer.walkable_hexes)
+	
+	# Rest of the function continues here...
 	print("AI: Enemy position is", enemy_pos)
-	
-	# Check if top action already used
+	# Check if actions already used
 	var top_used = enemy_cryptid.cryptid.top_card_played
-	# Check if bottom action already used
 	var bottom_used = enemy_cryptid.cryptid.bottom_card_played
-	
-	# If both actions used, can't move or attack
+
+	# If both actions used, can't move
 	if top_used and bottom_used:
 		return null
 	
@@ -222,125 +276,153 @@ func find_move_to_attack(enemy_cryptid):
 					})
 	
 	print("AI: Found", move_cards.size(), "available move cards")
-	
-	# If no move cards, can't do this strategy
 	if move_cards.size() == 0:
-		print("AI: No move cards available")
 		return null
 	
-	# Get the closest player cryptid using our helper function
-	var closest_player_info = find_closest_player_cryptid(enemy_pos)
-	var closest_player = closest_player_info.cryptid
-	var closest_player_distance = closest_player_info.distance
+	# Find the closest player cryptid
+	var closest_player = null
+	var closest_player_distance = 999
 	
-	# If we found a player to approach
+	# Debug: print all player cryptids first
+	print("AI: All player cryptids:")
+	for player_cryptid in tile_map_layer.player_cryptids_in_play:
+		var player_pos = tile_map_layer.local_to_map(player_cryptid.position)
+		print("AI: Player:", player_cryptid.cryptid.name, "at position:", player_pos)
+	
+	for player_cryptid in tile_map_layer.player_cryptids_in_play:
+		var player_pos = tile_map_layer.local_to_map(player_cryptid.position)
+		
+		# Use cube distance - more reliable for hex grids
+		var enemy_cube = tile_map_layer.axial_to_cube(enemy_pos)
+		var player_cube = tile_map_layer.axial_to_cube(player_pos)
+		var distance = tile_map_layer.cube_distance(enemy_cube, player_cube)
+		
+		# Calculate our own cube distance directly
+		var direct_distance = (abs(enemy_cube.x - player_cube.x) + 
+							   abs(enemy_cube.y - player_cube.y) + 
+							   abs(enemy_cube.z - player_cube.z)) / 2
+							   
+		# Also calculate Manhattan distance as a sanity check
+		var manhattan_distance = abs(enemy_pos.x - player_pos.x) + abs(enemy_pos.y - player_pos.y)
+		
+		print("AI: Distance to", player_cryptid.cryptid.name, "at", player_pos, 
+			  "from", enemy_pos, "is cube:", distance, 
+			  "direct:", direct_distance, 
+			  "manhattan:", manhattan_distance,
+			  "enemy_cube:", enemy_cube,
+			  "player_cube:", player_cube)
+		
+		if direct_distance < closest_player_distance:  # Using direct calculation for reliability
+			closest_player_distance = direct_distance
+			closest_player = player_cryptid
+			print("AI: New closest player:", player_cryptid.cryptid.name, "at distance", direct_distance)
+	
+	if closest_player:
+		print("AI: Final closest player is", closest_player.cryptid.name, 
+			  "at position", tile_map_layer.local_to_map(closest_player.position), 
+			  "with distance", closest_player_distance)
+	else:
+		print("AI: No player cryptids found!")
+		return null
+	
 	if closest_player:
 		var player_pos = tile_map_layer.local_to_map(closest_player.position)
-		var best_approach_pos = null
-		var best_approach_move = null
-		var best_approach_distance = closest_player_distance  # Start with current distance
+		var best_move = null
+		var best_distance_to_player = closest_player_distance
 		
-		# For each move card, find the best position to move closer
+		# Sort move cards by range to try the furthest moves first
+		move_cards.sort_custom(Callable(self, "sort_by_move_range"))
+		
+		# For each move card
 		for move_info in move_cards:
-			print("AI: Checking move card with range", move_info.range)
+			print("AI: Testing move card with range", move_info.range)
 			
-			# Get all positions that are exactly within our movement range
-			var positions_in_range = []
+			# CRITICAL: Use a much smaller search radius to guarantee we only find truly reachable positions
+			var max_range = move_info.range
 			
-			# First, get all walkable hexes
-			for walkable_hex in tile_map_layer.walkable_hexes:
-				# Skip hexes that are already occupied
-				var occupied = false
-				for cryptid in tile_map_layer.all_cryptids_in_play:
-					if tile_map_layer.local_to_map(cryptid.position) == walkable_hex:
-						occupied = true
-						break
+			# For each possible distance
+			for distance in range(1, max_range + 1):
+				# Get all hexes at exactly this distance from the enemy
+				var move_targets = get_hexes_at_distance(enemy_pos, distance)
 				
-				if occupied:
-					continue
+				# Sort them by distance to player (closest first)
+				for target in move_targets:
+					# Skip if occupied
+					var occupied = false
+					for cryptid in tile_map_layer.all_cryptids_in_play:
+						if tile_map_layer.local_to_map(cryptid.position) == target:
+							occupied = true
+							break
 					
-				# Skip if this is the same position as a player
-				if walkable_hex == player_pos:
-					continue
-				
-				# Calculate the exact path length from our position to this hex
-				var move_path = tile_map_layer.a_star_hex_grid.get_id_path(
-					tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
-					tile_map_layer.a_star_hex_grid.get_closest_point(walkable_hex)
-				)
-				
-				# Calculate actual distance using path length
-				var actual_distance = move_path.size() - 1
-				
-				# Debug output for positions that are potentially in range
-				if actual_distance <= move_info.range:
-					print("AI: Position", walkable_hex, "is", actual_distance, "moves away (range:", move_info.range, ")")
-					positions_in_range.append({
-						"position": walkable_hex,
-						"distance": actual_distance
-					})
-			
-			# Now check each position in range to find the closest to a player
-			for pos_data in positions_in_range:
-				var pos = pos_data.position
-				
-				# Calculate distance from this hex to the player
-				var approach_path = tile_map_layer.a_star_hex_grid.get_id_path(
-					tile_map_layer.a_star_hex_grid.get_closest_point(pos),
-					tile_map_layer.a_star_hex_grid.get_closest_point(player_pos)
-				)
-				
-				# Print the full path for debugging
-				var path_positions = []
-				for point_id in approach_path:
-					path_positions.append(tile_map_layer.a_star_hex_grid.get_point_position(point_id))
-				
-				print("AI: Path from", pos, "to player at", player_pos, ":", path_positions)
-				
-				var approach_distance = approach_path.size() - 1
-				
-				# Also calculate using cube distance for comparison
-				var pos_cube = tile_map_layer.axial_to_cube(pos)
-				var player_pos_cube = tile_map_layer.axial_to_cube(player_pos)
-				var cube_dist = tile_map_layer.cube_distance(pos_cube, player_pos_cube)
-				
-				print("AI: Path distance:", approach_distance, "Cube distance:", cube_dist)
-				
-				# Use the cube distance as it's more reliable for hex grids
-				approach_distance = cube_dist
-				
-				# If this gets us closer, it's a candidate
-				if approach_distance < best_approach_distance:
-					print("AI: Found better approach position at", pos, 
-						"with distance", approach_distance, 
-						"(current is", best_approach_distance, ")")
+					if occupied or target == player_pos:
+						continue
 					
-					best_approach_distance = approach_distance
-					best_approach_pos = pos
-					best_approach_move = {
-						"position": pos,
-						"card": move_info.card,
-						"is_top": move_info.is_top,
-						"range": move_info.range,
-						"move_distance": pos_data.distance  # Actual distance calculated earlier
-					}
+					# Double-check that this target is actually reachable
+					var move_path = tile_map_layer.a_star_hex_grid.get_id_path(
+						tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
+						tile_map_layer.a_star_hex_grid.get_closest_point(target)
+					)
+					
+					var actual_move_distance = move_path.size() - 1
+					
+					# If it's reachable, check how close it gets us to the player
+					if actual_move_distance <= max_range:
+						var target_cube = tile_map_layer.axial_to_cube(target)
+						var player_cube = tile_map_layer.axial_to_cube(player_pos)
+						var distance_to_player = (abs(target_cube.x - player_cube.x) + 
+												 abs(target_cube.y - player_cube.y) + 
+												 abs(target_cube.z - player_cube.z)) / 2
+						
+						print("AI: Position", target, "is", actual_move_distance, "moves away, distance to player:", distance_to_player)
+						
+						# If this is better than our current best
+						if distance_to_player < best_distance_to_player:
+							best_distance_to_player = distance_to_player
+							best_move = {
+								"position": target,
+								"card": move_info.card,
+								"is_top": move_info.is_top,
+								"range": move_info.range,
+								"move_distance": actual_move_distance
+							}
+							
+							print("AI: New best move to", target, "with distance to player", distance_to_player)
 		
-		# If we found a better position
-		if best_approach_move and best_approach_distance < closest_player_distance:
-			print("AI: Found move to approach player from distance", 
-				closest_player_distance, "to", best_approach_distance,
-				"(moving to", best_approach_move.position, ")")
+		# If we found a better move
+		if best_move and best_distance_to_player < closest_player_distance:
+			print("AI: Final best move to", best_move.position, 
+				"reduces distance from", closest_player_distance, 
+				"to", best_distance_to_player)
 			
 			return {
-				"move_target": best_approach_move,
+				"move_target": best_move,
 				"can_attack_after_move": false
 			}
-		else:
-			print("AI: No better position found than current position")
 	
-	# No good moves found
 	return null
+
+# Helper to sort move cards by range
+func sort_by_move_range(a, b):
+	return a.range > b.range
+
+# Get all hexes at a specific distance from a center hex
+func get_hexes_at_distance(center, distance):
+	var result = []
+	var center_cube = tile_map_layer.axial_to_cube(center)
 	
+	# For each walkable hex, check if it's at the right distance
+	for hex in tile_map_layer.walkable_hexes:
+		var hex_cube = tile_map_layer.axial_to_cube(hex)
+		var hex_distance = (abs(center_cube.x - hex_cube.x) + 
+						   abs(center_cube.y - hex_cube.y) + 
+						   abs(center_cube.z - hex_cube.z)) / 2
+		
+		if hex_distance == distance:
+			result.append(hex)
+	
+	return result
+
+
 # Find the closest player cryptid - fixed version
 func find_closest_player_cryptid(enemy_pos):
 	var closest_player = null
@@ -495,9 +577,18 @@ func perform_attack(enemy_cryptid, attack_info):
 	var attack_range = attack_info.range
 	var attack_distance = attack_info.attack_distance
 	
+	# Important: Save the currently selected cryptid to restore later
+	var previously_selected = tile_map_layer.selected_cryptid
+	
+	# Explicitly set the target enemy cryptid as the selected one
+	print("AI: Setting selected cryptid to", enemy_cryptid.cryptid.name)
+	tile_map_layer.selected_cryptid = enemy_cryptid
+	
 	# Double check the target is in range
 	if attack_distance > attack_range:
 		print("AI: ERROR - Target out of range, skipping attack")
+		# Restore selected cryptid
+		tile_map_layer.selected_cryptid = previously_selected
 		return
 	
 	# Create a card dialog instance to use for the attack
@@ -528,14 +619,19 @@ func perform_attack(enemy_cryptid, attack_info):
 	tile_map_layer.attack_action_selected(card_dialog_instance)
 	
 	# Wait a moment to make sure action is set up
-	await get_tree().process_frame
+	await get_tree().create_timer(0.3).timeout
 	
-	# Perform the attack - after this point, card_dialog_instance might be freed
+	# Double-check we're still attacking with the right cryptid
+	if tile_map_layer.selected_cryptid != enemy_cryptid:
+		print("AI: ERROR - Selected cryptid changed! Restoring correct cryptid.")
+		tile_map_layer.selected_cryptid = enemy_cryptid
+	
+	# Perform the attack
 	print("AI: Initiating attack action to position:", target_pos)
 	tile_map_layer.handle_attack_action(target_pos)
 	
-	# Wait a moment for any animations to finish
-	await get_tree().create_timer(0.5).timeout
+	# Wait for animation to complete
+	await get_tree().create_timer(1.0).timeout
 	
 	# Mark the card as used - use our stored references instead of possibly freed objects
 	if is_top:
@@ -551,6 +647,10 @@ func perform_attack(enemy_cryptid, attack_info):
 		enemy_cryptid.cryptid.discard.push_back(card)
 	
 	print("AI: Attack action completed")
+	
+	# Restore the previously selected cryptid
+	tile_map_layer.selected_cryptid = previously_selected
+	print("AI: Restored previously selected cryptid")
 
 
 # Perform a move action
@@ -563,6 +663,13 @@ func perform_move(enemy_cryptid, move_info):
 	var card = move_info.card
 	var is_top = move_info.is_top
 	var target_pos = move_info.position
+	
+	# Important: Save the currently selected cryptid to restore later
+	var previously_selected = tile_map_layer.selected_cryptid
+	
+	# Explicitly set the target enemy cryptid as the selected one
+	print("AI: Setting selected cryptid to", enemy_cryptid.cryptid.name)
+	tile_map_layer.selected_cryptid = enemy_cryptid
 	
 	# Ensure move action is reset
 	tile_map_layer.move_action_bool = false
@@ -611,7 +718,13 @@ func perform_move(enemy_cryptid, move_info):
 	
 	# Debug action state before move
 	print("AI: Pre-move state: move_action_bool =", tile_map_layer.move_action_bool, 
-		"move_leftover =", tile_map_layer.move_leftover)
+		"move_leftover =", tile_map_layer.move_leftover, 
+		"selected_cryptid =", tile_map_layer.selected_cryptid.cryptid.name)
+	
+	# Double-check we're still moving the right cryptid
+	if tile_map_layer.selected_cryptid != enemy_cryptid:
+		print("AI: ERROR - Selected cryptid changed! Restoring correct cryptid.")
+		tile_map_layer.selected_cryptid = enemy_cryptid
 	
 	# Perform the move - force calculation of path first
 	print("AI: Calculating path from", tile_map_layer.local_to_map(enemy_cryptid.position), "to", target_pos)
@@ -640,21 +753,10 @@ func perform_move(enemy_cryptid, move_info):
 		enemy_cryptid.cryptid.discard.push_back(card)
 	
 	print("AI: Move action completed")
-
-# Perform rest action to recover cards
-func perform_rest(enemy_cryptid):
-	print("AI: Performing rest for cryptid:", enemy_cryptid.cryptid.name)
 	
-	# Reset all card states to IN_DECK
-	for card in enemy_cryptid.cryptid.deck:
-		card.current_state = Card.CardState.IN_DECK
-	
-	# Mark both actions as used
-	enemy_cryptid.cryptid.top_card_played = true
-	enemy_cryptid.cryptid.bottom_card_played = true
-	
-	# Mark turn as completed
-	enemy_cryptid.cryptid.completed_turn = true
+	# Restore the previously selected cryptid
+	tile_map_layer.selected_cryptid = previously_selected
+	print("AI: Restored previously selected cryptid")
 
 
 # End the current turn
