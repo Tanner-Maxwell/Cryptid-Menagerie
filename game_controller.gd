@@ -120,7 +120,7 @@ func battle_phase():
 	
 	# Check if all player cryptids have completed their turns
 	var all_completed = true
-	for cryptid in tile_map_layer.player_cryptids_in_play:
+	for cryptid in tile_map_layer.all_cryptids_in_play:
 		if cryptid.cryptid.completed_turn == false:
 			all_completed = false
 			break

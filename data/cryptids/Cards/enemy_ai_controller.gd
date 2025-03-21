@@ -50,55 +50,74 @@ func take_enemy_turn(enemy_cryptid):
 			# Update which action we used
 			if attack_target.is_top:
 				top_action_used = true
+				enemy_cryptid.cryptid.top_card_played = true
 			else:
 				bottom_action_used = true
+				enemy_cryptid.cryptid.bottom_card_played = true
 				
 			# Wait for animations to complete
 			await get_tree().create_timer(1.0).timeout
 		else:
 			print("AI: No immediate attack targets found")
 	
-	# Second phase: See if we can move to attack range
+	# Second phase: See if we can move to get closer
 	if !top_action_used or !bottom_action_used:
-		print("AI: Looking for move-to-attack opportunities")
-		var move_attack_result = find_move_to_attack(enemy_cryptid)
+		print("AI: Looking for move opportunities")
+		var move_result = find_move_to_attack(enemy_cryptid)
 		
-		if move_attack_result:
-			print("AI: Found move to attack position")
-			perform_move(enemy_cryptid, move_attack_result.move_target)
+		if move_result:
+			print("AI: Found move to get closer to player")
+			perform_move(enemy_cryptid, move_result.move_target)
 			
 			# Update which action we used
-			if move_attack_result.move_target.is_top:
+			if move_result.move_target.is_top:
 				top_action_used = true
+				enemy_cryptid.cryptid.top_card_played = true
 			else:
 				bottom_action_used = true
+				enemy_cryptid.cryptid.bottom_card_played = true
 				
-			# Wait for animations to complete
-			await get_tree().create_timer(1.0).timeout
+			# Wait for movement animation to complete with proper polling
+			print("AI: Waiting for movement animation to complete...")
+			var timeout_counter = 0
+			while tile_map_layer.movement_in_progress and timeout_counter < 50:
+				await get_tree().process_frame
+				timeout_counter += 1
+				if timeout_counter % 10 == 0:
+					print("AI: Still waiting for movement to finish...")
+
+			# Add a safety delay to ensure any animation state is fully reset
+			await get_tree().create_timer(0.5).timeout
 			
-			# If we can attack after moving, and we have an action left, do so
-			if move_attack_result.can_attack_after_move and (!top_action_used or !bottom_action_used):
-				print("AI: Attempting attack after move")
-				# Find new attack targets from our new position
+			# IMPORTANT: Re-get the enemy position AFTER movement
+			enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
+			print("AI: New position after move:", move_result.move_target)
+			
+			# IMPORTANT: Check for attack opportunities AFTER moving
+			if !top_action_used or !bottom_action_used:
+				print("AI: Checking for attack opportunities after moving")
 				var post_move_attack = find_attack_target(enemy_cryptid)
+				
 				if post_move_attack:
-					# Make sure we're not trying to use the same half twice
+					# Check if we have the right action type available
 					if (post_move_attack.is_top and !top_action_used) or (!post_move_attack.is_top and !bottom_action_used):
-						print("AI: Attacking after move")
+						print("AI: Found attack opportunity after moving!")
 						perform_attack(enemy_cryptid, post_move_attack)
 						
 						# Update which action we used
 						if post_move_attack.is_top:
 							top_action_used = true
+							enemy_cryptid.cryptid.top_card_played = true
 						else:
 							bottom_action_used = true
+							enemy_cryptid.cryptid.bottom_card_played = true
 							
 						# Wait for animations to complete
 						await get_tree().create_timer(1.0).timeout
 				else:
-					print("AI: No valid attack targets after moving")
+					print("AI: No attack opportunities found after moving")
 		else:
-			print("AI: No viable move-to-attack options found")
+			print("AI: No viable move options found")
 	
 	# Third phase: If we've attacked but not moved, consider retreat
 	if (top_action_used or bottom_action_used) and (!top_action_used or !bottom_action_used):
@@ -113,8 +132,10 @@ func take_enemy_turn(enemy_cryptid):
 				# Update which action we used
 				if retreat_target.is_top:
 					top_action_used = true
+					enemy_cryptid.cryptid.top_card_played = true
 				else:
 					bottom_action_used = true
+					enemy_cryptid.cryptid.bottom_card_played = true
 					
 				# Wait for animations to complete
 				await get_tree().create_timer(1.0).timeout
@@ -126,16 +147,18 @@ func take_enemy_turn(enemy_cryptid):
 		game_controller.perform_rest(enemy_cryptid)
 		top_action_used = true
 		bottom_action_used = true
+		enemy_cryptid.cryptid.top_card_played = true
+		enemy_cryptid.cryptid.bottom_card_played = true
 	elif !top_action_used or !bottom_action_used:
 		print("AI: Still have an unused action, but no good options")
 		# We have one action left but nothing good to do with it
 		# Just mark it as used so we end the turn
+		enemy_cryptid.cryptid.top_card_played = true
+		enemy_cryptid.cryptid.bottom_card_played = true
 		top_action_used = true
 		bottom_action_used = true
 	
 	# Mark the cryptid's turn as completed
-	enemy_cryptid.cryptid.top_card_played = top_action_used
-	enemy_cryptid.cryptid.bottom_card_played = bottom_action_used
 	enemy_cryptid.cryptid.completed_turn = true
 	
 	print("AI: Ending turn for cryptid:", enemy_cryptid.cryptid.name)
@@ -416,7 +439,6 @@ func find_move_to_attack(enemy_cryptid):
 					
 					var approach_distance = approach_path.size() - 1
 					
-					print("AI: Position", walkable_hex, "is", move_distance, "moves away, distance to player:", approach_distance)
 					
 					potential_targets.append({
 						"position": walkable_hex,
@@ -839,7 +861,7 @@ func perform_move(enemy_cryptid, move_info):
 	# Debug action state before move
 	print("AI: Pre-move state: move_action_bool =", tile_map_layer.move_action_bool, 
 		"move_leftover =", tile_map_layer.move_leftover, 
-		"selected_cryptid =", tile_map_layer.selected_cryptid.cryptid.name)
+		"selected_cryptid =", tile_map_layer.selected_cryptid.name)
 	
 	# Double-check we're still moving the right cryptid
 	if tile_map_layer.selected_cryptid != enemy_cryptid:
