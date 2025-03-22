@@ -1,4 +1,4 @@
-[gd_scene load_steps=92 format=4 uid="uid://citawmf1hj211"]
+[gd_scene load_steps=82 format=4 uid="uid://citawmf1hj211"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="1_2lacv"]
 [ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_ot6rc"]
@@ -185,117 +185,37 @@ dexterity = 56
 vigor = 12
 level = 3
 
-[sub_resource type="Resource" id="Resource_epu5x"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
-name_prefix = ""
-name_suffix = ""
-card_side = 0
-elemental_type = Array[int]([])
-
-[sub_resource type="Resource" id="Resource_nfbk7"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
-name_prefix = "Test Card"
-name_suffix = "Card"
-card_side = 0
-elemental_type = Array[int]([0])
-
-[sub_resource type="Resource" id="Resource_d5rvc"]
+[sub_resource type="Resource" id="Resource_lqap2"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_nfbk7")
-bottom_move = SubResource("Resource_epu5x")
+top_move = SubResource("Resource_atvuc")
+bottom_move = SubResource("Resource_2k767")
 
-[sub_resource type="Resource" id="Resource_wr7op"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
-name_prefix = ""
-name_suffix = ""
-card_side = 0
-elemental_type = Array[int]([])
-
-[sub_resource type="Resource" id="Resource_n7l18"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
-name_prefix = "Test Card"
-name_suffix = "Card"
-card_side = 0
-elemental_type = Array[int]([0])
-
-[sub_resource type="Resource" id="Resource_k7xwd"]
+[sub_resource type="Resource" id="Resource_fpb8j"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_n7l18")
-bottom_move = SubResource("Resource_wr7op")
+top_move = SubResource("Resource_atvuc")
+bottom_move = SubResource("Resource_2k767")
 
-[sub_resource type="Resource" id="Resource_irgv6"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
-name_prefix = ""
-name_suffix = ""
-card_side = 0
-elemental_type = Array[int]([])
-
-[sub_resource type="Resource" id="Resource_das0i"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
-name_prefix = "Test Card"
-name_suffix = "Card"
-card_side = 0
-elemental_type = Array[int]([0])
-
-[sub_resource type="Resource" id="Resource_g12qu"]
+[sub_resource type="Resource" id="Resource_63v7q"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_das0i")
-bottom_move = SubResource("Resource_irgv6")
+top_move = SubResource("Resource_atvuc")
+bottom_move = SubResource("Resource_2k767")
 
-[sub_resource type="Resource" id="Resource_g5pbg"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
-name_prefix = ""
-name_suffix = ""
-card_side = 0
-elemental_type = Array[int]([])
-
-[sub_resource type="Resource" id="Resource_arho8"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
-name_prefix = "Test Card"
-name_suffix = "Card"
-card_side = 0
-elemental_type = Array[int]([0])
-
-[sub_resource type="Resource" id="Resource_oxgyk"]
+[sub_resource type="Resource" id="Resource_tph6r"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_arho8")
-bottom_move = SubResource("Resource_g5pbg")
+top_move = SubResource("Resource_atvuc")
+bottom_move = SubResource("Resource_2k767")
 
-[sub_resource type="Resource" id="Resource_bx70d"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3d2rr")])
-name_prefix = ""
-name_suffix = ""
-card_side = 0
-elemental_type = Array[int]([])
-
-[sub_resource type="Resource" id="Resource_1qhw7"]
-script = ExtResource("13_qv2a1")
-actions = Array[ExtResource("12_5n0p1")]([SubResource("Resource_3rjur")])
-name_prefix = "Test Card"
-name_suffix = "Card"
-card_side = 0
-elemental_type = Array[int]([0])
-
-[sub_resource type="Resource" id="Resource_qw245"]
+[sub_resource type="Resource" id="Resource_qusfs"]
 script = ExtResource("10_jbw6i")
-top_move = SubResource("Resource_1qhw7")
-bottom_move = SubResource("Resource_bx70d")
+top_move = SubResource("Resource_atvuc")
+bottom_move = SubResource("Resource_2k767")
 
 [sub_resource type="Resource" id="Resource_kx7v4"]
 script = ExtResource("9_1osvm")
 name = "Grove Starter"
 scene = ExtResource("15_3vyn4")
 icon = ExtResource("14_c2v55")
-deck = Array[ExtResource("10_jbw6i")]([SubResource("Resource_d5rvc"), SubResource("Resource_k7xwd"), SubResource("Resource_g12qu"), SubResource("Resource_oxgyk"), SubResource("Resource_qw245")])
+deck = Array[ExtResource("10_jbw6i")]([SubResource("Resource_lqap2"), SubResource("Resource_fpb8j"), SubResource("Resource_63v7q"), SubResource("Resource_tph6r"), SubResource("Resource_qusfs")])
 discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
 currently_selected = false
@@ -446,7 +366,7 @@ bottom_card_played = false
 strength = 10
 knowledge = 10
 willpower = 10
-dexterity = 98
+dexterity = 20
 vigor = 12
 level = 3
 
@@ -728,12 +648,6 @@ layout_mode = 2
 size_flags_vertical = 3
 text = "Catch"
 
-[node name="DiscardButton" type="Button" parent="UIRoot/ActionSelectMenu/VBoxContainer"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 3
-text = "Confirm Discard"
-
 [node name="GameInstructions" type="Label" parent="UIRoot"]
 unique_name_in_owner = true
 offset_left = 31.0
@@ -752,4 +666,3 @@ scale = Vector2(-5.62239, 38.9907)
 [connection signal="pressed" from="UIRoot/BackButton" to="UIRoot/Hand" method="clear_card_selections"]
 [connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/DoneMoving" to="TileMapLayer" method="finish_movement"]
 [connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/RestButton" to="UIRoot/Hand" method="rest_action"]
-[connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/DiscardButton" to="UIRoot/Hand" method="_on_confirm_discard_pressed"]

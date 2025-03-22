@@ -251,10 +251,21 @@ func handle_move_action(pos_clicked):
 							# Animate movement along the path
 							animate_movement_along_path(selected_cryptid, original_position, new_position)
 							
-							# Mark top action as used only if we've used all movement
+							# Handle based on whether we've used all movement
 							if move_leftover <= 0:
 								# Mark only the top half as used for action economy
 								selected_cryptid.cryptid.top_card_played = true
+								
+								# Set the movement amount to zero in this card instance
+								for move_action in card_dialog.card_resource.top_move.actions:
+									if move_action.action_types == [0]:  # Move action
+										# Update to zero to make it clear this action is used up
+										move_action.amount = 0
+										break
+								
+								# Update the display to show zero movement left
+								if card_dialog.has_method("update_move_action_display"):
+									card_dialog.update_move_action_display("top", 0)
 								
 								# But visually disable both halves
 								disable_entire_card(card_dialog)
@@ -274,9 +285,23 @@ func handle_move_action(pos_clicked):
 								# Disable top half of all other cards
 								disable_other_card_halves("top")
 								
+								# Store original move amount in the card instance's data
+								if not card_dialog.has_meta("original_move_amount"):
+									card_dialog.set_meta("original_move_amount", original_move_amount)
+								
 								# Update card display to show remaining movement
 								if card_dialog.has_method("update_move_action_display"):
 									card_dialog.update_move_action_display("top", move_leftover)
+									
+								# Important: Also update the actual action value in this card instance
+								for move_action in card_dialog.card_resource.top_move.actions:
+									if move_action.action_types == [0]:  # Move action
+										# Only update this specific card instance's action amount
+										move_action.amount = move_leftover
+										break
+								
+								# IMPORTANT: Do NOT mark the card as discarded or used yet
+								# since we still have movement left
 			
 			# Check bottom half
 			elif card_dialog.bottom_half_container and card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
@@ -295,10 +320,21 @@ func handle_move_action(pos_clicked):
 							# Animate movement along the path
 							animate_movement_along_path(selected_cryptid, original_position, new_position)
 							
-							# Mark bottom action as used only if we've used all movement
+							# Handle based on whether we've used all movement
 							if move_leftover <= 0:
 								# Mark only the bottom half as used for action economy
 								selected_cryptid.cryptid.bottom_card_played = true
+								
+								# Set the movement amount to zero in this card instance
+								for move_action in card_dialog.card_resource.bottom_move.actions:
+									if move_action.action_types == [0]:  # Move action
+										# Update to zero to make it clear this action is used up
+										move_action.amount = 0
+										break
+								
+								# Update the display to show zero movement left
+								if card_dialog.has_method("update_move_action_display"):
+									card_dialog.update_move_action_display("bottom", 0)
 								
 								# But visually disable both halves
 								disable_entire_card(card_dialog)
@@ -318,9 +354,24 @@ func handle_move_action(pos_clicked):
 								# Disable bottom half of all other cards
 								disable_other_card_halves("bottom")
 								
+								# Store original move amount in the card instance's data
+								if not card_dialog.has_meta("original_move_amount"):
+									card_dialog.set_meta("original_move_amount", original_move_amount)
+								
 								# Update card display to show remaining movement
 								if card_dialog.has_method("update_move_action_display"):
 									card_dialog.update_move_action_display("bottom", move_leftover)
+								
+								# Important: Also update the actual action value in this card instance
+								for move_action in card_dialog.card_resource.bottom_move.actions:
+									if move_action.action_types == [0]:  # Move action
+										# Only update this specific card instance's action amount
+										move_action.amount = move_leftover
+										break
+								
+								# IMPORTANT: Do NOT mark the card as discarded or used yet
+								# since we still have movement left
+		
 		# Handle the case where card_dialog is not valid - AI controlled cryptids
 		else:
 			print("Card dialog not valid - likely AI controlled move")
@@ -371,7 +422,6 @@ func handle_move_action(pos_clicked):
 		# Show remaining movement indicator
 		update_movement_indicator(selected_cryptid, move_leftover)
 		
-	force_update_discard_display()	
 	delete_all_lines()
 
 
@@ -1411,30 +1461,22 @@ func finish_movement():
 	if move_action_bool and move_leftover > 0:
 		print("Finishing movement early with " + str(move_leftover) + " movement left")
 		
-		# Mark the card part as used
+		# Now we should mark the card as used and discard it
 		if active_movement_card_part == "top":
 			selected_cryptid.cryptid.top_card_played = true
 			
-			# Mark the original card as discarded
-			if card_dialog.card_resource.original_card != null:
-				print("DEBUG: Marking original card as discarded from move action")
-				card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
+			# Discard the card now that we're done with it
+			if is_instance_valid(active_movement_card):
+				disable_entire_card(active_movement_card)
+				discard_card(active_movement_card, selected_cryptid.cryptid)
 				
-				# Reset the card display to its original amount
-				if card_dialog.has_method("update_move_action_display"):
-					card_dialog.update_move_action_display("top", original_move_amount)
-		
 		elif active_movement_card_part == "bottom":
 			selected_cryptid.cryptid.bottom_card_played = true
 			
-			# Mark the original card as discarded
-			if card_dialog.card_resource.original_card != null:
-				print("DEBUG: Marking original card as discarded from move action")
-				card_dialog.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
-				
-				# Reset the card display to its original amount
-				if card_dialog.has_method("update_move_action_display"):
-					card_dialog.update_move_action_display("bottom", original_move_amount)
+			# Discard the card now that we're done with it
+			if is_instance_valid(active_movement_card):
+				disable_entire_card(active_movement_card)
+				discard_card(active_movement_card, selected_cryptid.cryptid)
 		
 		# Reset movement state
 		move_action_bool = false
@@ -1450,12 +1492,16 @@ func finish_movement():
 		enable_all_card_halves()
 		
 		# Update UI
-		hand.update_card_availability()
+		var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+		if hand_node and hand_node.has_method("update_card_availability"):
+			hand_node.update_card_availability()
 		
 		# Check if turn is complete
 		if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
 			selected_cryptid.cryptid.completed_turn = true
-			hand.next_cryptid_turn()
+			
+			if hand_node and hand_node.has_method("next_cryptid_turn"):
+				hand_node.next_cryptid_turn()
 	else:
 		print("No movement in progress to finish")
 
@@ -1722,3 +1768,65 @@ func force_update_discard_display():
 		# Also try to refresh the UI more generally
 		if hand_node.has_method("update_card_availability"):
 			hand_node.update_card_availability()
+
+# First, let's update the reset_card_action_values function to be more robust:
+func reset_card_action_values(cryptid):
+	print("Resetting card action values for " + cryptid.name)
+	
+	# Go through all cards in the cryptid's deck
+	for card in cryptid.deck:
+		# Check if this card has a base move action
+		if card.base_move_bottom != null and card.base_move_bottom.action_types == [0]:
+			# Reset bottom move to base value
+			var bottom_action_found = false
+			if card.bottom_move and card.bottom_move.actions:
+				for action in card.bottom_move.actions:
+					if action.action_types == [0]:  # Move action
+						# Reset to base move amount
+						action.amount = card.base_move_bottom.amount
+						print("Reset bottom movement to base value: " + str(action.amount))
+						bottom_action_found = true
+						break
+			
+			if not bottom_action_found:
+				print("Warning: Could not find bottom move action to reset")
+		
+		# Check if this card has a base attack action for top (might also include movement)
+		if card.base_attack_top != null and card.top_move and card.top_move.actions:
+			for action in card.top_move.actions:
+				if action.action_types == [0]:  # Move action
+					if card.base_attack_top.action_types == [0]:
+						# Reset to base attack amount (which is actually movement)
+						action.amount = card.base_attack_top.amount
+						print("Reset top movement to base value: " + str(action.amount))
+					else:
+						# Default to 2 if we can't determine original amount
+						action.amount = 2
+						print("Reset top movement to default value: 2")
+					break
+		
+		# Additional check for metadata-based storage
+		if card.has_meta("original_move_amount"):
+			var original_amount = card.get_meta("original_move_amount")
+			print("Card has stored original amount: " + str(original_amount))
+			
+			# Apply to both top and bottom moves if they exist
+			if card.top_move and card.top_move.actions:
+				for action in card.top_move.actions:
+					if action.action_types == [0]:  # Move action
+						action.amount = original_amount
+						print("Reset top movement with metadata: " + str(original_amount))
+			
+			if card.bottom_move and card.bottom_move.actions:
+				for action in card.bottom_move.actions:
+					if action.action_types == [0]:  # Move action
+						action.amount = original_amount
+						print("Reset bottom movement with metadata: " + str(original_amount))
+
+# Now, we need to find where the enemy AI is modifying movement values and make sure it
+# tracks the original values properly. Check if there's a take_enemy_turn function in
+# EnemyAIController.gd and add the following to any place where movement happens:
+
+# This is a pseudocode example of what to add to the enemy AI movement code:
+# When the AI performs a move, make sure it stores the original value:
+

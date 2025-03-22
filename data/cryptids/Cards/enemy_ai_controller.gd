@@ -169,6 +169,20 @@ func take_enemy_turn(enemy_cryptid):
 	# Mark the cryptid's turn as completed
 	enemy_cryptid.cryptid.completed_turn = true
 	
+	# Reset card action values for this cryptid
+	if tile_map_layer and tile_map_layer.has_method("reset_card_action_values"):
+		print("AI: Resetting card action values at end of turn")
+		tile_map_layer.reset_card_action_values(enemy_cryptid.cryptid)
+		
+	# Print card movement values for debugging
+	for card in enemy_cryptid.cryptid.deck:
+		for action in card.top_move.actions:
+			if action.action_types == [0]:
+				print("AI: End of turn - Card top move amount:", action.amount)
+		for action in card.bottom_move.actions:
+			if action.action_types == [0]:
+				print("AI: End of turn - Card bottom move amount:", action.amount)
+	
 	print("AI: Ending turn for cryptid:", enemy_cryptid.cryptid.name)
 	
 	# Show end turn button
@@ -801,6 +815,20 @@ func perform_move(enemy_cryptid, move_info):
 	var card = move_info.card
 	var is_top = move_info.is_top
 	var target_pos = move_info.position
+	
+	# Store original movement amount before any changes are made
+	if is_top:
+		for action in card.top_move.actions:
+			if action.action_types == [0]:  # Move action
+				if not card.has_meta("original_move_amount"):
+					card.set_meta("original_move_amount", action.amount)
+					print("AI: Storing original top movement amount: " + str(action.amount))
+	else:
+		for action in card.bottom_move.actions:
+			if action.action_types == [0]:  # Move action
+				if not card.has_meta("original_move_amount"):
+					card.set_meta("original_move_amount", action.amount)
+					print("AI: Storing original bottom movement amount: " + str(action.amount))
 	
 	# Important: Save the currently selected cryptid to restore later
 	var previously_selected = tile_map_layer.selected_cryptid

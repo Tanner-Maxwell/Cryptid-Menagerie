@@ -14,6 +14,13 @@ extends Control
 
 var current_highlighted_card: CardDialog = null
 
+# Variables to track discard state
+var in_discard_mode = false
+var cards_to_discard = []
+var discard_count_required = 0
+var confirm_button = null
+var in_discard_selection_mode
+var selected_for_discard
 @onready var card_dialog = preload("res://Cryptid-Menagerie/data/cryptids/Cards/card_dialog.tscn")
 
 var hand: Array = []
@@ -267,6 +274,12 @@ func check_if_turn_complete():
 func next_cryptid_turn():
 	print("Switching to next cryptid's turn")
 	
+	# Process any pending card discards for the current turn
+	if selected_cryptid:
+		var game_controller = get_node("/root/VitaChrome/GameController")
+		if game_controller and game_controller.has_method("process_end_turn_card_discards"):
+			game_controller.process_end_turn_card_discards(selected_cryptid)
+	
 	# First ensure that player_cryptids_in_play are sorted by speed
 	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.all_cryptids_in_play)
 	
@@ -316,6 +329,10 @@ func next_cryptid_turn():
 	# Set the new cryptid as selected
 	selected_cryptid = next_cryptid
 	selected_cryptid.currently_selected = true
+	
+	# Reset card action values for the newly selected cryptid
+	if tile_map_layer:
+		tile_map_layer.reset_card_action_values(selected_cryptid)
 	
 	# Check if this is an enemy cryptid
 	var is_enemy = false
@@ -376,7 +393,7 @@ func next_cryptid_turn():
 				if end_turn_button: end_turn_button.show()
 	
 	switch_cryptid_deck(selected_cryptid)
-		# Force update action menu button state for the new cryptid
+	# Force update action menu button state for the new cryptid
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu:
 		# First ensure it's visible
@@ -496,12 +513,12 @@ func create_unique_card_instance(card_template):
 		var new_action = Action.new()
 		new_action.action_types = action.action_types.duplicate()
 		new_action.range = action.range
-		new_action.amount = action.amount
+		new_action.amount = action.amount  # This is the value that needs to be unique per card instance!
 		new_action.area_of_effect = action.area_of_effect.duplicate()
 		new_action.disabled = action.disabled
 		new_top_move.add_action(new_action)
 	
-	# Duplicate the bottom move
+	# Duplicate the bottom move (similar to top move)
 	var new_bottom_move = Move.new()
 	new_bottom_move.name_prefix = card_template.bottom_move.name_prefix
 	new_bottom_move.name_suffix = card_template.bottom_move.name_suffix
@@ -513,7 +530,7 @@ func create_unique_card_instance(card_template):
 		var new_action = Action.new()
 		new_action.action_types = action.action_types.duplicate()
 		new_action.range = action.range
-		new_action.amount = action.amount
+		new_action.amount = action.amount  # This is the value that needs to be unique per card instance!
 		new_action.area_of_effect = action.area_of_effect.duplicate()
 		new_action.disabled = action.disabled
 		new_bottom_move.add_action(new_action)
@@ -564,3 +581,267 @@ func clear_card_selections():
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu:
 		action_menu.show()
+
+# Function to enter discard selection mode
+func enter_discard_selection_mode(count_required):
+	var in_discard_selection_mode = true
+	discard_count_required = count_required
+	var selected_for_discard = []
+	
+	# Add/update a visible label to show discard mode is active
+	var discard_mode_label = Label.new()
+	discard_mode_label.name = "DiscardModeLabel"
+	discard_mode_label.text = "SELECT " + str(count_required) + " CARD(S) TO DISCARD"
+	discard_mode_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))  # Red color
+	discard_mode_label.add_theme_font_size_override("font_size", 24)  # Larger font
+	add_child(discard_mode_label)
+	
+	# Position the label at the top of the screen
+	discard_mode_label.anchor_left = 0.5
+	discard_mode_label.anchor_right = 0.5
+	discard_mode_label.anchor_top = 0.1
+	discard_mode_label.anchor_bottom = 0.1
+	discard_mode_label.offset_left = -200
+	discard_mode_label.offset_right = 200
+	
+	# Add a separate click detector to each card for discard mode
+	for card in get_children():
+		if card is CardDialog:
+			# Add a new button that covers the whole card but is invisible
+			var click_detector = Button.new()
+			click_detector.name = "DiscardClickDetector"
+			click_detector.flat = true
+			click_detector.modulate = Color(1, 1, 1, 0)  # Invisible
+			
+			# Size it to cover the entire card
+			click_detector.size = card.size
+			click_detector.mouse_filter = Control.MOUSE_FILTER_PASS  # Pass events through
+			
+			# Connect the pressed signal
+			click_detector.connect("pressed", Callable(self, "_on_card_clicked_for_discard").bind(card))
+			
+			# Add it to the card
+			card.add_child(click_detector)
+			
+			# Add a highlight effect to show it's selectable
+			var highlight = ColorRect.new()
+			highlight.name = "DiscardHighlight"
+			highlight.size = card.size
+			highlight.color = Color(1, 0.8, 0.8, 0.3)  # Light red, semi-transparent
+			highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Don't intercept events
+			highlight.visible = false  # Start invisible
+			card.add_child(highlight)
+
+# Modify _on_card_clicked_for_discard to work with the new detectors
+func _on_card_clicked_for_discard(card):
+	if !in_discard_selection_mode:
+		return
+	
+	# Toggle selection state
+	if selected_for_discard.has(card):
+		# Deselect the card
+		selected_for_discard.erase(card)
+		
+		# Update highlight
+		var highlight = card.get_node_or_null("DiscardHighlight")
+		if highlight:
+			highlight.visible = false
+	else:
+		# Check if we've already selected enough cards
+		if selected_for_discard.size() >= discard_count_required:
+			return
+		
+		# Select the card
+		selected_for_discard.append(card)
+		
+		# Update highlight
+		var highlight = card.get_node_or_null("DiscardHighlight")
+		if highlight:
+			highlight.visible = true
+	
+	# Update instruction text
+	var discard_mode_label = get_node_or_null("DiscardModeLabel")
+	if discard_mode_label:
+		var remaining = discard_count_required - selected_for_discard.size()
+		if remaining > 0:
+			discard_mode_label.text = "SELECT " + str(remaining) + " MORE CARD(S) TO DISCARD"
+		else:
+			discard_mode_label.text = "PRESS CONFIRM TO DISCARD SELECTED CARDS"
+			# Show confirm button
+			show_confirm_discard_button()
+
+# Add a function to show confirm button
+func show_confirm_discard_button():
+	var confirm_button = Button.new()
+	confirm_button.text = "Confirm Discard"
+	confirm_button.name = "ConfirmDiscardButton"
+	confirm_button.connect("pressed", Callable(self, "_on_confirm_discard_pressed"))
+	add_child(confirm_button)
+	
+	# Position the button at the bottom of the screen
+	confirm_button.anchor_left = 0.5
+	confirm_button.anchor_top = 1.0
+	confirm_button.anchor_right = 0.5
+	confirm_button.anchor_bottom = 1.0
+	confirm_button.offset_left = -100
+	confirm_button.offset_top = -50
+	confirm_button.offset_right = 100
+	confirm_button.offset_bottom = -10
+
+# Add this function for the confirm button
+# Function for the confirm button
+# Add this function to handle the button press
+func _on_confirm_discard_pressed():
+	
+	# Get the hand and game controller
+	var hand = get_node_or_null("/root/VitaChrome/UIRoot/Hand")
+	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
+	
+	if hand and game_controller:
+		# Get the selected cards from hand
+		var selected_cards = hand.cards_to_discard.duplicate()
+		
+		# Reset discard mode in hand
+		hand.in_discard_mode = false
+		hand.cards_to_discard.clear()
+		hand.discard_count_required = 0
+		
+		# Reset card visuals
+		for card in hand.get_children():
+			if card is CardDialog:
+				card.modulate = Color(1, 1, 1, 1)
+		
+		# Notify the game controller
+		game_controller.on_discard_complete(selected_cards)
+
+
+# Add function to exit discard mode and clean up
+func exit_discard_selection_mode():
+	in_discard_selection_mode = false
+	
+	# Remove the discard mode label
+	var discard_mode_label = get_node_or_null("DiscardModeLabel")
+	if discard_mode_label:
+		remove_child(discard_mode_label)
+		discard_mode_label.queue_free()
+	
+	# Remove all click detectors and highlights
+	for card in get_children():
+		if card is CardDialog:
+			var click_detector = card.get_node_or_null("DiscardClickDetector")
+			if click_detector:
+				card.remove_child(click_detector)
+				click_detector.queue_free()
+			
+			var highlight = card.get_node_or_null("DiscardHighlight")
+			if highlight:
+				card.remove_child(highlight)
+				highlight.queue_free()
+	
+	# Remove confirm button if it exists
+	var confirm_button = get_node_or_null("ConfirmDiscardButton")
+	if confirm_button:
+		remove_child(confirm_button)
+		confirm_button.queue_free()
+
+func start_discard_mode(count_required):
+	in_discard_mode = true
+	discard_count_required = count_required
+	cards_to_discard = []
+	
+	# Connect all cards to the discard selection function
+	for card in get_children():
+		if card is CardDialog:
+			# Make the card visually indicate it's selectable
+			card.modulate = Color(1, 1, 1, 1)  # Full brightness
+			
+			# Connect the input event if not already connected
+			if not card.is_connected("gui_input", Callable(self, "_on_card_input")):
+				card.connect("gui_input", Callable(self, "_on_card_input").bind(card))
+
+# Function to handle card input
+func _on_card_input(event, card):
+	# Only process clicks in discard mode
+	if not in_discard_mode:
+		return
+	
+	# Check for left click
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		toggle_card_selection(card)
+
+# Replace the toggle_card_selection function with this updated version
+func toggle_card_selection(card):
+	print("Toggling card selection in discard mode")
+	
+	if cards_to_discard.has(card):
+		# Deselect the card
+		cards_to_discard.erase(card)
+		card.modulate = Color(1, 1, 1, 1)  # Reset color
+		print("Card deselected, remaining:", cards_to_discard.size(), "/", discard_count_required)
+	else:
+		# Only allow selection if we haven't reached the required count
+		if cards_to_discard.size() < discard_count_required:
+			# Select the card
+			cards_to_discard.append(card)
+			card.modulate = Color(1, 0.5, 0.5, 1)  # Red tint
+			print("Card selected, now have:", cards_to_discard.size(), "/", discard_count_required)
+	
+	# Update the confirm button
+	update_confirm_button_state()
+	
+	# Update the instruction text
+	var game_controller = get_node("/root/VitaChrome/GameController")
+	if game_controller:
+		var remaining = discard_count_required - cards_to_discard.size()
+		if remaining > 0:
+			game_controller.game_instructions.text = "Select " + str(remaining) + " more card(s) to discard"
+		else:
+			game_controller.game_instructions.text = "Press Confirm to discard selected cards"
+
+func update_confirm_button_state():
+	if confirm_button:
+		print("Updating confirm button state")
+		
+		# Enable the button if we have selected enough cards
+		confirm_button.disabled = cards_to_discard.size() < discard_count_required
+		
+		# If the button should be enabled, make sure it's visible
+		if !confirm_button.disabled:
+			print("Enabling confirm button and ensuring visibility")
+			confirm_button.visible = true
+			
+			# Force a redraw
+			confirm_button.queue_redraw()
+			
+			# Bring to front
+			move_child(confirm_button, get_child_count() - 1)
+	else:
+		print("WARNING: Confirm button not found!")
+		
+		# If button doesn't exist but we need it, recreate it
+		if in_discard_mode and cards_to_discard.size() >= discard_count_required:
+			print("Recreating confirm button")
+			confirm_button = Button.new()
+			confirm_button.text = "Confirm Discard"
+			confirm_button.name = "ConfirmDiscard"
+			
+			# Set position - try both methods for maximum compatibility
+			# Method 1: Direct position
+			confirm_button.position = Vector2(get_viewport_rect().size.x / 2 - 100, get_viewport_rect().size.y - 60)
+			
+			# Method 2: Control anchors
+			confirm_button.anchor_left = 0.5
+			confirm_button.anchor_top = 1.0
+			confirm_button.anchor_right = 0.5
+			confirm_button.anchor_bottom = 1.0
+			confirm_button.offset_left = -100
+			confirm_button.offset_top = -60
+			confirm_button.offset_right = 100
+			confirm_button.offset_bottom = -20
+			
+			# Make it obvious and visible
+			confirm_button.modulate = Color(1, 0.3, 0.3)  # Red tint
+			confirm_button.size = Vector2(200, 40)
+			confirm_button.connect("pressed", Callable(self, "_on_confirm_discard_pressed"))
+			
+			add_child(confirm_button)

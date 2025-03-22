@@ -15,6 +15,8 @@ enum ActionType { SWAP, REST, CATCH, BATTLE_PHASE, END_TURN }
 @onready var catch_button = $VBoxContainer/CatchButton
 @onready var end_turn_button = $VBoxContainer/EndTurnButton
 @onready var done_moving_button = $VBoxContainer/DoneMoving
+@onready var confirm_discard_button = $VBoxContainer/DiscardButton
+
 
 func _ready():
 	# Print button references to verify we have the correct paths
@@ -110,3 +112,50 @@ func _on_DoneMoving_pressed():
 	hide()
 	# Call the finish_movement function
 	tile_map_layer.finish_movement()
+
+# Modify or add this function to show/hide discard confirmation
+func show_discard_confirmation(visible = true):
+	# Hide all normal action buttons
+	for child in $VBoxContainer.get_children():
+		child.visible = false
+	
+	# Create confirm button if it doesn't exist
+	if not confirm_discard_button:
+		confirm_discard_button = Button.new()
+		confirm_discard_button.text = "Confirm Discard"
+		confirm_discard_button.name = "ConfirmDiscardButton"
+		$VBoxContainer.add_child(confirm_discard_button)
+		
+		# Connect to signal
+		confirm_discard_button.connect("pressed", Callable(self, "_on_confirm_discard_pressed"))
+	
+	# Show or hide the button
+	confirm_discard_button.visible = visible
+	self.visible = visible
+
+
+# Add this function to handle the button press
+func _on_confirm_discard_pressed():
+	# Hide the button
+	show_discard_confirmation(false)
+	
+	# Get the hand and game controller
+	var hand = get_node_or_null("/root/VitaChrome/UIRoot/Hand")
+	var game_controller = get_node_or_null("/root/VitaChrome/GameController")
+	
+	if hand and game_controller:
+		# Get the selected cards from hand
+		var selected_cards = hand.cards_to_discard.duplicate()
+		
+		# Reset discard mode in hand
+		hand.in_discard_mode = false
+		hand.cards_to_discard.clear()
+		hand.discard_count_required = 0
+		
+		# Reset card visuals
+		for card in hand.get_children():
+			if card is CardDialog:
+				card.modulate = Color(1, 1, 1, 1)
+		
+		# Notify the game controller
+		game_controller.on_discard_complete(selected_cards)

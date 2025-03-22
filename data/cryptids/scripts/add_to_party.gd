@@ -56,6 +56,7 @@ func _on_area_2d_input_event(viewport, event, shape_idx):
 			# Show discard cards
 			hand.switch_cryptid_discard_cards(cryptid)
 			discard_cards.show()
+			hand.clear_card_selections()
 		else:
 			# Hide discard cards
 			discard_cards.hide()
