@@ -219,16 +219,6 @@ func handle_left_click(event):
 
 	
 func handle_move_action(pos_clicked):
-	# DEBUG: Print all card movement values at the start of handle_move_action
-	if selected_cryptid and selected_cryptid.cryptid:
-		print("DEBUG MOVE VALUES at start of handle_move_action:")
-		for card in selected_cryptid.cryptid.deck:
-			for action in card.top_move.actions:
-				if action.action_types == [0]:
-					print("Card top move amount:", action.amount)
-			for action in card.bottom_move.actions:
-				if action.action_types == [0]:
-					print("Card bottom move amount:", action.amount)
 	# Calculate the movement distance required for this move
 	var movement_distance = point_path.size() - 1
 	
@@ -764,11 +754,6 @@ func disable_other_card_halves_debug(active_card_half):
 	print("---------- END DISABLE OTHER CARD HALVES DEBUG ----------\n")
 
 func _input(event):
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_F10:  # Use F10 as debug key
-			print("DEBUG: Forcing card value reset with F10")
-			force_reset_all_cards()
-	
 	if movement_in_progress:
 		return
 	
@@ -1546,9 +1531,7 @@ func print_node_tree(node, indent = 0):
 
 # A simplified version that doesn't rely on specific container names
 func disable_other_cards_simplified(active_card_half):
-	print("\n--------
-	
-	-- DISABLE OTHER CARDS ----------")
+	print("\n---------- DISABLE OTHER CARDS ----------")
 	print("Active card half: " + active_card_half)
 	
 	# Get all cards in the hand
@@ -1786,86 +1769,59 @@ func force_update_discard_display():
 		if hand_node.has_method("update_card_availability"):
 			hand_node.update_card_availability()
 
-# Replace the reset_card_action_values function with this completely rewritten version
+# First, let's update the reset_card_action_values function to be more robust:
 func reset_card_action_values(cryptid):
-	print("HARD RESET of all card action values for " + cryptid.name)
-	
-	# Default move values to use if we can't determine the original
-	var default_move_amount = 3
+	print("Resetting card action values for " + cryptid.name)
 	
 	# Go through all cards in the cryptid's deck
 	for card in cryptid.deck:
-		# Print the current values
-		print("Card before reset:")
-		for action in card.top_move.actions:
-			if action.action_types == [0]:
-				print("  Top move amount:", action.amount)
-		for action in card.bottom_move.actions:
-			if action.action_types == [0]:
-				print("  Bottom move amount:", action.amount)
+		# Check if this card has a base move action
+		if card.base_move_bottom != null and card.base_move_bottom.action_types == [0]:
+			# Reset bottom move to base value
+			var bottom_action_found = false
+			if card.bottom_move and card.bottom_move.actions:
+				for action in card.bottom_move.actions:
+					if action.action_types == [0]:  # Move action
+						# Reset to base move amount
+						action.amount = card.base_move_bottom.amount
+						print("Reset bottom movement to base value: " + str(action.amount))
+						bottom_action_found = true
+						break
+			
+			if not bottom_action_found:
+				print("Warning: Could not find bottom move action to reset")
 		
-		# APPROACH 1: Use stored metadata
-		var has_metadata = card.has_meta("original_move_amount")
-		if has_metadata:
+		# Check if this card has a base attack action for top (might also include movement)
+		if card.base_attack_top != null and card.top_move and card.top_move.actions:
+			for action in card.top_move.actions:
+				if action.action_types == [0]:  # Move action
+					if card.base_attack_top.action_types == [0]:
+						# Reset to base attack amount (which is actually movement)
+						action.amount = card.base_attack_top.amount
+						print("Reset top movement to base value: " + str(action.amount))
+					else:
+						# Default to 2 if we can't determine original amount
+						action.amount = 2
+						print("Reset top movement to default value: 2")
+					break
+		
+		# Additional check for metadata-based storage
+		if card.has_meta("original_move_amount"):
 			var original_amount = card.get_meta("original_move_amount")
-			print("Found stored original amount:", original_amount)
+			print("Card has stored original amount: " + str(original_amount))
 			
-			# Reset both top and bottom moves to this value
+			# Apply to both top and bottom moves if they exist
 			if card.top_move and card.top_move.actions:
 				for action in card.top_move.actions:
-					if action.action_types == [0]:
+					if action.action_types == [0]:  # Move action
 						action.amount = original_amount
+						print("Reset top movement with metadata: " + str(original_amount))
 			
 			if card.bottom_move and card.bottom_move.actions:
 				for action in card.bottom_move.actions:
-					if action.action_types == [0]:
+					if action.action_types == [0]:  # Move action
 						action.amount = original_amount
-			
-			# Clear the metadata to prevent issues
-			card.remove_meta("original_move_amount")
-		
-		# APPROACH 2: Use base card values when available
-		elif card.base_move_bottom != null or card.base_attack_top != null:
-			# Reset bottom move based on base_move_bottom
-			if card.base_move_bottom != null and card.bottom_move and card.bottom_move.actions:
-				for action in card.bottom_move.actions:
-					if action.action_types == [0]:
-						if card.base_move_bottom.action_types == [0]:
-							action.amount = card.base_move_bottom.amount
-						else:
-							action.amount = default_move_amount
-			
-			# Reset top move based on base_attack_top (for movement)
-			if card.base_attack_top != null and card.top_move and card.top_move.actions:
-				for action in card.top_move.actions:
-					if action.action_types == [0]:
-						if card.base_attack_top.action_types == [0]:
-							action.amount = card.base_attack_top.amount
-						else:
-							action.amount = default_move_amount
-		
-		# APPROACH 3: Default to standard values
-		else:
-			print("Using default values (no metadata or base values found)")
-			# Reset to default values
-			if card.top_move and card.top_move.actions:
-				for action in card.top_move.actions:
-					if action.action_types == [0]:
-						action.amount = default_move_amount
-			
-			if card.bottom_move and card.bottom_move.actions:
-				for action in card.bottom_move.actions:
-					if action.action_types == [0]:
-						action.amount = default_move_amount
-		
-		# Print the values after reset
-		print("Card after reset:")
-		for action in card.top_move.actions:
-			if action.action_types == [0]:
-				print("  Top move amount:", action.amount)
-		for action in card.bottom_move.actions:
-			if action.action_types == [0]:
-				print("  Bottom move amount:", action.amount)
+						print("Reset bottom movement with metadata: " + str(original_amount))
 
 # Now, we need to find where the enemy AI is modifying movement values and make sure it
 # tracks the original values properly. Check if there's a take_enemy_turn function in
@@ -1873,10 +1829,4 @@ func reset_card_action_values(cryptid):
 
 # This is a pseudocode example of what to add to the enemy AI movement code:
 # When the AI performs a move, make sure it stores the original value:
-# Add this function to reset card values directly
-func force_reset_all_cards():
-	print("FORCING RESET OF ALL CARDS IN GAME")
-	
-	# Reset cards for all cryptids
-	for cryptid_in_play in all_cryptids_in_play:
-		reset_card_action_values(cryptid_in_play.cryptid)
+
