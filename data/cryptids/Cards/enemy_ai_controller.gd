@@ -146,7 +146,7 @@ func take_enemy_turn(enemy_cryptid):
 					enemy_cryptid.cryptid.bottom_card_played = true
 					
 				# Wait for animations to complete
-				await get_tree().create_timer(1.0).timeout
+				await get_tree().create_timer(1.5).timeout
 	
 	# Fourth phase: If we still have actions left and haven't found a good move,
 	# consider resting to restore cards

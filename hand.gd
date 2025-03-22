@@ -469,21 +469,17 @@ func update_card_availability():
 			if selected_cryptid.top_card_played or fully_disabled:
 				top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				top_half_container.disabled = true
-				print("DEBUG: Disabled top half for card")
 			else:
 				top_half_container.modulate = Color(1, 1, 1, 1)
 				top_half_container.disabled = false
-				print("DEBUG: Enabled top half for card")
 			
 			# Handle bottom half availability
 			if selected_cryptid.bottom_card_played or fully_disabled:
 				bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				bottom_half_container.disabled = true
-				print("DEBUG: Disabled bottom half for card")
 			else:
 				bottom_half_container.modulate = Color(1, 1, 1, 1)
 				bottom_half_container.disabled = false
-				print("DEBUG: Enabled bottom half for card")
 				
 	# If both actions have been used, check if turn is complete
 	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
