@@ -17,6 +17,7 @@ func _ready():
 
 # Main function to handle an enemy cryptid's turn
 func take_enemy_turn(enemy_cryptid):
+	await get_tree().create_timer(0.5).timeout
 	print("AI: Taking turn for enemy cryptid: ", enemy_cryptid.cryptid.name)
 	
 	# Set the selected cryptid in the hand and tile map layer
@@ -56,7 +57,7 @@ func take_enemy_turn(enemy_cryptid):
 				enemy_cryptid.cryptid.bottom_card_played = true
 				
 			# Wait for animations to complete
-			await get_tree().create_timer(1.0).timeout
+			await get_tree().create_timer(1.5).timeout
 		else:
 			print("AI: No immediate attack targets found")
 	
@@ -87,7 +88,7 @@ func take_enemy_turn(enemy_cryptid):
 					print("AI: Still waiting for movement to finish...")
 
 			# Add a safety delay to ensure any animation state is fully reset
-			await get_tree().create_timer(1.5).timeout
+			await get_tree().create_timer(2.0).timeout
 			
 			# After waiting for movement to complete
 			print("AI: Movement finished, cryptid at position:", tile_map_layer.local_to_map(enemy_cryptid.position))
@@ -146,7 +147,7 @@ func take_enemy_turn(enemy_cryptid):
 					enemy_cryptid.cryptid.bottom_card_played = true
 					
 				# Wait for animations to complete
-				await get_tree().create_timer(1.0).timeout
+				await get_tree().create_timer(1.3).timeout
 	
 	# Fourth phase: If we still have actions left and haven't found a good move,
 	# consider resting to restore cards
