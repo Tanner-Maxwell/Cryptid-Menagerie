@@ -559,23 +559,37 @@ func handle_attack_action(pos_clicked):
 	var attack_performed = false
 	var valid_target = false
 	
+	# Early exit if no target found
+	if target_cryptid == null:
+		print("Invalid attack: No valid target at the selected position")
+		print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
+		
+		# Reset action state
+		attack_action_bool = false
+		active_movement_card_part = ""
+		active_movement_card = null
+		delete_all_lines()
+		delete_all_indicators()
+		
+		force_update_discard_display()
+		return false
+	
 	# Get the attacking cryptid
 	selected_cryptid = currently_selected_cryptid()
 	
 	# Determine if this is a valid target based on attacker type
-	if target_cryptid != null:
-		if selected_cryptid in player_cryptids_in_play and target_cryptid in enemy_cryptids_in_play:
-			valid_target = true
-			print("Valid target: Player attacking enemy")
-		elif selected_cryptid in enemy_cryptids_in_play and target_cryptid in player_cryptids_in_play:
-			valid_target = true
-			print("Valid target: Enemy attacking player")
-		else:
-			valid_target = false
-			print("Invalid target: Cannot attack your own team")
+	if selected_cryptid in player_cryptids_in_play and target_cryptid in enemy_cryptids_in_play:
+		valid_target = true
+		print("Valid target: Player attacking enemy")
+	elif selected_cryptid in enemy_cryptids_in_play and target_cryptid in player_cryptids_in_play:
+		valid_target = true
+		print("Valid target: Enemy attacking player")
+	else:
+		valid_target = false
+		print("Invalid target: Cannot attack your own team")
 	
 	# Only proceed if targeting a valid cryptid
-	if target_cryptid != null and valid_target:
+	if valid_target:
 		print("Valid target found")
 		
 		# Calculate attack distance
@@ -585,6 +599,13 @@ func handle_attack_action(pos_clicked):
 			a_star_hex_attack_grid.get_closest_point(current_pos),
 			a_star_hex_attack_grid.get_closest_point(target_pos)
 		)
+		
+		# Extra safety check for valid path
+		if attack_path.size() == 0:
+			print("ERROR: No valid attack path found")
+			print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
+			return false
+			
 		var attack_distance = attack_path.size() - 1
 		
 		print("Attack distance:", attack_distance, "Attack range:", attack_range)

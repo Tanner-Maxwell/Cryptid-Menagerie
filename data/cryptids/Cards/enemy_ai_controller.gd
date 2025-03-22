@@ -34,9 +34,11 @@ func take_enemy_turn(enemy_cryptid):
 		print("AI: Cryptid already completed turn, skipping")
 		return
 	
-	# Initialize action flags
+	# Initialize action flags - this is key to tracking usage properly
 	var top_action_used = enemy_cryptid.cryptid.top_card_played
 	var bottom_action_used = enemy_cryptid.cryptid.bottom_card_played
+	
+	print("AI: Starting turn with top_action_used =", top_action_used, ", bottom_action_used =", bottom_action_used)
 	
 	# First phase: See if we can attack without moving
 	if !top_action_used or !bottom_action_used:
@@ -47,13 +49,15 @@ func take_enemy_turn(enemy_cryptid):
 			print("AI: Found immediate attack target:", attack_target.target.cryptid.name)
 			perform_attack(enemy_cryptid, attack_target)
 			
-			# Update which action we used
+			# Update which action we used and ensure cryptid state is updated
 			if attack_target.is_top:
 				top_action_used = true
 				enemy_cryptid.cryptid.top_card_played = true
+				print("AI: Used top attack action")
 			else:
 				bottom_action_used = true
 				enemy_cryptid.cryptid.bottom_card_played = true
+				print("AI: Used bottom attack action")
 				
 			# Wait for animations to complete
 			await get_tree().create_timer(1.0).timeout
@@ -69,13 +73,15 @@ func take_enemy_turn(enemy_cryptid):
 			print("AI: Found move to get closer to player")
 			perform_move(enemy_cryptid, move_result.move_target)
 			
-			# Update which action we used
+			# Update which action we used and ensure cryptid state is updated
 			if move_result.move_target.is_top:
 				top_action_used = true
 				enemy_cryptid.cryptid.top_card_played = true
+				print("AI: Used top move action")
 			else:
 				bottom_action_used = true
 				enemy_cryptid.cryptid.bottom_card_played = true
+				print("AI: Used bottom move action")
 				
 			# Wait for movement animation to complete with proper polling
 			print("AI: Waiting for movement animation to complete...")
@@ -92,14 +98,9 @@ func take_enemy_turn(enemy_cryptid):
 			# After waiting for movement to complete
 			print("AI: Movement finished, cryptid at position:", tile_map_layer.local_to_map(enemy_cryptid.position))
 
-			# IMPORTANT: Check for attack opportunities AFTER moving
-			if !top_action_used or !bottom_action_used:
-				print("AI: Checking for attack opportunities after moving")
-				var post_move_attack = find_attack_target(enemy_cryptid)
-
 			# IMPORTANT: Re-get the enemy position AFTER movement
 			enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
-			print("AI: New position after move:", move_result.move_target)
+			print("AI: New position after move:", enemy_pos)
 			
 			# IMPORTANT: Check for attack opportunities AFTER moving
 			if !top_action_used or !bottom_action_used:
@@ -112,13 +113,15 @@ func take_enemy_turn(enemy_cryptid):
 						print("AI: Found attack opportunity after moving!")
 						perform_attack(enemy_cryptid, post_move_attack)
 						
-						# Update which action we used
+						# Update which action we used and ensure cryptid state is updated
 						if post_move_attack.is_top:
 							top_action_used = true
 							enemy_cryptid.cryptid.top_card_played = true
+							print("AI: Used top attack action after move")
 						else:
 							bottom_action_used = true
 							enemy_cryptid.cryptid.bottom_card_played = true
+							print("AI: Used bottom attack action after move")
 							
 						# Wait for animations to complete
 						await get_tree().create_timer(1.0).timeout
@@ -137,22 +140,33 @@ func take_enemy_turn(enemy_cryptid):
 				print("AI: Retreating after attack")
 				perform_move(enemy_cryptid, retreat_target)
 				
-				# Update which action we used
+				# Update which action we used and ensure cryptid state is updated
 				if retreat_target.is_top:
 					top_action_used = true
 					enemy_cryptid.cryptid.top_card_played = true
+					print("AI: Used top move action for retreat")
 				else:
 					bottom_action_used = true
 					enemy_cryptid.cryptid.bottom_card_played = true
+					print("AI: Used bottom move action for retreat")
 					
 				# Wait for animations to complete
-				await get_tree().create_timer(1.5).timeout
+				await get_tree().create_timer(1.0).timeout
+	
+	# Double-check that our local tracking vars match the cryptid state
+	if top_action_used != enemy_cryptid.cryptid.top_card_played:
+		print("AI: WARNING - Mismatch in top action tracking. Setting cryptid.top_card_played =", top_action_used)
+		enemy_cryptid.cryptid.top_card_played = top_action_used
+	
+	if bottom_action_used != enemy_cryptid.cryptid.bottom_card_played:
+		print("AI: WARNING - Mismatch in bottom action tracking. Setting cryptid.bottom_card_played =", bottom_action_used)
+		enemy_cryptid.cryptid.bottom_card_played = bottom_action_used
 	
 	# Fourth phase: If we still have actions left and haven't found a good move,
 	# consider resting to restore cards
 	if !top_action_used and !bottom_action_used:
 		print("AI: No good options, resting to restore cards")
-		game_controller.perform_rest(enemy_cryptid)
+		game_controller.perform_rest()
 		top_action_used = true
 		bottom_action_used = true
 		enemy_cryptid.cryptid.top_card_played = true
@@ -165,6 +179,12 @@ func take_enemy_turn(enemy_cryptid):
 		enemy_cryptid.cryptid.bottom_card_played = true
 		top_action_used = true
 		bottom_action_used = true
+	
+	# Final check to ensure consistency
+	print("AI: End of turn state - top_action_used =", top_action_used, 
+		  "bottom_action_used =", bottom_action_used,
+		  "cryptid.top_card_played =", enemy_cryptid.cryptid.top_card_played,
+		  "cryptid.bottom_card_played =", enemy_cryptid.cryptid.bottom_card_played)
 	
 	# Mark the cryptid's turn as completed
 	enemy_cryptid.cryptid.completed_turn = true
@@ -214,6 +234,7 @@ func show_end_turn_button_for_enemy():
 	if game_instructions:
 		game_instructions.text = "AI has completed its actions. Press End Turn to continue."
 # Find closest player cryptid that can be attacked
+# Find closest player cryptid that can be attacked
 func find_attack_target(enemy_cryptid):
 	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
 	print("AI: Checking attack options from", enemy_pos)
@@ -228,6 +249,23 @@ func find_attack_target(enemy_cryptid):
 	
 	# If both actions used, can't attack
 	if top_used and bottom_used:
+		print("AI: Both actions already used, can't attack")
+		return null
+	
+	# Determine appropriate targets based on team
+	var valid_targets = []
+	if enemy_cryptid in tile_map_layer.enemy_cryptids_in_play:
+		# Enemy is attacking player cryptids
+		valid_targets = tile_map_layer.player_cryptids_in_play
+		print("AI: Enemy cryptid looking for player targets, found", valid_targets.size(), "potential targets")
+	else:
+		# Player is attacking enemy cryptids
+		valid_targets = tile_map_layer.enemy_cryptids_in_play
+		print("AI: Player cryptid looking for enemy targets, found", valid_targets.size(), "potential targets")
+	
+	# If no valid targets, return null
+	if valid_targets.size() == 0:
+		print("AI: No valid targets found")
 		return null
 	
 	# Store original action state
@@ -238,17 +276,29 @@ func find_attack_target(enemy_cryptid):
 	tile_map_layer.move_action_bool = false
 	tile_map_layer.attack_action_bool = true
 	
-	# Examine each player cryptid
-	for player_cryptid in tile_map_layer.player_cryptids_in_play:
-		var player_pos = tile_map_layer.local_to_map(player_cryptid.position)
+	# Examine each valid target
+	for target_cryptid in valid_targets:
+		var target_pos = tile_map_layer.local_to_map(target_cryptid.position)
+		
+		# Verify the target position is valid
+		if not tile_map_layer.a_star_hex_attack_grid.has_point(
+			tile_map_layer.a_star_hex_attack_grid.get_closest_point(target_pos)
+		):
+			print("AI: Target position not found in pathfinding grid, skipping")
+			continue
 		
 		# Get the actual path through the A* grid
-		var path = tile_map_layer.a_star_hex_grid.get_id_path(
-			tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
-			tile_map_layer.a_star_hex_grid.get_closest_point(player_pos)
+		var path = tile_map_layer.a_star_hex_attack_grid.get_id_path(
+			tile_map_layer.a_star_hex_attack_grid.get_closest_point(enemy_pos),
+			tile_map_layer.a_star_hex_attack_grid.get_closest_point(target_pos)
 		)
 		
-		print("AI: Checking player", player_cryptid.cryptid.name, "at position", player_pos)
+		# If path is empty, skip this target
+		if path.size() == 0:
+			print("AI: No valid path to target at", target_pos, ", skipping")
+			continue
+		
+		print("AI: Checking target", target_cryptid.cryptid.name, "at position", target_pos)
 		
 		# Check cards for attacks
 		for card in enemy_cryptid.cryptid.deck:
@@ -261,7 +311,7 @@ func find_attack_target(enemy_cryptid):
 				for action in card.top_move.actions:
 					if action.action_types.has(1):  # Attack action
 						var attack_range = action.range
-						
+						print(path)
 						# Calculate attack distance
 						var attack_distance = path.size() - 1
 						
@@ -272,23 +322,24 @@ func find_attack_target(enemy_cryptid):
 							if attack_distance < closest_distance:
 								closest_distance = attack_distance
 								closest_target = {
-									"target": player_cryptid,
+									"target": target_cryptid,
 									"card": card,
 									"is_top": true,
 									"range": attack_range,
 									"damage": action.amount,
 									"attack_distance": attack_distance,
-									"target_pos": player_pos
+									"target_pos": target_pos
 								}
+								print("AI: Found valid top attack at distance", attack_distance)
 			
 			# Check bottom of card for attacks if bottom action not used yet
 			if !bottom_used:
 				for action in card.bottom_move.actions:
 					if action.action_types.has(1):  # Attack action
 						var attack_range = action.range
-						
+						print(path)
 						# Calculate attack distance
-						var attack_distance = path.size() - 1
+						var attack_distance = path.size() - 2
 						
 						print("AI: Card", card.bottom_move.name_suffix, "attack range:", attack_range, "actual distance:", attack_distance)
 						
@@ -297,18 +348,39 @@ func find_attack_target(enemy_cryptid):
 							if attack_distance < closest_distance:
 								closest_distance = attack_distance
 								closest_target = {
-									"target": player_cryptid,
+									"target": target_cryptid,
 									"card": card,
 									"is_top": false,
 									"range": attack_range,
 									"damage": action.amount,
 									"attack_distance": attack_distance,
-									"target_pos": player_pos
+									"target_pos": target_pos
 								}
+								print("AI: Found valid bottom attack at distance", attack_distance)
 	
 	# Restore original state
 	tile_map_layer.move_action_bool = original_move_bool
 	tile_map_layer.attack_action_bool = original_attack_bool
+	
+	# Final validation before returning
+	if closest_target != null:
+		print("AI: Best attack target found:", closest_target.target.cryptid.name, 
+			  "distance:", closest_target.attack_distance,
+			  "using", "top" if closest_target.is_top else "bottom", "action")
+		
+		# Double check target still exists and is valid
+		if closest_target.target in valid_targets:
+			var final_check_pos = tile_map_layer.local_to_map(closest_target.target.position)
+			if final_check_pos == closest_target.target_pos:
+				return closest_target
+			else:
+				print("AI: ERROR - Target position changed, invalidating attack")
+				return null
+		else:
+			print("AI: ERROR - Target no longer valid")
+			return null
+	else:
+		print("AI: No valid attack targets found within range")
 	
 	return closest_target
 
@@ -729,6 +801,23 @@ func perform_attack(enemy_cryptid, attack_info):
 	var attack_range = attack_info.range
 	var attack_distance = attack_info.attack_distance
 	
+	# IMPORTANT: Verify the target exists before proceeding
+	var target_cryptid = tile_map_layer.get_cryptid_at_position(target_pos)
+	if target_cryptid == null:
+		print("AI: ERROR - No valid target at position", target_pos, ", skipping attack")
+		return
+	
+	# Check if target is valid (enemy attacking player or player attacking enemy)
+	var is_valid_target = false
+	if enemy_cryptid in tile_map_layer.enemy_cryptids_in_play and target_cryptid in tile_map_layer.player_cryptids_in_play:
+		is_valid_target = true
+	elif enemy_cryptid in tile_map_layer.player_cryptids_in_play and target_cryptid in tile_map_layer.enemy_cryptids_in_play:
+		is_valid_target = true
+		
+	if not is_valid_target:
+		print("AI: ERROR - Invalid target (cannot attack own team), skipping attack")
+		return
+	
 	# Important: Save the currently selected cryptid to restore later
 	var previously_selected = tile_map_layer.selected_cryptid
 	
@@ -780,16 +869,23 @@ func perform_attack(enemy_cryptid, attack_info):
 	
 	# Perform the attack
 	print("AI: Initiating attack action to position:", target_pos)
-	tile_map_layer.handle_attack_action(target_pos)
+	var attack_successful = tile_map_layer.handle_attack_action(target_pos)
+	
+	# Important: Check if the attack was actually performed before marking as used
+	if attack_successful:
+		print("AI: Attack was successful, marking card as used")
+		# Mark the card as used - use our stored references instead of possibly freed objects
+		if is_top:
+			enemy_cryptid.cryptid.top_card_played = true
+			print("AI: Marked top card as played")
+		else:
+			enemy_cryptid.cryptid.bottom_card_played = true
+			print("AI: Marked bottom card as played")
+	else:
+		print("AI: Attack was not successful, not marking as used")
 	
 	# Wait for animation to complete
 	await get_tree().create_timer(1.0).timeout
-	
-	# Mark the card as used - use our stored references instead of possibly freed objects
-	if is_top:
-		enemy_cryptid.cryptid.top_card_played = true
-	else:
-		enemy_cryptid.cryptid.bottom_card_played = true
 	
 	# Update card state
 	card.current_state = Card.CardState.IN_DISCARD
@@ -805,6 +901,7 @@ func perform_attack(enemy_cryptid, attack_info):
 	print("AI: Restored previously selected cryptid")
 
 
+
 # Perform a move action
 func perform_move(enemy_cryptid, move_info):
 	print("AI: Performing move with card:", 
@@ -817,21 +914,27 @@ func perform_move(enemy_cryptid, move_info):
 	var target_pos = move_info.position
 	
 	# Store original movement amount before any changes are made
+	var original_amount = 0
 	if is_top:
 		for action in card.top_move.actions:
 			if action.action_types == [0]:  # Move action
+				original_amount = action.amount
 				if not card.has_meta("original_move_amount"):
 					card.set_meta("original_move_amount", action.amount)
 					print("AI: Storing original top movement amount: " + str(action.amount))
 	else:
 		for action in card.bottom_move.actions:
 			if action.action_types == [0]:  # Move action
+				original_amount = action.amount
 				if not card.has_meta("original_move_amount"):
 					card.set_meta("original_move_amount", action.amount)
 					print("AI: Storing original bottom movement amount: " + str(action.amount))
 	
 	# Important: Save the currently selected cryptid to restore later
 	var previously_selected = tile_map_layer.selected_cryptid
+	
+	# Save original cryptid position to check if move was successful
+	var original_position = enemy_cryptid.position
 	
 	# Explicitly set the target enemy cryptid as the selected one
 	print("AI: Setting selected cryptid to", enemy_cryptid.cryptid.name)
@@ -902,14 +1005,24 @@ func perform_move(enemy_cryptid, move_info):
 	# Wait for movement animation to complete
 	await get_tree().create_timer(1.0).timeout
 	
+	# Check if the move was successful by comparing positions
+	var new_position = enemy_cryptid.position
+	var move_successful = original_position != new_position
+	
 	# Debug position after move attempt
 	print("AI: Cryptid position after move:", tile_map_layer.local_to_map(enemy_cryptid.position))
+	print("AI: Move successful:", move_successful)
 	
-	# Mark the card as used - use our stored references instead of possibly freed objects
-	if is_top:
-		enemy_cryptid.cryptid.top_card_played = true
+	if move_successful:
+		# Mark the card as used - use our stored references instead of possibly freed objects
+		if is_top:
+			enemy_cryptid.cryptid.top_card_played = true
+			print("AI: Marked top card as played for movement")
+		else:
+			enemy_cryptid.cryptid.bottom_card_played = true
+			print("AI: Marked bottom card as played for movement")
 	else:
-		enemy_cryptid.cryptid.bottom_card_played = true
+		print("AI: Move was not successful, not marking as used")
 	
 	# Update card state
 	card.current_state = Card.CardState.IN_DISCARD
