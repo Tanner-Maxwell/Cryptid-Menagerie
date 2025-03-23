@@ -346,6 +346,7 @@ func next_cryptid_turn():
 	if is_enemy:
 		print("Enemy cryptid's turn: ", selected_cryptid.name)
 		# Trigger the enemy AI
+		tile_map_layer.reset_for_new_cryptid()
 		enemy_ai.take_enemy_turn(enemy_cryptid_node)
 	else:
 		print("Player cryptid's turn: ", selected_cryptid.name)
@@ -507,9 +508,10 @@ func create_unique_card_instance(card_template):
 	# Duplicate top move actions
 	for action in card_template.top_move.actions:
 		var new_action = Action.new()
+		#new_action.duplicate()
 		new_action.action_types = action.action_types.duplicate()
 		new_action.range = action.range
-		new_action.amount = action.amount  # This is the value that needs to be unique per card instance!
+		new_action.amount = action.amount #This is the value that needs to be unique per card instance!
 		new_action.area_of_effect = action.area_of_effect.duplicate()
 		new_action.disabled = action.disabled
 		new_top_move.add_action(new_action)

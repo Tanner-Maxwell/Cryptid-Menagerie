@@ -244,7 +244,6 @@ func update_move_action_display(card_half, remaining_amount):
 			# Update the amount in the action
 			var original_amount = action.amount
 			action.amount = remaining_amount
-			action.amount = remaining_amount
 			
 			# Clear and rebuild the card half
 			var container = top_half_container if card_half == "top" else bottom_half_container
@@ -256,7 +255,7 @@ func update_move_action_display(card_half, remaining_amount):
 			
 			# Re-add the action slots with updated values
 			for action_to_add in move_actions:
-				var slot = action_slot.instantiate()
+				var slot = action_slot.instantiate().duplicate()
 				container.add_child(slot)
 				slot.add_action(action_to_add)
 			
