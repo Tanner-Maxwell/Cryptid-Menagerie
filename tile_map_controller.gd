@@ -12,6 +12,10 @@ const MAIN_ATLAS_ID = 0
 @onready var card_dialog = $"../UIRoot/Hand/CardDialog"
 @onready var hand = %Hand
 @onready var turn_order = %"Turn Order"
+@onready var debug_container = Node2D.new()
+var debug_indicators = {}  # Dictionary to track all debug indicators by point ID
+var debug_enabled = true   # Toggle for the debug display
+
 
 @onready var player_team = %PlayerTeam
 @onready var enemy_team = %EnemyTeam
@@ -69,11 +73,27 @@ func _ready():
 		print(cryptid, cryptid.cryptid.speed, cryptid.cryptid.currently_selected)
 	print(player_cryptids_in_play)
 	
+	debug_container.name = "DebugContainer"
+	debug_container.z_index = 100  # Make sure debug visuals appear above everything else
+	add_child(debug_container)
+	
+	# Call this at the end of _ready() to set up initial debug display
+	call_deferred("setup_debug_display")
+	
+	var grid_check_timer = Timer.new()
+	grid_check_timer.name = "GridStateVerifier"
+	grid_check_timer.wait_time = 5.0  # Check every 5 seconds
+	grid_check_timer.autostart = true
+	grid_check_timer.one_shot = false
+	grid_check_timer.timeout.connect(verify_grid_state)
+	add_child(grid_check_timer)
 	
 
 func _process(delta):
 	if move_action_bool:
 		handle_mouse_motion()
+	if debug_enabled and Engine.get_frames_drawn() % 30 == 0:  # Update every 30 frames
+		update_all_debug_indicators()
 
 #Place player and enemy teams on map
 func initialize_starting_positions(starting_positions : Array, team):
@@ -83,21 +103,25 @@ func initialize_starting_positions(starting_positions : Array, team):
 		cryptid = blank_cryptid.instantiate()
 		cryptid.cryptid = team._content[cryptids_in_play.size()]
 		team.add_child(cryptid)
-		#if selected_cryptid == null:
-			#selected_cryptid = cryptid.cryptid
-			#print("hello??")
-			#print(selected_cryptid)
-			#print(cryptid.cryptid.currently_selected)
-			#cryptid.cryptid.currently_selected = true
-			
 		
 		cryptid.position = map_to_local(starting_positions[cryptids_in_play.size()])
 		cryptid.hand = %Hand
 		cryptids_in_play.append(cryptid)
+		
+		# Use our debug-enabled function instead of directly calling A*
 		var point = a_star_hex_grid.get_closest_point(positions, true)
-		a_star_hex_grid.set_point_disabled(point, true)
+		a_star_hex_grid.set_point_disabled(point, true)  # Use our wrapper function
 	return cryptids_in_play
+
+# Add a helper function to update all debug indicators
+func refresh_debug_display():
+	if not debug_enabled:
+		return
+		
+	print("Refreshing all A* hex grid debug indicators")
 	
+	for point_id in a_star_hex_grid.get_points():
+		update_debug_indicator(point_id)
 # Update handle_right_click function to also finish movement
 func handle_right_click():
 	print("Right-click detected - cancelling current action")
@@ -232,8 +256,14 @@ func handle_left_click(event):
 
 	
 func handle_move_action(pos_clicked):
+	# Update debug display at the start of the move action
+	update_all_debug_indicators()
+	
 	# Calculate the movement distance required for this move
 	var movement_distance = point_path.size() - 1
+	
+	# Flag to track if move was successful
+	var move_success = false
 	
 	# Only process the move if the clicked position is walkable and within movement range
 	if pos_clicked in walkable_hexes and movement_distance <= move_leftover:
@@ -394,7 +424,8 @@ func handle_move_action(pos_clicked):
 			move_performed = (original_position != new_position)
 			
 			if move_performed:
-				move_leftover = remaining_movement
+				# Update return flag
+				move_success = true
 				
 				# Animate movement along the path
 				animate_movement_along_path(selected_cryptid, original_position, new_position)
@@ -427,9 +458,17 @@ func handle_move_action(pos_clicked):
 				# This will update menu to show only End Turn if a card action was used
 				action_menu.update_menu_visibility(selected_cryptid.cryptid)
 				action_menu.show()
+			update_all_debug_indicators()
 	else:
 		print("Invalid move: Clicked on a non-walkable hex or insufficient movement points")
 		print("Required movement: ", movement_distance, ", Available movement: ", move_leftover)
+		
+		# IMPORTANT: If the move failed, make sure the target hex is not disabled
+		# This is key to fixing the bug
+		var point = a_star_hex_grid.get_closest_point(pos_clicked, true)
+		if a_star_hex_grid.is_point_disabled(point):
+			print("CLEANUP: Re-enabling hex that was incorrectly disabled due to failed move")
+			set_point_disabled(point, false)
 	
 	# Reset action state only if no movement left
 	if move_leftover <= 0:
@@ -444,8 +483,9 @@ func handle_move_action(pos_clicked):
 	else:
 		# Show remaining movement indicator
 		update_movement_indicator(selected_cryptid, move_leftover)
-		
+	update_all_debug_indicators()
 	delete_all_lines()
+	return move_success
 
 func attack_action_selected(current_card):
 	# Check if we're in discard mode
@@ -1143,20 +1183,23 @@ func _on_movement_tween_finished():
 	# Reset any visual cues used during movement
 	delete_all_lines()
 	
+	# Get the current position of the selected cryptid
+	var current_pos = local_to_map(selected_cryptid.position)
+	
 	# If we still have movement points left, make sure the current position is usable
 	if move_action_bool and move_leftover > 0:
-		# Get the current position of the selected cryptid
-		var current_pos = local_to_map(selected_cryptid.position)
-		
 		# Make the current position usable as a starting point for the next segment
 		var point = a_star_hex_grid.get_closest_point(current_pos, true)
-		a_star_hex_grid.set_point_disabled(point, false)
+		set_point_disabled(point, false)
 		
 		# Update the movement indicator to show remaining movement
 		update_movement_indicator(selected_cryptid, move_leftover)
 	else:
 		# Clean up indicators if movement is complete
 		remove_movement_indicator()
+	
+	# Update debug display after movement completes
+	update_all_debug_indicators()
 	
 func create_movement_trail(cryptid_node, path):
 	# Create a new line to show the path being followed
@@ -1190,11 +1233,16 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 	# First, make the original hex walkable again
 	walkable_hexes.append(start_pos)
 	var point = a_star_hex_grid.get_closest_point(start_pos, true)
+	
+	# Use our debug-aware function instead of direct call
 	a_star_hex_grid.set_point_disabled(point, false)
+	
 	# Remove walkability from the destination hex immediately
 	# so no other cryptid can move there during animation
 	walkable_hexes.erase(end_pos)
 	point = a_star_hex_grid.get_closest_point(end_pos, true)
+	
+	# Use our debug-aware function instead of direct call
 	a_star_hex_grid.set_point_disabled(point, true)
 	# Create a temp variable to store the full path
 	var movement_path = vector_path.duplicate()
@@ -1560,6 +1608,9 @@ func finish_movement():
 		
 		# Re-enable cards
 		enable_all_card_halves()
+		
+		# Update debug display after finishing movement
+		update_all_debug_indicators()
 		
 		# Update UI
 		var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
@@ -1945,3 +1996,171 @@ func reset_card_action_values(cryptid):
 				if action.action_types == [0]:  # Move action
 					print("  Bottom move amount: " + str(action.amount))
 
+# Function to initialize the debug display
+func setup_debug_display():
+	if not debug_enabled:
+		return
+		
+	print("Setting up A* hex grid debug display")
+	
+	# Clear any existing debug indicators
+	for child in debug_container.get_children():
+		debug_container.remove_child(child)
+		child.queue_free()
+	
+	debug_indicators.clear()
+	
+	# Iterate through all points in the A* grid and create indicators
+	for point_id in a_star_hex_grid.get_point_ids():
+		var point_pos = a_star_hex_grid.get_point_position(point_id)
+		var map_pos = map_to_local(point_pos)
+		
+		# Create indicator for this point
+		var indicator = create_debug_indicator(point_id, map_pos)
+		debug_container.add_child(indicator)
+		debug_indicators[point_id] = indicator
+		
+		# Set initial color based on disabled state
+		update_debug_indicator(point_id)
+
+# Create a visual indicator for a grid point
+func create_debug_indicator(point_id, position):
+	var indicator = Node2D.new()
+	indicator.position = position
+	
+	# Add a ColorRect as a visible marker
+	var rect = ColorRect.new()
+	rect.size = Vector2(20, 20)  # Size of the indicator
+	rect.position = Vector2(-10, -10)  # Center the rect on the point
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE  # Don't intercept mouse events
+	indicator.add_child(rect)
+	
+	# Add a Label for the point ID
+	var label = Label.new()
+	label.text = str(point_id)
+	label.position = Vector2(-15, -25)  # Position above the rect
+	label.add_theme_color_override("font_color", Color.BLACK)
+	label.add_theme_font_size_override("font_size", 12)
+	# Add a ColorRect background for better visibility
+	var bg = ColorRect.new()
+	bg.size = Vector2(30, 20)
+	bg.position = Vector2(-15, -25)
+	bg.color = Color(1, 1, 1, 0.7)  # Semi-transparent white
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	indicator.add_child(bg)
+	indicator.add_child(label)
+	
+	return indicator
+
+# Update a debug indicator's color based on its disabled state
+func update_debug_indicator(point_id):
+	if not debug_enabled or not debug_indicators.has(point_id):
+		return
+		
+	var indicator = debug_indicators[point_id]
+	var is_disabled = a_star_hex_grid.is_point_disabled(point_id)
+	
+	# Get the ColorRect
+	var rect = indicator.get_child(0)
+	
+	# Set color based on disabled state
+	if is_disabled:
+		rect.color = Color(1, 0, 0, 0.5)  # Semi-transparent red for disabled
+	else:
+		rect.color = Color(0, 1, 0, 0.5)  # Semi-transparent green for enabled
+
+# Improved debug-aware wrapper for set_point_disabled
+func set_point_disabled(point_id, disabled):
+	# Call the original A* function
+	a_star_hex_grid.set_point_disabled(point_id, disabled)
+	
+	# Update the debug display
+	update_debug_indicator(point_id)
+	
+	# Add debug output
+	print("Set point " + str(point_id) + " disabled=" + str(disabled) + 
+		  " at position " + str(a_star_hex_grid.get_point_position(point_id)))
+
+# Add this function to force update all debug indicators
+func update_all_debug_indicators():
+	if not debug_enabled:
+		return
+	
+	print("Updating all debug indicators")
+	
+	# Clear existing indicators
+	for child in debug_container.get_children():
+		debug_container.remove_child(child)
+		child.queue_free()
+	
+	debug_indicators.clear()
+	
+	# Create indicators for all points
+	for point_id in a_star_hex_grid.get_point_ids():
+		var point_pos = a_star_hex_grid.get_point_position(point_id)
+		var map_pos = map_to_local(point_pos)
+		
+		# Create indicator for this point
+		var indicator = create_debug_indicator(point_id, map_pos)
+		debug_container.add_child(indicator)
+		debug_indicators[point_id] = indicator
+		
+		# Set color based on disabled state
+		update_debug_indicator(point_id)
+		
+# Function to clean up target position if a move fails
+func cleanup_failed_move_target(target_pos):
+	print("Cleaning up failed move target at:", target_pos)
+	
+	# Get the point ID for the target position
+	var point = a_star_hex_grid.get_closest_point(target_pos, true)
+	
+	# Check if this point is disabled
+	if a_star_hex_grid.is_point_disabled(point):
+		print("Re-enabling point that was incorrectly disabled by failed move")
+		
+		# Re-enable the point
+		set_point_disabled(point, false)
+		
+		# Add the position back to walkable hexes if it's not already there
+		if not target_pos in walkable_hexes:
+			walkable_hexes.append(target_pos)
+		
+		# Update debug display
+		update_all_debug_indicators()
+	else:
+		print("Target point was not disabled, no cleanup needed")
+
+# Function to verify and fix A* grid state
+func verify_grid_state():
+	print("Verifying A* grid state...")
+	var fixed_count = 0
+	
+	# Verify each hex corresponds to the correct state
+	for i in range(walkable_hexes.size()):
+		var hex_pos = walkable_hexes[i]
+		var point = a_star_hex_grid.get_closest_point(hex_pos, true)
+		
+		# Check if the point is disabled
+		if a_star_hex_grid.is_point_disabled(point):
+			# Check if there's a cryptid occupying this position
+			var is_occupied = false
+			for cryptid in all_cryptids_in_play:
+				if local_to_map(cryptid.position) == hex_pos:
+					is_occupied = true
+					break
+			
+			# If not occupied, this should be enabled
+			if not is_occupied:
+				print("Found incorrectly disabled point at", hex_pos, "- fixing")
+				set_point_disabled(point, false)
+				fixed_count += 1
+	
+	# Report results
+	if fixed_count > 0:
+		print("Fixed", fixed_count, "incorrectly disabled grid points")
+	else:
+		print("Grid state verified - no issues found")
+	
+	# Update debug display
+	update_all_debug_indicators()

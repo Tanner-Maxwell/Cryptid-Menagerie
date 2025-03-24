@@ -134,23 +134,45 @@ func take_enemy_turn(enemy_cryptid):
 		print("AI: Considering retreat after attack")
 		var retreat_target = find_retreat_position(enemy_cryptid)
 		if retreat_target:
+			# Reset any ongoing movement state before retreat
+			tile_map_layer.move_action_bool = false
+			tile_map_layer.attack_action_bool = false
+			tile_map_layer.active_movement_card = null
+			tile_map_layer.active_movement_card_part = ""
+			tile_map_layer.move_leftover = 0
+			
 			# Check if we have the right action type available
 			if (retreat_target.is_top and !top_action_used) or (!retreat_target.is_top and !bottom_action_used):
 				print("AI: Retreating after attack")
-				perform_move(enemy_cryptid, retreat_target)
 				
-				# Update which action we used and ensure cryptid state is updated
-				if retreat_target.is_top:
-					top_action_used = true
-					enemy_cryptid.cryptid.top_card_played = true
-					print("AI: Used top move action for retreat")
-				else:
-					bottom_action_used = true
-					enemy_cryptid.cryptid.bottom_card_played = true
-					print("AI: Used bottom move action for retreat")
+				# Validate the target position is not disabled
+				var target_point = tile_map_layer.a_star_hex_grid.get_closest_point(retreat_target.position, true)
+				if tile_map_layer.a_star_hex_grid.is_point_disabled(target_point):
+					print("AI: WARNING - Retreat target is disabled, enabling for movement attempt")
+					tile_map_layer.set_point_disabled(target_point, false)
 					
-				# Wait for animations to complete
-				await get_tree().create_timer(1.5).timeout
+					# Force update debug display
+					tile_map_layer.update_all_debug_indicators()
+				
+				# Delay to ensure everything is reset
+				await get_tree().create_timer(0.5).timeout
+			
+			# Perform the retreat
+			perform_move(enemy_cryptid, retreat_target)
+			
+			# Update which action we used and ensure cryptid state is updated
+			if retreat_target.is_top:
+				top_action_used = true
+				enemy_cryptid.cryptid.top_card_played = true
+				print("AI: Used top move action for retreat")
+			else:
+				bottom_action_used = true
+				enemy_cryptid.cryptid.bottom_card_played = true
+				print("AI: Used bottom move action for retreat")
+				
+			# Wait for animations to complete
+			await get_tree().create_timer(1.0).timeout
+					
 	
 	# Double-check that our local tracking vars match the cryptid state
 	if top_action_used != enemy_cryptid.cryptid.top_card_played:
@@ -556,8 +578,26 @@ func find_move_to_attack(enemy_cryptid):
 		tile_map_layer.move_action_bool = original_move_bool
 		tile_map_layer.attack_action_bool = original_attack_bool
 		
-		# If we found a better move
-		if best_move and best_distance_to_player < closest_player_distance:
+		# Before returning the best move, add this verification
+		if best_move:
+			# Verify the position is still walkable
+			var is_target_walkable = best_move.position in tile_map_layer.walkable_hexes
+			var is_target_disabled = false
+			
+			# Check if the point is disabled
+			point = tile_map_layer.a_star_hex_grid.get_closest_point(best_move.position, true)
+			is_target_disabled = tile_map_layer.a_star_hex_grid.is_point_disabled(point)
+			
+			# Debug output
+			print("AI: Checking if target position", best_move.position, "is valid:")
+			print("  In walkable_hexes:", is_target_walkable)
+			print("  Point disabled:", is_target_disabled)
+			
+			# If the target point is disabled or not walkable, we can't move there
+			if is_target_disabled or not is_target_walkable:
+				print("AI: Target position is not valid, cannot move there")
+				return null
+			
 			print("AI: Final best move to", best_move.position, 
 				"reduces distance from", closest_player_distance, 
 				"to", best_distance_to_player)
@@ -600,7 +640,6 @@ func get_hexes_at_distance(center, distance):
 	
 	return result
 
-# Find a position to retreat to after attacking
 func find_retreat_position(enemy_cryptid):
 	var enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
 	print("AI: Calculating retreat from position", enemy_pos)
@@ -681,6 +720,12 @@ func find_retreat_position(enemy_cryptid):
 			if occupied or walkable_hex in player_positions:
 				continue
 			
+			# Check if the point is disabled in the grid
+			var hex_point = tile_map_layer.a_star_hex_grid.get_closest_point(walkable_hex, true)
+			if tile_map_layer.a_star_hex_grid.is_point_disabled(hex_point):
+				print("AI: Skipping disabled position", walkable_hex)
+				continue
+			
 			# Check if we can reach this hex
 			var move_path = tile_map_layer.a_star_hex_grid.get_id_path(
 				tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
@@ -729,7 +774,75 @@ func find_retreat_position(enemy_cryptid):
 	tile_map_layer.move_action_bool = original_move_bool
 	tile_map_layer.attack_action_bool = original_attack_bool
 	
+	# Final validation - check that the point is not disabled
 	if best_retreat_move:
+		var point = tile_map_layer.a_star_hex_grid.get_closest_point(best_retreat_move.position, true)
+		if tile_map_layer.a_star_hex_grid.is_point_disabled(point):
+			print("AI: WARNING - Selected retreat position is disabled! Trying to fix...")
+			
+			# Try to fix it
+			tile_map_layer.set_point_disabled(point, false)
+			
+			# Double-check it was fixed
+			if tile_map_layer.a_star_hex_grid.is_point_disabled(point):
+				print("AI: ERROR - Could not enable retreat position, finding alternative")
+				
+				# Find the next best option that's not disabled
+				var second_best = null
+				var second_best_score = -999
+				
+				for move_info in move_cards:
+					for walkable_hex in tile_map_layer.walkable_hexes:
+						# Skip hexes that are already occupied
+						var occupied = false
+						for cryptid in tile_map_layer.all_cryptids_in_play:
+							if tile_map_layer.local_to_map(cryptid.position) == walkable_hex:
+								occupied = true
+								break
+						
+						if occupied or walkable_hex in player_positions:
+							continue
+						
+						# Skip the disabled best position
+						if walkable_hex == best_retreat_pos:
+							continue
+						
+						# Check if the point is disabled
+						point = tile_map_layer.a_star_hex_grid.get_closest_point(walkable_hex, true)
+						if tile_map_layer.a_star_hex_grid.is_point_disabled(point):
+							continue
+						
+						# Only consider positions we can reach
+						var path = tile_map_layer.a_star_hex_grid.get_id_path(
+							tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos),
+							point
+						)
+						
+						if path.size() - 1 <= move_info.range:
+							# Calculate safety score
+							var safety_score = 0
+							for player_pos in player_positions:
+								var player_point = tile_map_layer.a_star_hex_grid.get_closest_point(player_pos)
+								var distance = tile_map_layer.a_star_hex_grid.get_id_path(point, player_point).size() - 1
+								safety_score += distance
+							
+							if safety_score > second_best_score:
+								second_best_score = safety_score
+								second_best = {
+									"position": walkable_hex,
+									"card": move_info.card,
+									"is_top": move_info.is_top,
+									"range": move_info.range,
+									"move_distance": path.size() - 1
+								}
+				
+				if second_best:
+					print("AI: Using alternative retreat position with score", second_best_score)
+					best_retreat_move = second_best
+				else:
+					print("AI: No viable retreat options found")
+					return null
+		
 		print("AI: Final retreat position is", best_retreat_move.position, "with safety score", best_retreat_score)
 	else:
 		print("AI: No viable retreat positions found")
@@ -943,23 +1056,20 @@ func perform_move(enemy_cryptid, move_info):
 	tile_map_layer.attack_action_bool = false
 	
 	# Wait for a bit to ensure any previous actions are complete
-	await get_tree().create_timer(0.5).timeout
+	await get_tree().create_timer(0.2).timeout
 	
 	# Create a card dialog instance to use for the move
 	var card_dialog_scene = load("res://Cryptid-Menagerie/data/cryptids/Cards/card_dialog.tscn")
 	var card_dialog_instance = card_dialog_scene.instantiate()
 	
-	# Create a unique instance of the card to avoid modifying all cards
-	var unique_card = hand.create_unique_card_instance(card)
-	
-	# Set the unique card resource
-	card_dialog_instance.card_resource = unique_card
+	# Set the card resource
+	card_dialog_instance.card_resource = card
 	
 	# Set the parent to be the hand (needed for some reference checks)
 	hand.add_child(card_dialog_instance)
 	
 	# Set up the card dialog
-	card_dialog_instance.display(unique_card)
+	card_dialog_instance.display(card)
 	
 	# Mark the appropriate half as selected
 	if is_top:
@@ -989,7 +1099,7 @@ func perform_move(enemy_cryptid, move_info):
 	# Debug action state before move
 	print("AI: Pre-move state: move_action_bool =", tile_map_layer.move_action_bool, 
 		"move_leftover =", tile_map_layer.move_leftover, 
-		"selected_cryptid =", tile_map_layer.selected_cryptid.name)
+		"selected_cryptid =", tile_map_layer.selected_cryptid)
 	
 	# Double-check we're still moving the right cryptid
 	if tile_map_layer.selected_cryptid != enemy_cryptid:
@@ -1001,20 +1111,30 @@ func perform_move(enemy_cryptid, move_info):
 	tile_map_layer.calculate_path(tile_map_layer.local_to_map(enemy_cryptid.position), target_pos)
 	
 	print("AI: Initiating move action to position:", target_pos)
-	tile_map_layer.handle_move_action(target_pos)
+	var move_success = tile_map_layer.handle_move_action(target_pos)
 	
 	# Wait for movement animation to complete
 	await get_tree().create_timer(1.0).timeout
 	
 	# Check if the move was successful by comparing positions
 	var new_position = enemy_cryptid.position
-	var move_successful = original_position != new_position
+	var move_performed = original_position != new_position
 	
 	# Debug position after move attempt
 	print("AI: Cryptid position after move:", tile_map_layer.local_to_map(enemy_cryptid.position))
-	print("AI: Move successful:", move_successful)
+	print("AI: Move successful:", move_performed)
 	
-	if move_successful:
+	# IMPORTANT: If move was not successful, we need to clean up
+	if !move_performed:
+		print("AI: Move was not successful, cleaning up target position")
+		# Re-enable the target position that was disabled
+		var point = tile_map_layer.a_star_hex_grid.get_closest_point(target_pos, true)
+		tile_map_layer.set_point_disabled(point, false)
+		
+		# Force update debug display
+		tile_map_layer.update_all_debug_indicators()
+	
+	if move_performed:
 		# Mark the card as used - use our stored references instead of possibly freed objects
 		if is_top:
 			enemy_cryptid.cryptid.top_card_played = true
@@ -1038,7 +1158,6 @@ func perform_move(enemy_cryptid, move_info):
 	tile_map_layer.selected_cryptid = previously_selected
 	print("AI: Restored previously selected cryptid")
 
-
 # End the current turn
 func end_turn(enemy_cryptid):
 	print("AI: Ending turn for cryptid:", enemy_cryptid.cryptid.name)
@@ -1048,3 +1167,4 @@ func end_turn(enemy_cryptid):
 	
 	# Move to next cryptid
 	hand.next_cryptid_turn()
+
