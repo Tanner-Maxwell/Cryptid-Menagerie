@@ -1195,7 +1195,7 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 	# so no other cryptid can move there during animation
 	walkable_hexes.erase(end_pos)
 	point = a_star_hex_grid.get_closest_point(end_pos, true)
-	a_star_hex_grid.set_point_disabled(point)
+	a_star_hex_grid.set_point_disabled(point, true)
 	# Create a temp variable to store the full path
 	var movement_path = vector_path.duplicate()
 	

@@ -193,9 +193,15 @@ func take_enemy_turn(enemy_cryptid):
 		print("AI: Resetting card action values at end of turn")
 		tile_map_layer.reset_card_action_values(enemy_cryptid.cryptid)
 	
+	enemy_pos = tile_map_layer.local_to_map(enemy_cryptid.position)
+	point = tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos, false)
+	var point_two = tile_map_layer.a_star_hex_grid.get_closest_point(enemy_pos, true)
+	
+	if point == point_two:
+		tile_map_layer.a_star_hex_grid.set_point_disabled(point, true)
+	
 	# Show the End Turn button for the player to proceed
 	show_end_turn_button_for_enemy()
-	
 	# Restore the previously selected cryptid
 	tile_map_layer.selected_cryptid = previous_selected
 
@@ -332,7 +338,7 @@ func find_attack_target(enemy_cryptid):
 						var attack_range = action.range
 						print(path)
 						# Calculate attack distance
-						var attack_distance = path.size() - 2
+						var attack_distance = path.size() - 1
 						
 						print("AI: Card", card.bottom_move.name_suffix, "attack range:", attack_range, "actual distance:", attack_distance)
 						
@@ -937,7 +943,7 @@ func perform_move(enemy_cryptid, move_info):
 	tile_map_layer.attack_action_bool = false
 	
 	# Wait for a bit to ensure any previous actions are complete
-	await get_tree().create_timer(0.2).timeout
+	await get_tree().create_timer(0.5).timeout
 	
 	# Create a card dialog instance to use for the move
 	var card_dialog_scene = load("res://Cryptid-Menagerie/data/cryptids/Cards/card_dialog.tscn")
