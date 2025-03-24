@@ -53,7 +53,30 @@ func _gui_input(event):
 	if parent_node and parent_node.has_method("switch_cryptid_deck") and parent_node.in_discard_mode:
 		# Don't process card actions during discard mode
 		return
-		
+	
+	# Check if this card is disabled due to being the only card in hand
+	if has_meta("disabled_for_action") and get_meta("disabled_for_action") == true:
+		# Only one card in hand - show warning and prevent action
+		var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+		if game_instructions and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
+			game_instructions.text = "Need at least 2 cards to play! Use Rest action instead."
+			
+			# Highlight the Rest button as a hint
+			var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+			if action_menu and action_menu.rest_button:
+				# Create a flash effect to draw attention to the Rest button
+				var original_color = action_menu.rest_button.modulate
+				action_menu.rest_button.modulate = Color(1, 0.5, 0.5, 1)  # Highlight in red
+				
+				# Create a timer to reset the color
+				var timer = get_tree().create_timer(1.0)
+				timer.timeout.connect(func(): action_menu.rest_button.modulate = original_color)
+			
+			# Prevent further processing
+			get_viewport().set_input_as_handled()
+			return
+	
+	# Normal card handling for 2+ cards
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
 		if self.get_parent().is_in_group("hand"):
 			var parent_hand = self.get_parent()

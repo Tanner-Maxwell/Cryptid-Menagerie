@@ -96,9 +96,9 @@ func unhighlight_card(card: CardDialog):
 func can_highlight_more() -> bool:
 	return highlighted_cards.size() < max_highlighted_cards
 	
-# Replace the cards_selected function with this improved version:
 func cards_selected(selected_cards: Array):
 	print("DEBUG: cards_selected called with " + str(selected_cards.size()) + " cards")
+	
 	for cards_picked in selected_cards:
 		print("DEBUG: Processing card: " + cards_picked.card_resource.to_string())
 		
@@ -107,26 +107,17 @@ func cards_selected(selected_cards: Array):
 			# Update the original card's state to IN_DISCARD
 			cards_picked.card_resource.original_card.current_state = Card.CardState.IN_DISCARD
 			print("DEBUG: Updated original card state to IN_DISCARD")
-		else:
-			# If no original reference, update this card's state directly
-			cards_picked.card_resource.current_state = Card.CardState.IN_DISCARD
-			print("DEBUG: Updated direct card state to IN_DISCARD")
-		
-		# Remove card from deck only if it's still there
-		if selected_cryptid.deck.has(cards_picked.card_resource.original_card or cards_picked.card_resource):
-			if cards_picked.card_resource.original_card != null:
-				selected_cryptid.deck.erase(cards_picked.card_resource.original_card)
-				print("DEBUG: Removed original card from deck")
-			else:
-				selected_cryptid.deck.erase(cards_picked.card_resource)
-				print("DEBUG: Removed card from deck")
-		
-		# Add card to discard if not already there
-		if cards_picked.card_resource.original_card != null:
+			
+			# Make sure the original card is in the discard pile if not already there
 			if not selected_cryptid.discard.has(cards_picked.card_resource.original_card):
 				selected_cryptid.discard.push_back(cards_picked.card_resource.original_card)
 				print("DEBUG: Added original card to discard")
 		else:
+			# If no original reference, update this card's state directly
+			cards_picked.card_resource.current_state = Card.CardState.IN_DISCARD
+			print("DEBUG: Updated direct card state to IN_DISCARD")
+			
+			# Make sure the card is in the discard pile if not already there
 			if not selected_cryptid.discard.has(cards_picked.card_resource):
 				selected_cryptid.discard.push_back(cards_picked.card_resource)
 				print("DEBUG: Added card to discard")
@@ -134,10 +125,36 @@ func cards_selected(selected_cards: Array):
 	print("DEBUG: After cards_selected - deck size: " + str(selected_cryptid.deck.size()) + 
 		  ", discard size: " + str(selected_cryptid.discard.size()))
 	
+	# Print contents of discard pile for debugging
+	print("DEBUG: Discard pile contents:")
+	for i in range(selected_cryptid.discard.size()):
+		print("  [" + str(i) + "] " + selected_cryptid.discard[i].to_string())
+	
 	# Make sure to update card availability after modifying card states
 	update_card_availability()
 	
 	return selected_cryptid
+
+# Add a new debug function to help troubleshoot card state
+func debug_print_all_cards():
+	print("\n----- DEBUG: ALL CARDS FOR " + selected_cryptid.name + " -----")
+	
+	print("DECK CARDS:")
+	for card in selected_cryptid.deck:
+		print("  Card: " + card.to_string() + ", State: " + str(card.current_state))
+	
+	print("DISCARD CARDS:")
+	for card in selected_cryptid.discard:
+		print("  Card: " + card.to_string() + ", State: " + str(card.current_state))
+	
+	print("HAND DISPLAY:")
+	var child_count = 0
+	for child in get_children():
+		if child is CardDialog and child.card_resource:
+			child_count += 1
+			print("  Display card " + str(child_count) + ": " + child.card_resource.to_string())
+	
+	print("----- END DEBUG CARDS -----\n")
 
 # Add a function to completely clear the hand
 func clear_hand():
@@ -174,9 +191,24 @@ func switch_cryptid_deck(cryptid: Cryptid):
 		var card = cryptid.deck[i]
 		print("DEBUG: Card " + str(i) + " - state: " + str(card.current_state))
 	
+	# Count how many cards are in the deck state
+	var available_cards = 0
+	for card in cryptid.deck:
+		if card.current_state == Card.CardState.IN_DECK:
+			available_cards += 1
+	
+	print("DEBUG: Total available cards in deck: " + str(available_cards))
+	
 	# Create unique instances of each card
 	var base_card
 	var cards_added = 0
+	var single_card_warning = false
+	
+	# Flag to track if we only have one card
+	if available_cards == 1:
+		single_card_warning = true
+		print("WARNING: Only one card available - actions will be disabled")
+	
 	for card_resource in cryptid.deck:
 		# Only display cards that are in the deck state
 		if card_resource.current_state == Card.CardState.IN_DECK:
@@ -188,6 +220,11 @@ func switch_cryptid_deck(cryptid: Cryptid):
 			# Instantiate the card dialog
 			base_card = card_dialog.instantiate()
 			base_card.card_resource = unique_card_resource
+			
+			# If only one card, mark it as disabled using metadata
+			if single_card_warning:
+				base_card.set_meta("disabled_for_action", true)
+			
 			add_card(base_card)
 			cards_added += 1
 	
@@ -202,6 +239,12 @@ func switch_cryptid_deck(cryptid: Cryptid):
 	
 	# Update card availability based on the new cryptid's state
 	update_card_availability()
+	
+	# Show warning if only one card available
+	if single_card_warning:
+		var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+		if game_instructions:
+			game_instructions.text = "Only one card available! Use Rest action to recover cards."
 	
 	# Make sure the hand is visible
 	show()
@@ -338,12 +381,29 @@ func update_card_availability():
 	print("DEBUG: Top card played: " + str(selected_cryptid.top_card_played))
 	print("DEBUG: Bottom card played: " + str(selected_cryptid.bottom_card_played))
 	
+	# Check if we only have one card in hand
+	var single_card_warning = (get_child_count() == 1)
+	if single_card_warning:
+		print("WARNING: Only one card in hand - disabling card actions")
+	
 	# Process all cards in the hand
 	for card in get_children():
+		if not is_instance_valid(card):
+			print("WARNING: Invalid card instance, skipping")
+			continue
+			
 		if card is CardDialog:
 			# Check if this specific card has been fully disabled
 			var fully_disabled = card.has_meta("fully_disabled") and card.get_meta("fully_disabled") == true
 			
+			# Also disable if we only have one card in hand
+			if single_card_warning:
+				card.set_meta("disabled_for_action", true)
+				# Visually indicate it's disabled
+				card.modulate = Color(0.8, 0.8, 0.8, 1)  # Slightly grayed out
+			else:
+				card.set_meta("disabled_for_action", false)
+				
 			# Get the card containers
 			var vbox = card.get_node_or_null("VBoxContainer")
 			if not vbox:
@@ -356,7 +416,7 @@ func update_card_availability():
 				continue
 			
 			# Handle top half availability
-			if selected_cryptid.top_card_played or fully_disabled:
+			if selected_cryptid.top_card_played or fully_disabled or single_card_warning:
 				top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				top_half_container.disabled = true
 			else:
@@ -364,7 +424,7 @@ func update_card_availability():
 				top_half_container.disabled = false
 			
 			# Handle bottom half availability
-			if selected_cryptid.bottom_card_played or fully_disabled:
+			if selected_cryptid.bottom_card_played or fully_disabled or single_card_warning:
 				bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
 				bottom_half_container.disabled = true
 			else:
@@ -375,6 +435,12 @@ func update_card_availability():
 	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
 		selected_cryptid.completed_turn = true
 		print("DEBUG: Marked cryptid's turn as complete")
+		
+	# Update action menu to show Rest as the primary option when only one card
+	if single_card_warning:
+		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+		if action_menu and action_menu.has_method("update_menu_visibility"):
+			action_menu.update_menu_visibility(selected_cryptid)
 
 
 func create_unique_card_instance(card_template):
@@ -442,18 +508,71 @@ func create_unique_card_instance(card_template):
 
 # Add this to hand.gd or wherever your rest action is handled
 func rest_action():
-	# Reset all card states to IN_DECK
-	for card in selected_cryptid.deck:
-		card.current_state = Card.CardState.IN_DECK
+	print("Performing rest action for", selected_cryptid.name)
 	
-	# Then refresh the hand
+	# Reset all card states from IN_DISCARD to IN_DECK
+	var cards_recovered = 0
+	
+	# First, report the state before rest
+	print("Before rest - Deck size:", selected_cryptid.deck.size())
+	print("Before rest - Discard size:", selected_cryptid.discard.size())
+	
+	# Create an array to store cards being moved
+	var cards_to_recover = selected_cryptid.discard.duplicate()
+	
+	# Process each card in the discard pile
+	for card in cards_to_recover:
+		# Verify the card state before changing it
+		print("Processing card:", card, "Current state:", card.current_state)
+		
+		# Only change state if it's actually in discard
+		if card.current_state == Card.CardState.IN_DISCARD:
+			# Change the card state to IN_DECK
+			card.current_state = Card.CardState.IN_DECK
+			cards_recovered += 1
+			print("Recovered card from discard:", card, "New state:", card.current_state)
+		else:
+			print("WARN: Card in discard pile had unexpected state:", card.current_state)
+	
+	# Clear the discard pile after moving all cards to deck
+	selected_cryptid.discard.clear()
+	
+	print("Cards recovered from discard:", cards_recovered)
+	
+	# Verify all cards in deck are properly marked
+	print("Verifying deck card states:")
+	for i in range(selected_cryptid.deck.size()):
+		var card = selected_cryptid.deck[i]
+		print("Deck card", i, ":", card, "State:", card.current_state)
+		
+		# Ensure all cards are marked as IN_DECK
+		if card.current_state != Card.CardState.IN_DECK:
+			print("FIXING incorrect card state for card", i)
+			card.current_state = Card.CardState.IN_DECK
+	
+	# Then refresh the hand with all IN_DECK cards
 	switch_cryptid_deck(selected_cryptid)
 	
+	# Double-check that our discard pile is truly empty
+	if selected_cryptid.discard.size() > 0:
+		print("ERROR: Discard pile not empty after rest! Size:", selected_cryptid.discard.size())
+		# Force clear it again
+		selected_cryptid.discard.clear()
+	
+	# Update the game instructions
+	var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+	if game_instructions:
+		game_instructions.text = "Rested: recovered " + str(cards_recovered) + " cards from discard pile!"
+	
 	# Mark the cryptid's turn as completed
+	selected_cryptid.top_card_played = true
+	selected_cryptid.bottom_card_played = true
 	selected_cryptid.completed_turn = true
 	
-	# Move to next cryptid's turn
-	next_cryptid_turn()
+	# Show only the End Turn button
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu and action_menu.has_method("show_end_turn_only"):
+		action_menu.show_end_turn_only()
 	
 func clear_card_selections():
 	print("Clearing all card selections")

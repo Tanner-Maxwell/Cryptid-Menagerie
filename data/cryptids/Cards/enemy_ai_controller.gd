@@ -123,7 +123,7 @@ func take_enemy_turn(enemy_cryptid):
 							print("AI: Used bottom attack action after move")
 							
 						# Wait for animations to complete
-						await get_tree().create_timer(1.0).timeout
+						await get_tree().create_timer(1.5).timeout
 				else:
 					print("AI: No attack opportunities found after moving")
 		else:
@@ -150,7 +150,7 @@ func take_enemy_turn(enemy_cryptid):
 					print("AI: Used bottom move action for retreat")
 					
 				# Wait for animations to complete
-				await get_tree().create_timer(1.0).timeout
+				await get_tree().create_timer(1.5).timeout
 	
 	# Double-check that our local tracking vars match the cryptid state
 	if top_action_used != enemy_cryptid.cryptid.top_card_played:

@@ -1808,8 +1808,8 @@ func discard_card(card_dialog, cryptid):
 		cryptid.discard.push_back(original_card)
 		print("Added card to discard pile")
 	
-	# IMPORTANT: We are NOT removing the card from the deck anymore
-	# This keeps the card available in the hand but still marked as discarded
+	# Do NOT remove the card from the deck array - it stays in both places
+	# but with the state marked as IN_DISCARD
 	
 	# Print current state after changes
 	print("AFTER DISCARD - Deck size: " + str(cryptid.deck.size()) + ", Discard size: " + str(cryptid.discard.size()))

@@ -141,6 +141,10 @@ func find_next_cryptid():
 func setup_cryptid_turn(cryptid):
 	print("Setting up turn for cryptid:", cryptid.name)
 	
+	# Before switching cryptids, verify card states for current cryptid
+	if hand.selected_cryptid:
+		verify_cryptid_card_states(hand.selected_cryptid)
+	
 	# Current cryptid is no longer selected
 	if hand.selected_cryptid:
 		hand.selected_cryptid.currently_selected = false
@@ -148,6 +152,9 @@ func setup_cryptid_turn(cryptid):
 	# Set the new cryptid as selected
 	hand.selected_cryptid = cryptid
 	cryptid.currently_selected = true
+	
+	# Verify card states for the new cryptid
+	verify_cryptid_card_states(cryptid)
 	
 	# Reset card action values for the newly selected cryptid
 	if tile_map_layer:
@@ -182,6 +189,42 @@ func setup_cryptid_turn(cryptid):
 		# Show the action menu for the new cryptid
 		action_selection_menu.prompt_player_for_action()
 
+# Add this new helper function to verify card states
+func verify_cryptid_card_states(cryptid):
+	print("Verifying card states for", cryptid.name)
+	
+	# Track counts for reporting
+	var fixed_deck_cards = 0
+	var fixed_discard_cards = 0
+	
+	# First check deck cards
+	for card in cryptid.deck:
+		# Check if card is in discard pile
+		var in_discard = false
+		for discard_card in cryptid.discard:
+			if discard_card == card:
+				in_discard = true
+				break
+		
+		# If card is in discard pile, it should be marked as IN_DISCARD
+		if in_discard:
+			if card.current_state != Card.CardState.IN_DISCARD:
+				print("Found card in discard pile with wrong state - fixing")
+				card.current_state = Card.CardState.IN_DISCARD
+				fixed_discard_cards += 1
+		# If card is NOT in discard pile, it should be marked as IN_DECK
+		else:
+			if card.current_state != Card.CardState.IN_DECK:
+				print("Found card not in discard with wrong state - fixing")
+				card.current_state = Card.CardState.IN_DECK
+				fixed_deck_cards += 1
+	
+	# Report results
+	if fixed_deck_cards > 0 or fixed_discard_cards > 0:
+		print("Fixed card states:", fixed_deck_cards, "deck cards,", fixed_discard_cards, "discard cards")
+	else:
+		print("All card states verified correct")
+
 # Update prompt_swap_cryptid function to update menu
 func prompt_swap_cryptid():
 	print("Prompting player to swap cryptid")
@@ -199,7 +242,7 @@ func prompt_swap_cryptid():
 # Update perform_rest function to properly update menu state
 func perform_rest():
 	print("Player is resting")
-	game_instructions.text = "Player is resting"
+	game_instructions.text = "Player is resting - recovering cards from discard..."
 	
 	# Mark current cryptid's turn as completed
 	if hand.selected_cryptid:
@@ -211,8 +254,17 @@ func perform_rest():
 		# Update the UI to show only end turn button
 		action_selection_menu.show_end_turn_only()
 	
-	# Refresh the cards in hand for clarity
+	# Refresh the cards in hand for clarity - adding debug output
+	print("Before rest action - Discard count:", 
+		  hand.selected_cryptid.discard.size() if hand.selected_cryptid else "No cryptid")
+	
+	# Call the proper rest action to recover cards
 	hand.rest_action()
+	
+	print("After rest action - Discard count:", 
+		  hand.selected_cryptid.discard.size() if hand.selected_cryptid else "No cryptid")
+	print("After rest action - Deck/Hand count:", 
+		  hand.get_child_count() - 1 if hand else "No hand")  # -1 for non-card children
 
 
 
@@ -441,20 +493,42 @@ func process_end_of_round():
 # Modified reset_all_cryptid_turns function
 func reset_all_cryptid_turns():
 	for cryptid_in_play in tile_map_layer.all_cryptids_in_play:
-		cryptid_in_play.cryptid.completed_turn = false
-		cryptid_in_play.cryptid.top_card_played = false
-		cryptid_in_play.cryptid.bottom_card_played = false
+		var cryptid = cryptid_in_play.cryptid
+		
+		print("Resetting turn for cryptid:", cryptid.name)
+		cryptid.completed_turn = false
+		cryptid.top_card_played = false
+		cryptid.bottom_card_played = false
 		
 		# Reset all card action values
-		tile_map_layer.reset_card_action_values(cryptid_in_play.cryptid)
+		tile_map_layer.reset_card_action_values(cryptid)
 		
-		# Make sure cards in discard pile have the correct state
-		for card in cryptid_in_play.cryptid.discard:
-			card.current_state = Card.CardState.IN_DISCARD
+		# Verify all cards are in the correct state
+		
+		# First check deck cards
+		print("Checking deck cards for", cryptid.name)
+		for card in cryptid.deck:
+			print("Card:", card, "State:", card.current_state)
 			
-		# Make sure cards in deck have the correct state
-		for card in cryptid_in_play.cryptid.deck:
+			# Only cards in discard pile should have IN_DISCARD state
+			if card.current_state == Card.CardState.IN_DISCARD:
+				var in_discard = false
+				for discard_card in cryptid.discard:
+					if discard_card == card:
+						in_discard = true
+						break
+				
+				if not in_discard:
+					print("Found card marked as IN_DISCARD but not in discard pile - fixing!")
+					card.current_state = Card.CardState.IN_DECK
+		
+		# Then check discard pile cards
+		print("Checking discard cards for", cryptid.name)
+		for card in cryptid.discard:
+			print("Discard card:", card, "State:", card.current_state)
+			
+			# All cards in discard should have IN_DISCARD state
 			if card.current_state != Card.CardState.IN_DISCARD:
-				card.current_state = Card.CardState.IN_DECK
-
+				print("Found card in discard pile with wrong state - fixing!")
+				card.current_state = Card.CardState.IN_DISCARD
 
