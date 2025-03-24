@@ -193,10 +193,17 @@ func handle_mouse_motion():
 	
 	calculate_path(current_pos, target_pos)
 			
+# Update the handle_left_click function to prevent actions during discard mode
 func handle_left_click(event):
 	var global_clicked = event.position
 	selected_cryptid = currently_selected_cryptid()
 	var pos_clicked = local_to_map(to_local(global_clicked))
+	
+	# Check if we're in discard mode
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.in_discard_mode:
+		print("In discard mode, ignoring card activation clicks")
+		return
 	
 	# Debugging
 	print("Left click detected!")
@@ -424,10 +431,13 @@ func handle_move_action(pos_clicked):
 		
 	delete_all_lines()
 
-
-# Updated attack_action_selected based on the correct node structure
-# Updated attack_action_selected function
 func attack_action_selected(current_card):
+	# Check if we're in discard mode
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.in_discard_mode:
+		print("In discard mode, ignoring attack action selection")
+		return
+	
 	print("\n---------- ATTACK ACTION SELECTED DEBUG ----------")
 	card_dialog = current_card
 	
@@ -788,7 +798,14 @@ func _input(event):
 			if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed():
 				handle_left_click(event)
 
+# Update the move_action_selected function to prevent activating during discard
 func move_action_selected(current_card):
+	# Check if we're in discard mode
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.in_discard_mode:
+		print("In discard mode, ignoring move action selection")
+		return
+	
 	# If already in segmented movement, only allow continuing with the same card
 	if move_leftover > 0 and active_movement_card != null:
 		# Only allow the same card to continue movement
@@ -1790,64 +1807,103 @@ func force_update_discard_display():
 		if hand_node.has_method("update_card_availability"):
 			hand_node.update_card_availability()
 
-# First, let's update the reset_card_action_values function to be more robust:
 func reset_card_action_values(cryptid):
 	print("Resetting card action values for " + cryptid.name)
 	
-	# Go through all cards in the cryptid's deck
-	for card in cryptid.deck:
-		# Check if this card has a base move action
-		if card.base_move_bottom != null and card.base_move_bottom.action_types == [0]:
-			# Reset bottom move to base value
-			var bottom_action_found = false
-			if card.bottom_move and card.bottom_move.actions:
-				for action in card.bottom_move.actions:
-					if action.action_types == [0]:  # Move action
-						# Reset to base move amount
-						action.amount = card.base_move_bottom.amount
-						print("Reset bottom movement to base value: " + str(action.amount))
-						bottom_action_found = true
-						break
-			
-			if not bottom_action_found:
-				print("Warning: Could not find bottom move action to reset")
-		
-		# Check if this card has a base attack action for top (might also include movement)
-		if card.base_attack_top != null and card.top_move and card.top_move.actions:
+	# Go through all cards in the cryptid's deck and discard
+	var all_cards = []
+	all_cards.append_array(cryptid.deck)
+	all_cards.append_array(cryptid.discard)
+	
+	for card in all_cards:
+		# Debug info - print current values before reset
+		print("Card before reset:")
+		if card.top_move:
 			for action in card.top_move.actions:
 				if action.action_types == [0]:  # Move action
-					if card.base_attack_top.action_types == [0]:
-						# Reset to base attack amount (which is actually movement)
-						action.amount = card.base_attack_top.amount
-						print("Reset top movement to base value: " + str(action.amount))
-					else:
-						# Default to 2 if we can't determine original amount
-						action.amount = 2
-						print("Reset top movement to default value: 2")
-					break
+					print("  Top move amount: " + str(action.amount))
+		if card.bottom_move:
+			for action in card.bottom_move.actions:
+				if action.action_types == [0]:  # Move action
+					print("  Bottom move amount: " + str(action.amount))
 		
-		# Additional check for metadata-based storage
+		# Use EXACTLY ONE method to reset values - prioritize metadata
+		var reset_applied = false
+		
+		# First check if we have stored metadata
 		if card.has_meta("original_move_amount"):
 			var original_amount = card.get_meta("original_move_amount")
-			print("Card has stored original amount: " + str(original_amount))
+			print("Using stored original amount: " + str(original_amount))
 			
-			# Apply to both top and bottom moves if they exist
-			if card.top_move and card.top_move.actions:
+			# Apply to both top and bottom if they have move actions
+			if card.top_move:
 				for action in card.top_move.actions:
 					if action.action_types == [0]:  # Move action
 						action.amount = original_amount
-						print("Reset top movement with metadata: " + str(original_amount))
+						print("Reset top move to " + str(original_amount))
 			
-			if card.bottom_move and card.bottom_move.actions:
+			if card.bottom_move:
 				for action in card.bottom_move.actions:
 					if action.action_types == [0]:  # Move action
 						action.amount = original_amount
-						print("Reset bottom movement with metadata: " + str(original_amount))
-
-# Now, we need to find where the enemy AI is modifying movement values and make sure it
-# tracks the original values properly. Check if there's a take_enemy_turn function in
-# EnemyAIController.gd and add the following to any place where movement happens:
-
-# This is a pseudocode example of what to add to the enemy AI movement code:
-# When the AI performs a move, make sure it stores the original value:
+						print("Reset bottom move to " + str(original_amount))
+			
+			reset_applied = true
+		elif card.has_meta("original_top_move_amount") or card.has_meta("original_bottom_move_amount"):
+			# Use specific top/bottom metadata if available
+			if card.has_meta("original_top_move_amount") and card.top_move:
+				var original_top_amount = card.get_meta("original_top_move_amount")
+				for action in card.top_move.actions:
+					if action.action_types == [0]:  # Move action
+						action.amount = original_top_amount
+						print("Reset top move to " + str(original_top_amount))
+			
+			if card.has_meta("original_bottom_move_amount") and card.bottom_move:
+				var original_bottom_amount = card.get_meta("original_bottom_move_amount")
+				for action in card.bottom_move.actions:
+					if action.action_types == [0]:  # Move action
+						action.amount = original_bottom_amount
+						print("Reset bottom move to " + str(original_bottom_amount))
+			
+			reset_applied = true
+		
+		# Only use base values if metadata wasn't found
+		if not reset_applied:
+			# Try to use base values
+			if card.get("base_move_bottom") != null and card.bottom_move:
+				for action in card.bottom_move.actions:
+					if action.action_types == [0]:
+						action.amount = card.base_move_bottom.amount
+						print("Reset bottom move to hardcoded base value: " + str(card.base_move_bottom.amount))
+			
+			if card.get("base_attack_top") != null and card.top_move:
+				for action in card.top_move.actions:
+					if action.action_types == [0]:
+						action.amount = card.base_attack_top.amount
+						print("Reset top move to hardcoded base value: " + str(card.base_attack_top.amount))
+			
+			# If no other method worked, use hardcoded defaults
+			if not card.get("base_move_bottom") and not card.get("base_attack_top"):
+				if card.top_move:
+					for action in card.top_move.actions:
+						if action.action_types == [0]:
+							action.amount = 3  # Default move value
+							print("Reset top move to default value: 3")
+				
+				if card.bottom_move:
+					for action in card.bottom_move.actions:
+						if action.action_types == [0]:
+							action.amount = 3  # Default move value
+							print("Reset bottom move to default value: 3")
+		
+		# Debug info - print values after reset
+		print("Card after reset:")
+		if card.top_move:
+			for action in card.top_move.actions:
+				if action.action_types == [0]:  # Move action
+					print("  Top move amount: " + str(action.amount))
+		if card.bottom_move:
+			for action in card.bottom_move.actions:
+				if action.action_types == [0]:  # Move action
+					print("  Bottom move amount: " + str(action.amount))
 

@@ -48,6 +48,12 @@ func _ready():
 	tile_map_layer = get_tree().get_nodes_in_group("map")[0]
 
 func _gui_input(event):
+	# First check if we're in discard mode - if so, let the hand handle this event
+	var parent_node = get_parent()
+	if parent_node and parent_node.has_method("switch_cryptid_deck") and parent_node.in_discard_mode:
+		# Don't process card actions during discard mode
+		return
+		
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
 		if self.get_parent().is_in_group("hand"):
 			var parent_hand = self.get_parent()

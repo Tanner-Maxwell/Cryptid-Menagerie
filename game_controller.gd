@@ -90,7 +90,7 @@ func prompt_catch_cryptid():
 	print("Prompting player to catch a cryptid")
 	game_instructions.text = "Select a cryptid to catch"
 	
-# Modified end_current_turn function
+# Update the end_current_turn function to properly handle discard
 func end_current_turn():
 	print("Ending current cryptid's turn")
 	
@@ -115,14 +115,23 @@ func end_current_turn():
 			if discard_count_needed > 0:
 				# Enter discard mode
 				discard_mode = true
-				hand.start_discard_mode(discard_count_needed)
 				end_turn_after_discard = true
 				
 				# Update instruction text
 				game_instructions.text = "Select " + str(discard_count_needed) + " card(s) to discard"
 				
-				# Show the discard confirmation button
+				# Start discard mode in the hand
+				hand.start_discard_mode(discard_count_needed)
+				
+				# Show the discard confirmation button in the action menu
 				action_selection_menu.show_discard_confirmation(true)
+				
+				# Make sure other card functionality is disabled
+				action_selection_menu.enter_discard_mode()
+				
+				# Prevent any active card actions in the tile map
+				tile_map_layer.reset_action_modes()
+				
 				return  # Return early, will complete turn after discard
 		
 		# If we get here, no discard needed or already handled
@@ -179,14 +188,24 @@ func complete_turn():
 		# Show the action menu for the next cryptid
 		action_selection_menu.prompt_player_for_action()
 
-# Function to handle when discard is complete
+# Update the on_discard_complete function to properly handle forced discards
 func on_discard_complete(selected_cards):
+	print("Discard complete with", selected_cards.size(), "cards")
+	
 	discard_mode = false
 	
 	# Get the current cryptid
 	var current_cryptid = hand.selected_cryptid
 	
 	if current_cryptid:
+		# Verify we have the right number of cards
+		if selected_cards.size() < discard_count_needed:
+			print("ERROR: Not enough cards discarded, needed", discard_count_needed, "got", selected_cards.size())
+			# Force another discard attempt
+			hand.start_discard_mode(discard_count_needed)
+			action_selection_menu.show_discard_confirmation(true)
+			return
+		
 		# Process the selected cards
 		hand.cards_selected(selected_cards)
 		

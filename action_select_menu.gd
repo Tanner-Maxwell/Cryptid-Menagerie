@@ -113,7 +113,7 @@ func _on_DoneMoving_pressed():
 	# Call the finish_movement function
 	tile_map_layer.finish_movement()
 
-# Modify or add this function to show/hide discard confirmation
+# Update the show_discard_confirmation function to properly create and manage the discard button
 func show_discard_confirmation(visible = true):
 	# Hide all normal action buttons
 	for child in $VBoxContainer.get_children():
@@ -123,7 +123,7 @@ func show_discard_confirmation(visible = true):
 	if not confirm_discard_button:
 		confirm_discard_button = Button.new()
 		confirm_discard_button.text = "Confirm Discard"
-		confirm_discard_button.name = "ConfirmDiscardButton"
+		confirm_discard_button.name = "DiscardButton"
 		$VBoxContainer.add_child(confirm_discard_button)
 		
 		# Connect to signal
@@ -131,8 +131,27 @@ func show_discard_confirmation(visible = true):
 	
 	# Show or hide the button
 	confirm_discard_button.visible = visible
+	
+	# Start with the button disabled
+	confirm_discard_button.disabled = true
+	confirm_discard_button.modulate = Color(0.7, 0.7, 0.7, 1)
+	
+	# Make sure the menu itself is visible
 	self.visible = visible
 
+# Add a function to disable all other card functionality during discard mode
+func enter_discard_mode():
+	# Hide all action buttons except the discard confirmation
+	for child in $VBoxContainer.get_children():
+		if child.name != "DiscardButton":
+			child.visible = false
+	
+	# Show the discard button
+	if confirm_discard_button:
+		confirm_discard_button.visible = true
+	
+	# Make sure the menu is visible
+	self.visible = true
 
 # Add this function to handle the button press
 func _on_confirm_discard_pressed():

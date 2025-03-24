@@ -361,7 +361,7 @@ func next_cryptid_turn():
 		for i in range(selected_cryptid.discard.size()):
 			print("   Discard card " + str(i) + ": " + selected_cryptid.discard[i].to_string())
 		
-		switch_cryptid_deck(selected_cryptid)
+		#switch_cryptid_deck(selected_cryptid)
 		
 		# Force update action menu button state for the new cryptid
 		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
@@ -495,6 +495,19 @@ func create_unique_card_instance(card_template):
 	# Store reference to original card
 	new_card.original_card = card_template
 	
+	# Store original movement values explicitly for both top and bottom moves
+	if card_template.top_move:
+		for action in card_template.top_move.actions:
+			if action.action_types == [0]:  # Move action
+				new_card.set_meta("original_top_move_amount", action.amount)
+				print("Storing original top move amount: " + str(action.amount))
+	
+	if card_template.bottom_move:
+		for action in card_template.bottom_move.actions:
+			if action.action_types == [0]:  # Move action
+				new_card.set_meta("original_bottom_move_amount", action.amount)
+				print("Storing original bottom move amount: " + str(action.amount))
+	
 	# Copy the state
 	new_card.current_state = card_template.current_state
 	
@@ -508,7 +521,6 @@ func create_unique_card_instance(card_template):
 	# Duplicate top move actions
 	for action in card_template.top_move.actions:
 		var new_action = Action.new()
-		#new_action.duplicate()
 		new_action.action_types = action.action_types.duplicate()
 		new_action.range = action.range
 		new_action.amount = action.amount #This is the value that needs to be unique per card instance!
@@ -686,31 +698,40 @@ func show_confirm_discard_button():
 	confirm_button.offset_right = 100
 	confirm_button.offset_bottom = -10
 
-# Add this function for the confirm button
-# Function for the confirm button
-# Add this function to handle the button press
 func _on_confirm_discard_pressed():
+	print("Confirm discard pressed with", cards_to_discard.size(), "cards selected")
 	
-	# Get the hand and game controller
-	var hand = get_node_or_null("/root/VitaChrome/UIRoot/Hand")
+	# Verify we have selected the required number of cards
+	if cards_to_discard.size() != discard_count_required:
+		print("ERROR: Not enough cards selected for discard")
+		return
+	
+	# Get the game controller
 	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
+	if not game_controller:
+		print("ERROR: Game controller not found")
+		return
 	
-	if hand and game_controller:
-		# Get the selected cards from hand
-		var selected_cards = hand.cards_to_discard.duplicate()
-		
-		# Reset discard mode in hand
-		hand.in_discard_mode = false
-		hand.cards_to_discard.clear()
-		hand.discard_count_required = 0
-		
-		# Reset card visuals
-		for card in hand.get_children():
-			if card is CardDialog:
-				card.modulate = Color(1, 1, 1, 1)
-		
-		# Notify the game controller
-		game_controller.on_discard_complete(selected_cards)
+	# Process the selected cards
+	var selected_cards = cards_to_discard.duplicate()
+	
+	# Reset discard mode
+	in_discard_mode = false
+	cards_to_discard.clear()
+	discard_count_required = 0
+	
+	# Reset card visuals
+	for card in get_children():
+		if card is CardDialog:
+			card.modulate = Color(1, 1, 1, 1)
+	
+	# Hide the discard confirmation button
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu:
+		action_menu.show_discard_confirmation(false)
+	
+	# Notify the game controller
+	game_controller.on_discard_complete(selected_cards)
 
 
 # Add function to exit discard mode and clean up
@@ -742,14 +763,36 @@ func exit_discard_selection_mode():
 		remove_child(confirm_button)
 		confirm_button.queue_free()
 
+# Replace the start_discard_mode function with this improved version
 func start_discard_mode(count_required):
 	in_discard_mode = true
 	discard_count_required = count_required
 	cards_to_discard = []
 	
+	print("Starting discard mode, cards needed: ", count_required)
+	
+	# Block all card activation functionality during discard mode
+	# by removing any active card state and highlighting
+	clear_card_selections()
+	
 	# Connect all cards to the discard selection function
 	for card in get_children():
 		if card is CardDialog:
+			# Check if the card was already used this turn
+			# The card should be grayed out and not selectable if it was used
+			var already_used = false
+			
+			# Check if the card's resource is already in the discard pile
+			for discard_card in selected_cryptid.discard:
+				if card.card_resource == discard_card or (card.card_resource.original_card != null and card.card_resource.original_card == discard_card):
+					already_used = true
+					break
+			
+			# Skip cards that were already used this turn
+			if already_used:
+				card.modulate = Color(0.5, 0.5, 0.5, 1)  # Gray out
+				continue
+				
 			# Make the card visually indicate it's selectable
 			card.modulate = Color(1, 1, 1, 1)  # Full brightness
 			
@@ -765,11 +808,20 @@ func _on_card_input(event, card):
 	
 	# Check for left click
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		# Block any other handling of the event
+		get_viewport().set_input_as_handled()
+		
+		# Toggle card selection
 		toggle_card_selection(card)
 
 # Replace the toggle_card_selection function with this updated version
 func toggle_card_selection(card):
 	print("Toggling card selection in discard mode")
+	
+	# Prevent toggling cards that were already used (grayed out)
+	if card.modulate.r < 0.6:  # Check if the card is grayed out
+		print("Card already used or in discard, cannot select")
+		return
 	
 	if cards_to_discard.has(card):
 		# Deselect the card
@@ -797,49 +849,23 @@ func toggle_card_selection(card):
 			game_controller.game_instructions.text = "Press Confirm to discard selected cards"
 
 func update_confirm_button_state():
-	if confirm_button:
-		print("Updating confirm button state")
+	# Get the action menu which contains the confirm button
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu:
+		# Ensure the confirm button exists
+		var confirm_button = action_menu.get_node_or_null("VBoxContainer/DiscardButton")
 		
-		# Enable the button if we have selected enough cards
-		confirm_button.disabled = cards_to_discard.size() < discard_count_required
-		
-		# If the button should be enabled, make sure it's visible
-		if !confirm_button.disabled:
-			print("Enabling confirm button and ensuring visibility")
-			confirm_button.visible = true
+		if confirm_button:
+			print("Updating confirm button state")
 			
-			# Force a redraw
-			confirm_button.queue_redraw()
+			# Only enable button if we have selected exactly the required number of cards
+			var enable_button = cards_to_discard.size() == discard_count_required
+			confirm_button.disabled = !enable_button
 			
-			# Bring to front
-			move_child(confirm_button, get_child_count() - 1)
-	else:
-		print("WARNING: Confirm button not found!")
-		
-		# If button doesn't exist but we need it, recreate it
-		if in_discard_mode and cards_to_discard.size() >= discard_count_required:
-			print("Recreating confirm button")
-			confirm_button = Button.new()
-			confirm_button.text = "Confirm Discard"
-			confirm_button.name = "ConfirmDiscard"
-			
-			# Set position - try both methods for maximum compatibility
-			# Method 1: Direct position
-			confirm_button.position = Vector2(get_viewport_rect().size.x / 2 - 100, get_viewport_rect().size.y - 60)
-			
-			# Method 2: Control anchors
-			confirm_button.anchor_left = 0.5
-			confirm_button.anchor_top = 1.0
-			confirm_button.anchor_right = 0.5
-			confirm_button.anchor_bottom = 1.0
-			confirm_button.offset_left = -100
-			confirm_button.offset_top = -60
-			confirm_button.offset_right = 100
-			confirm_button.offset_bottom = -20
-			
-			# Make it obvious and visible
-			confirm_button.modulate = Color(1, 0.3, 0.3)  # Red tint
-			confirm_button.size = Vector2(200, 40)
-			confirm_button.connect("pressed", Callable(self, "_on_confirm_discard_pressed"))
-			
-			add_child(confirm_button)
+			# Extra visibility check
+			if enable_button:
+				confirm_button.modulate = Color(1, 1, 1, 1)
+			else:
+				confirm_button.modulate = Color(0.7, 0.7, 0.7, 1)
+		else:
+			print("WARNING: Confirm button not found in action menu!")

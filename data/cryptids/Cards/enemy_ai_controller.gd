@@ -17,6 +17,7 @@ func _ready():
 
 # Main function to handle an enemy cryptid's turn
 func take_enemy_turn(enemy_cryptid):
+	await get_tree().create_timer(1.0).timeout
 	print("AI: Taking turn for enemy cryptid: ", enemy_cryptid.cryptid.name)
 	
 	# Set the selected cryptid in the hand and tile map layer
@@ -885,7 +886,7 @@ func perform_attack(enemy_cryptid, attack_info):
 		print("AI: Attack was not successful, not marking as used")
 	
 	# Wait for animation to complete
-	await get_tree().create_timer(1.0).timeout
+	await get_tree().create_timer(1.5).timeout
 	
 	# Update card state
 	card.current_state = Card.CardState.IN_DISCARD
@@ -896,13 +897,12 @@ func perform_attack(enemy_cryptid, attack_info):
 	
 	print("AI: Attack action completed")
 	
-	# Restore the previously selected cryptid
-	tile_map_layer.selected_cryptid = previously_selected
-	print("AI: Restored previously selected cryptid")
+	## Restore the previously selected cryptid
+	#tile_map_layer.selected_cryptid = previously_selected
+	#print("AI: Restored previously selected cryptid")
 
 
 
-# Perform a move action
 func perform_move(enemy_cryptid, move_info):
 	print("AI: Performing move with card:", 
 		move_info.card.top_move.name_prefix if move_info.is_top else move_info.card.bottom_move.name_suffix,
@@ -951,14 +951,17 @@ func perform_move(enemy_cryptid, move_info):
 	var card_dialog_scene = load("res://Cryptid-Menagerie/data/cryptids/Cards/card_dialog.tscn")
 	var card_dialog_instance = card_dialog_scene.instantiate()
 	
-	# Set the card resource
-	card_dialog_instance.card_resource = card
+	# Create a unique instance of the card to avoid modifying all cards
+	var unique_card = hand.create_unique_card_instance(card)
+	
+	# Set the unique card resource
+	card_dialog_instance.card_resource = unique_card
 	
 	# Set the parent to be the hand (needed for some reference checks)
 	hand.add_child(card_dialog_instance)
 	
 	# Set up the card dialog
-	card_dialog_instance.display(card)
+	card_dialog_instance.display(unique_card)
 	
 	# Mark the appropriate half as selected
 	if is_top:
