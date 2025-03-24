@@ -15,9 +15,7 @@ func _ready():
 	game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
 	hand = get_node("/root/VitaChrome/UIRoot/Hand")
 
-# Main function to handle an enemy cryptid's turn
 func take_enemy_turn(enemy_cryptid):
-	await get_tree().create_timer(1.0).timeout
 	print("AI: Taking turn for enemy cryptid: ", enemy_cryptid.cryptid.name)
 	
 	# Set the selected cryptid in the hand and tile map layer
@@ -194,23 +192,13 @@ func take_enemy_turn(enemy_cryptid):
 	if tile_map_layer and tile_map_layer.has_method("reset_card_action_values"):
 		print("AI: Resetting card action values at end of turn")
 		tile_map_layer.reset_card_action_values(enemy_cryptid.cryptid)
-		
-	# Print card movement values for debugging
-	for card in enemy_cryptid.cryptid.deck:
-		for action in card.top_move.actions:
-			if action.action_types == [0]:
-				print("AI: End of turn - Card top move amount:", action.amount)
-		for action in card.bottom_move.actions:
-			if action.action_types == [0]:
-				print("AI: End of turn - Card bottom move amount:", action.amount)
 	
-	print("AI: Ending turn for cryptid:", enemy_cryptid.cryptid.name)
-	
-	# Show end turn button
+	# Show the End Turn button for the player to proceed
 	show_end_turn_button_for_enemy()
 	
 	# Restore the previously selected cryptid
 	tile_map_layer.selected_cryptid = previous_selected
+
 
 # Show the end turn button and wait for player to press it
 func show_end_turn_button_for_enemy():
@@ -219,16 +207,20 @@ func show_end_turn_button_for_enemy():
 	# Get the action menu
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu:
-		# Hide all other buttons
-		for child in action_menu.get_node("VBoxContainer").get_children():
-			if child.name != "EndTurnButton":
-				child.hide()
-		
-		# Show only the end turn button
-		var end_turn_button = action_menu.get_node("VBoxContainer/EndTurnButton")
-		if end_turn_button:
-			end_turn_button.show()
-			action_menu.show()
+		# Use the new function to show only the End Turn button
+		if action_menu.has_method("show_end_turn_only"):
+			action_menu.show_end_turn_only()
+		else:
+			# Hide all other buttons
+			for child in action_menu.get_node("VBoxContainer").get_children():
+				if child.name != "EndTurnButton":
+					child.hide()
+			
+			# Show only the end turn button
+			var end_turn_button = action_menu.get_node("VBoxContainer/EndTurnButton")
+			if end_turn_button:
+				end_turn_button.show()
+				action_menu.show()
 	
 	# Add a label or instruction for clarity
 	var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")

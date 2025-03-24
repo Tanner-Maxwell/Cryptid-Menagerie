@@ -139,15 +139,34 @@ func cards_selected(selected_cards: Array):
 	
 	return selected_cryptid
 
+# Add a function to completely clear the hand
+func clear_hand():
+	print("Clearing hand completely")
+	
+	# Clear any selected cards
+	selected_top_card = null
+	selected_bottom_card = null
+	highlighted_cards.clear()
+	
+	# Remove and free all child nodes
+	for child in get_children():
+		if child is CardDialog:
+			remove_child(child)
+			child.queue_free()
+	
+	# Clear the hand array
+	hand.clear()
+	
+	# Reset any discard mode
+	in_discard_mode = false
+	cards_to_discard.clear()
+	discard_count_required = 0
+
 func switch_cryptid_deck(cryptid: Cryptid):
 	print("Switching deck to cryptid: ", cryptid.name)
 	
-	# Clear existing hand
-	hand.clear()
-	highlighted_cards.clear()
-	for child in self.get_children():
-		remove_child(child)
-		child.queue_free()
+	# Clear existing hand first
+	clear_hand()
 	
 	# Debug: Print state of all cards before filtering
 	print("DEBUG: All cards state before building hand:")
@@ -175,13 +194,20 @@ func switch_cryptid_deck(cryptid: Cryptid):
 	print("DEBUG: Total cards added to hand: " + str(cards_added))
 	
 	# Update the selected cryptid
-	if selected_cryptid:
+	if selected_cryptid and selected_cryptid != cryptid:
 		selected_cryptid.currently_selected = false
+	
 	selected_cryptid = cryptid
 	selected_cryptid.currently_selected = true
 	
 	# Update card availability based on the new cryptid's state
 	update_card_availability()
+	
+	# Make sure the hand is visible
+	show()
+	
+	# Force redraw to ensure everything is updated
+	queue_redraw()
 		
 func switch_cryptid_discard_cards(cryptid: Cryptid):
 	selected_cryptid = cryptid
@@ -236,7 +262,7 @@ func set_selected_bottom_card(card: CardDialog):
 	selected_bottom_card = card
 	check_if_turn_complete()
 
-# Add a more robust check_if_turn_complete function:
+# Modify check_if_turn_complete to not auto-advance
 func check_if_turn_complete():
 	print("DEBUG: check_if_turn_complete called")
 	print("DEBUG: selected_top_card = " + str(selected_top_card))
@@ -248,7 +274,7 @@ func check_if_turn_complete():
 		# Both top and bottom actions have been selected
 		# Make sure they're from different cards
 		if selected_top_card.card_resource != selected_bottom_card.card_resource:
-			print("DEBUG: Cards are different, completing turn")
+			print("DEBUG: Cards are different, completing actions")
 			selected_cryptid.top_card_played = true
 			selected_cryptid.bottom_card_played = true
 			
@@ -261,168 +287,31 @@ func check_if_turn_complete():
 			selected_top_card = null
 			selected_bottom_card = null
 			
-			# Mark cryptid's turn as completed
+			# Mark cryptid's turn as completed - BUT DON'T ADVANCE TURNS
 			selected_cryptid.completed_turn = true
 			
-			# Get next cryptid in turn order
-			next_cryptid_turn()
+			# Update the menu to show only the End Turn button
+			var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+			if action_menu and action_menu.has_method("show_end_turn_only"):
+				action_menu.show_end_turn_only()
+			
+			# Update instructions to tell player to press End Turn
+			var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+			if game_instructions:
+				game_instructions.text = "Turn complete. Press End Turn to continue."
 		else:
 			print("DEBUG: Same card selected for both actions")
 	else:
 		print("DEBUG: Not all cards selected yet")
 
+# Update the next_cryptid_turn function to prevent automatic switching
 func next_cryptid_turn():
-	print("Switching to next cryptid's turn")
+	print("next_cryptid_turn called but will NOT automatically advance")
 	
-	# Process any pending card discards for the current turn
-	if selected_cryptid:
-		var game_controller = get_node("/root/VitaChrome/GameController")
-		if game_controller and game_controller.has_method("process_end_turn_card_discards"):
-			game_controller.process_end_turn_card_discards(selected_cryptid)
-	
-	# First ensure that player_cryptids_in_play are sorted by speed
-	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.all_cryptids_in_play)
-	
-	# Log the current speed order for debugging
-	print("Current cryptid speed order:")
-	for cryptid in tile_map_layer.all_cryptids_in_play:
-		print(cryptid.cryptid.name, " - Speed: ", cryptid.cryptid.speed)
-	
-	# Find the index of the current cryptid in player_cryptids_in_play
-	var current_index = -1
-	for i in range(tile_map_layer.all_cryptids_in_play.size()):
-		if tile_map_layer.all_cryptids_in_play[i].cryptid == selected_cryptid:
-			current_index = i
-			break
-	
-	print("Current cryptid index: ", current_index)
-	
-	# Set the current cryptid as not selected
-	if selected_cryptid:
-		selected_cryptid.currently_selected = false
-	
-	# Find the next cryptid that hasn't completed their turn
-	# Start from the next index and loop around if necessary
-	var checked_count = 0
-	var next_index = (current_index + 1) % tile_map_layer.all_cryptids_in_play.size()
-	var next_cryptid = null
-	
-	# Loop through all cryptids starting from the next one and going in order
-	while checked_count < tile_map_layer.all_cryptids_in_play.size():
-		var candidate = tile_map_layer.all_cryptids_in_play[next_index].cryptid
-		
-		if not candidate.completed_turn:
-			next_cryptid = candidate
-			break
-			
-		# Move to the next index, wrapping around if necessary
-		next_index = (next_index + 1) % tile_map_layer.all_cryptids_in_play.size()
-		checked_count += 1
-	
-	if next_cryptid == null:
-		print("All cryptids have taken their turn, moving to battle phase")
-		# All cryptids have taken their turn, transition to the next phase
-		var game_controller = %GameController
-		game_controller.battle_phase()
-		return
-	
-	# Set the new cryptid as selected
-	selected_cryptid = next_cryptid
-	selected_cryptid.currently_selected = true
-	
-	# Reset card action values for the newly selected cryptid
-	if tile_map_layer:
-		tile_map_layer.reset_card_action_values(selected_cryptid)
-	
-	# Check if this is an enemy cryptid
-	var is_enemy = false
-	var enemy_cryptid_node = null
-	for enemy_cryptid in tile_map_layer.enemy_cryptids_in_play:
-		if enemy_cryptid.cryptid == selected_cryptid:
-			is_enemy = true
-			enemy_cryptid_node = enemy_cryptid
-			break
-	
-	if is_enemy:
-		print("Enemy cryptid's turn: ", selected_cryptid.name)
-		# Trigger the enemy AI
-		tile_map_layer.reset_for_new_cryptid()
-		enemy_ai.take_enemy_turn(enemy_cryptid_node)
-	else:
-		print("Player cryptid's turn: ", selected_cryptid.name)
-		# Regular player turn setup
-		tile_map_layer.reset_for_new_cryptid()
-		
-		# DEBUG: Print deck and discard contents
-		print("DEBUG: " + selected_cryptid.name + " deck size: " + str(selected_cryptid.deck.size()))
-		print("DEBUG: " + selected_cryptid.name + " discard size: " + str(selected_cryptid.discard.size()))
-		for i in range(selected_cryptid.deck.size()):
-			print("   Deck card " + str(i) + ": " + selected_cryptid.deck[i].to_string())
-		for i in range(selected_cryptid.discard.size()):
-			print("   Discard card " + str(i) + ": " + selected_cryptid.discard[i].to_string())
-		
-		#switch_cryptid_deck(selected_cryptid)
-		
-		# Force update action menu button state for the new cryptid
-		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-		if action_menu:
-			# First ensure it's visible
-			action_menu.show()
-			
-			# Get direct references to the buttons
-			var swap_button = action_menu.get_node("VBoxContainer/SwapButton")
-			var rest_button = action_menu.get_node("VBoxContainer/RestButton")
-			var catch_button = action_menu.get_node("VBoxContainer/CatchButton")
-			var end_turn_button = action_menu.get_node("VBoxContainer/EndTurnButton")
-			
-			# Check if this cryptid has already used a card action
-			if selected_cryptid.top_card_played or selected_cryptid.bottom_card_played:
-				print("NEW TURN - Cryptid has used card action, hiding action buttons")
-				
-				# Hide action buttons, show only end turn
-				if swap_button: swap_button.hide()
-				if rest_button: rest_button.hide()
-				if catch_button: catch_button.hide()
-				if end_turn_button: end_turn_button.show()
-			else:
-				print("NEW TURN - Cryptid has not used card action, showing all buttons")
-				
-				# Show all buttons
-				if swap_button: swap_button.show()
-				if rest_button: rest_button.show()
-				if catch_button: catch_button.show()
-				if end_turn_button: end_turn_button.show()
-	
-	switch_cryptid_deck(selected_cryptid)
-	# Force update action menu button state for the new cryptid
-	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-	if action_menu:
-		# First ensure it's visible
-		action_menu.show()
-		
-		# Get direct references to the buttons
-		var swap_button = action_menu.get_node("VBoxContainer/SwapButton")
-		var rest_button = action_menu.get_node("VBoxContainer/RestButton")
-		var catch_button = action_menu.get_node("VBoxContainer/CatchButton")
-		var end_turn_button = action_menu.get_node("VBoxContainer/EndTurnButton")
-		
-		# Check if this cryptid has already used a card action
-		if selected_cryptid.top_card_played or selected_cryptid.bottom_card_played:
-			print("NEW TURN - Cryptid has used card action, hiding action buttons")
-			
-			# Hide action buttons, show only end turn
-			if swap_button: swap_button.hide()
-			if rest_button: rest_button.hide()
-			if catch_button: catch_button.hide()
-			if end_turn_button: end_turn_button.show()
-		else:
-			print("NEW TURN - Cryptid has not used card action, showing all buttons")
-			
-			# Show all buttons
-			if swap_button: swap_button.show()
-			if rest_button: rest_button.show()
-			if catch_button: catch_button.show()
-			if end_turn_button: end_turn_button.show()
+	# DO NOTHING - this function should no longer do anything
+	# All turn changes must now go through the End Turn button
+	# This function is kept as a stub for compatibility with existing code
+	pass
 	
 func check_turn_completion():
 	if selected_cryptid.top_card_played and selected_cryptid.bottom_card_played:
@@ -814,7 +703,6 @@ func _on_card_input(event, card):
 		# Toggle card selection
 		toggle_card_selection(card)
 
-# Replace the toggle_card_selection function with this updated version
 func toggle_card_selection(card):
 	print("Toggling card selection in discard mode")
 	
@@ -836,8 +724,20 @@ func toggle_card_selection(card):
 			card.modulate = Color(1, 0.5, 0.5, 1)  # Red tint
 			print("Card selected, now have:", cards_to_discard.size(), "/", discard_count_required)
 	
-	# Update the confirm button
-	update_confirm_button_state()
+	# Update the confirm button state in the action menu
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu and action_menu.confirm_discard_button:
+		# Enable the button only if we have exactly the required number of cards
+		var enable_button = cards_to_discard.size() == discard_count_required
+		action_menu.confirm_discard_button.disabled = !enable_button
+		
+		# Update button appearance
+		if enable_button:
+			action_menu.confirm_discard_button.modulate = Color(1, 1, 1, 1)
+			print("Discard confirmation button enabled - ready to advance turn")
+		else:
+			action_menu.confirm_discard_button.modulate = Color(0.7, 0.7, 0.7, 1)
+			print("Discard confirmation button disabled - need more cards")
 	
 	# Update the instruction text
 	var game_controller = get_node("/root/VitaChrome/GameController")
@@ -846,26 +746,4 @@ func toggle_card_selection(card):
 		if remaining > 0:
 			game_controller.game_instructions.text = "Select " + str(remaining) + " more card(s) to discard"
 		else:
-			game_controller.game_instructions.text = "Press Confirm to discard selected cards"
-
-func update_confirm_button_state():
-	# Get the action menu which contains the confirm button
-	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-	if action_menu:
-		# Ensure the confirm button exists
-		var confirm_button = action_menu.get_node_or_null("VBoxContainer/DiscardButton")
-		
-		if confirm_button:
-			print("Updating confirm button state")
-			
-			# Only enable button if we have selected exactly the required number of cards
-			var enable_button = cards_to_discard.size() == discard_count_required
-			confirm_button.disabled = !enable_button
-			
-			# Extra visibility check
-			if enable_button:
-				confirm_button.modulate = Color(1, 1, 1, 1)
-			else:
-				confirm_button.modulate = Color(0.7, 0.7, 0.7, 1)
-		else:
-			print("WARNING: Confirm button not found in action menu!")
+			game_controller.game_instructions.text = "Press Confirm to discard selected cards and proceed to next cryptid"

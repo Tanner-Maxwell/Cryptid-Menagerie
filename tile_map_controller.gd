@@ -98,10 +98,16 @@ func initialize_starting_positions(starting_positions : Array, team):
 		a_star_hex_grid.set_point_disabled(point, true)
 	return cryptids_in_play
 	
+# Update handle_right_click function to also finish movement
 func handle_right_click():
 	print("Right-click detected - cancelling current action")
 	
-	# Clear action states
+	# If there's movement in progress, finish it
+	if move_action_bool and move_leftover > 0:
+		finish_movement()
+		return
+	
+	# Otherwise clear action states
 	move_action_bool = false
 	attack_action_bool = false
 	active_movement_card_part = ""
@@ -118,7 +124,7 @@ func handle_right_click():
 	# Show the action menu again
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu:
-		action_menu.show()
+		action_menu.prompt_player_for_action()
 
 # New function that can be called programmatically
 func calculate_path(current_pos: Vector2i, target_pos: Vector2i):
@@ -407,10 +413,20 @@ func handle_move_action(pos_clicked):
 			if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
 				selected_cryptid.cryptid.completed_turn = true
 				
-				# Check if the hand reference is valid before calling next_cryptid_turn
-				var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-				if hand_node and hand_node.has_method("next_cryptid_turn"):
-					hand_node.next_cryptid_turn()
+				# Instead of directly going to next cryptid, update the UI to prompt
+				# for the End Turn button
+				if action_menu and action_menu.has_method("show_end_turn_only"):
+					action_menu.show_end_turn_only()
+					
+				var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+				if game_instructions:
+					game_instructions.text = "Turn complete. Press End Turn to continue."
+			
+			# After a successful move, update the menu
+			if action_menu and action_menu.has_method("update_menu_visibility") and selected_cryptid:
+				# This will update menu to show only End Turn if a card action was used
+				action_menu.update_menu_visibility(selected_cryptid.cryptid)
+				action_menu.show()
 	else:
 		print("Invalid move: Clicked on a non-walkable hex or insufficient movement points")
 		print("Required movement: ", movement_distance, ", Available movement: ", move_leftover)
@@ -688,9 +704,15 @@ func handle_attack_action(pos_clicked):
 					selected_cryptid.cryptid.completed_turn = true
 					print("Marked cryptid's turn as complete")
 					
-					# Move to next cryptid
-					if hand and hand.has_method("next_cryptid_turn"):
-						hand.next_cryptid_turn()
+					# Instead of directly going to next cryptid, update the UI to prompt
+					# for the End Turn button
+					var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+					if action_menu and action_menu.has_method("show_end_turn_only"):
+						action_menu.show_end_turn_only()
+						
+					var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+					if game_instructions:
+						game_instructions.text = "Turn complete. Press End Turn to continue."
 				
 				# Show the action menu again with updated button state
 				var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
@@ -710,6 +732,14 @@ func handle_attack_action(pos_clicked):
 		active_movement_card = null
 		delete_all_lines()
 		delete_all_indicators()
+	
+	# Always update the menu if an attack was performed
+	if attack_performed:
+		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+		if action_menu and action_menu.has_method("update_menu_visibility") and selected_cryptid:
+			# This will update menu to show only End Turn after attack
+			action_menu.update_menu_visibility(selected_cryptid.cryptid)
+			action_menu.show()
 		
 	force_update_discard_display()
 	print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
@@ -1494,6 +1524,8 @@ func reset_for_new_cryptid():
 	# Make sure the hand is updated correctly
 	hand.update_card_availability()
 
+
+# Update finish_movement to not auto-advance turns
 func finish_movement():
 	# Only do something if there's movement in progress
 	if move_action_bool and move_leftover > 0:
@@ -1538,8 +1570,14 @@ func finish_movement():
 		if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
 			selected_cryptid.cryptid.completed_turn = true
 			
-			if hand_node and hand_node.has_method("next_cryptid_turn"):
-				hand_node.next_cryptid_turn()
+			# Show only the End Turn button instead of auto-advancing
+			var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+			if action_menu and action_menu.has_method("show_end_turn_only"):
+				action_menu.show_end_turn_only()
+				
+			var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+			if game_instructions:
+				game_instructions.text = "Turn complete. Press End Turn to continue."
 	else:
 		print("No movement in progress to finish")
 

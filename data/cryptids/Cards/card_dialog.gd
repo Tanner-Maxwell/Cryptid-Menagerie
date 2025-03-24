@@ -193,9 +193,22 @@ func perform_action(actions: Array[Action.ActionType]):
 			_:
 				print("Unknown action type")
 	
-	# Important: Don't disable the container here or mark actions as used
-	# This will be done in handle_move_action/handle_attack_action
-	# only when the action is successfully executed
+	# Important update: If top or bottom half was used, update the menu to show only End Turn button
+	if (top_half_container.modulate == Color(1, 1, 0, 1) and !selected_cryptid.top_card_played) or \
+	   (bottom_half_container.modulate == Color(1, 1, 0, 1) and !selected_cryptid.bottom_card_played):
+		# After action selection, a card action is about to be performed
+		# This will cause an action to be used, so update the menu
+		var menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+		if menu and menu.has_method("update_menu_visibility"):
+			# Create a temporary version of the cryptid to check what the menu would look like after this action
+			var temp_cryptid = selected_cryptid.duplicate()
+			if top_half_container.modulate == Color(1, 1, 0, 1):
+				temp_cryptid.top_card_played = true
+			if bottom_half_container.modulate == Color(1, 1, 0, 1):
+				temp_cryptid.bottom_card_played = true
+				
+			# Update menu based on what it will look like after action completes
+			menu.update_menu_visibility(temp_cryptid)
 
 func move_action():
 	tile_map_layer.move_action_bool = true
