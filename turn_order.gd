@@ -65,3 +65,24 @@ func update_label_colors():
 					var white_setting = label.label_settings.duplicate()
 					white_setting.font_color = Color(1, 1, 1, 1)  # White color
 					label.label_settings = white_setting
+
+# Add this method to update cryptid labels when swapping
+func update_cryptid_label(old_cryptid_node, new_cryptid_node):
+	# Remove the label for the old cryptid
+	if old_cryptid_node in cryptid_name_labels:
+		var old_label = cryptid_name_labels[old_cryptid_node]
+		remove_child(old_label)
+		old_label.queue_free()
+		cryptid_name_labels.erase(old_cryptid_node)
+	
+	# Add a label for the new cryptid
+	var new_label = Label.new()
+	new_label.text = new_cryptid_node.cryptid.name
+	
+	var label_setting = LabelSettings.new()
+	label_setting.font_size = 34
+	label_setting.font_color = Color(1, 0, 0, 1)  # Red since the turn is completed
+	new_label.label_settings = label_setting
+	
+	add_child(new_label)
+	cryptid_name_labels[new_cryptid_node] = new_label

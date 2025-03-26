@@ -1167,4 +1167,3 @@ func end_turn(enemy_cryptid):
 	
 	# Move to next cryptid
 	hand.next_cryptid_turn()
-

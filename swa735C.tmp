@@ -1,0 +1,32 @@
+[gd_scene load_steps=3 format=3 uid="uid://d154xbku5vvla"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/swap_cryptid_dialog.gd" id="1_cfef1"]
+[ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://swap_cryptid_slot.tscn" id="2_jlmaq"]
+
+[node name="SwapCryptidDialog" type="PanelContainer"]
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_cfef1")
+slot_scene = ExtResource("2_jlmaq")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="GridContainer" type="GridContainer" parent="MarginContainer/VBoxContainer/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 2
+
+[node name="CloseButton" type="Button" parent="MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2

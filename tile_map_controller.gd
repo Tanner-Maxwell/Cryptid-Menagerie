@@ -2086,8 +2086,6 @@ func update_all_debug_indicators():
 	if not debug_enabled:
 		return
 	
-	print("Updating all debug indicators")
-	
 	# Clear existing indicators
 	for child in debug_container.get_children():
 		debug_container.remove_child(child)
@@ -2164,3 +2162,23 @@ func verify_grid_state():
 	
 	# Update debug display
 	update_all_debug_indicators()
+
+# Ensure a cryptid's position is properly disabled
+func ensure_cryptid_position_disabled(cryptid_node):
+	if not cryptid_node:
+		return
+		
+	# Get the current map position
+	var map_pos = local_to_map(selected_cryptid.position)
+	
+	# Get the point ID for this position
+	var point = a_star_hex_grid.get_closest_point(map_pos, true)
+	
+	# Check if it's already disabled
+	if not a_star_hex_grid.is_point_disabled(point):
+		# Disable the point
+		set_point_disabled(point, true)
+		
+		# Also remove from walkable hexes if present
+		if map_pos in walkable_hexes:
+			walkable_hexes.erase(map_pos)

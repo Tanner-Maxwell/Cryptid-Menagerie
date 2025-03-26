@@ -748,10 +748,10 @@ text = "Game Instructions Go here!"
 label_settings = SubResource("LabelSettings_b0jos")
 
 [node name="SwapCryptidDialog" parent="UIRoot" instance=ExtResource("24_kvvei")]
-offset_left = 283.0
-offset_top = 101.0
-offset_right = 883.0
-offset_bottom = 601.0
+offset_left = 214.0
+offset_top = 400.0
+offset_right = 254.0
+offset_bottom = 440.0
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(577, 330)
