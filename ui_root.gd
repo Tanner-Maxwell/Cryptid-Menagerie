@@ -1,6 +1,6 @@
 extends CanvasLayer
 
-@onready var player:Player = %Player
+@onready var player = %PlayerTeam
 @onready var team_dialog:TeamDialog = %TeamDialog
 
 func _unhandled_input(event):

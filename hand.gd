@@ -859,7 +859,7 @@ func toggle_card_selection(card):
 			print("Discard confirmation button disabled - need more cards")
 	
 	# Update the instruction text
-	var game_controller = get_node("/root/VitaChrome/GameController")
+	var game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
 	if game_controller:
 		var remaining = discard_count_required - cards_to_discard.size()
 		if remaining > 0:

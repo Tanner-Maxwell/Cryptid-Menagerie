@@ -234,7 +234,7 @@ func _on_confirm_discard_pressed():
 	
 	# Get the hand and game controller
 	var hand = get_node_or_null("/root/VitaChrome/UIRoot/Hand")
-	var game_controller = get_node_or_null("/root/VitaChrome/GameController")
+	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
 	
 	if hand and game_controller:
 		# Get the selected cards from hand

@@ -34,6 +34,7 @@ var current_tween = null
 @onready var blank_cryptid = preload("res://Cryptid-Menagerie/data/cryptids/blank_cryptid.tscn")
 @onready var current_card
 
+var defeated_cryptids = []
 var original_move_amount = 0
 var active_movement_card_part = ""
 var move_action_bool = false
@@ -1101,23 +1102,120 @@ func get_cryptid_at_position(hex_pos):
 	return null
 
 # Apply damage to a target cryptid
+# Apply damage to a target cryptid - updated to directly trigger emergency swap
 func apply_damage(target_cryptid, damage_amount):
+	print("Applying " + str(damage_amount) + " damage to " + target_cryptid.cryptid.name)
+	
 	# Access the health value from the add_to_party.gd script
-	var health_var = target_cryptid.get_node("HealthBar")
-	if health_var:
-		health_var.value -= damage_amount
+	var health_bar = target_cryptid.get_node("HealthBar")
+	if health_bar:
+		# Calculate new health value
+		var new_health = health_bar.value - damage_amount
+		
+		# Update health bar
+		health_bar.value = new_health
 		
 		# If you have a health getter/setter in your cryptid class
-		target_cryptid.set_health_values(health_var.value, health_var.max_value)
+		target_cryptid.set_health_values(new_health, health_bar.max_value)
 		target_cryptid.update_health_bar()
-	
-	# Check if the cryptid is defeated
-	if health_var and health_var.value <= 0:
-		handle_cryptid_defeat(target_cryptid)
+		
+		print("Health reduced to: " + str(new_health) + "/" + str(health_bar.max_value))
+		
+		# Check if the cryptid is defeated
+		if new_health <= 0:
+			print("Cryptid " + target_cryptid.cryptid.name + " has been defeated!")
+			
+			# IMMEDIATE CHECK: Is this a player cryptid?
+			var is_player_cryptid = target_cryptid in player_cryptids_in_play
+			print("Is player cryptid: " + str(is_player_cryptid))
+			
+			if is_player_cryptid:
+				print("Player cryptid defeated! Triggering emergency swap!")
+				
+				# Store position data for the swap
+				var defeated_position = target_cryptid.position
+				var map_pos = local_to_map(defeated_position)
+				
+				# Mark the hex as walkable
+				walkable_hexes.append(map_pos)
+				var point = a_star_hex_grid.get_closest_point(map_pos, true)
+				a_star_hex_grid.set_point_disabled(point, false)
+				
+				# Visual effect for defeat
+				target_cryptid.modulate = Color(1, 0, 0, 0.5)  # Red fade
+				
+				# Store position metadata
+				target_cryptid.set_meta("defeated_position", defeated_position)
+				target_cryptid.set_meta("defeated_map_pos", map_pos)
+				
+				# Get game controller and call emergency swap DIRECTLY
+				var game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
+				if game_controller and game_controller.has_method("prompt_emergency_swap"):
+					# No delay - call immediately
+					game_controller.prompt_emergency_swap(target_cryptid)
+				else:
+					print("ERROR: Could not find GameController or prompt_emergency_swap method!")
+					# If we can't find the controller, just handle defeat normally
+					handle_cryptid_defeat(target_cryptid)
+			else:
+				# For enemy cryptids, handle defeat normally
+				handle_cryptid_defeat(target_cryptid)
+	else:
+		print("ERROR: Could not find health bar on target cryptid!")
 
-# Handle a defeated cryptid
 func handle_cryptid_defeat(defeated_cryptid):
-	# Remove from play
+	# CRITICAL: Add to the defeat tracker immediately
+	if Engine.has_singleton("DefeatedCryptidsTracker"):
+		var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
+		tracker.add_defeated(defeated_cryptid.cryptid.name)
+		print("Added to defeat tracker:", defeated_cryptid.cryptid.name)
+		
+	var is_player_cryptid = false
+	for player_cryptid in player_cryptids_in_play:
+		if player_cryptid == defeated_cryptid:
+			is_player_cryptid = true
+			break
+	
+	print("Is player cryptid:", is_player_cryptid)
+	
+	# Direct access to the global tracker
+	if Engine.has_singleton("DefeatedCryptidsTracker"):
+		var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
+		tracker.add_defeated(defeated_cryptid.cryptid.name)
+		print("Added to global tracker:", defeated_cryptid.cryptid.name)
+	
+	# Get access to the GameController with the correct path
+	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
+	
+	if game_controller:
+		# Record this cryptid as permanently defeated
+		game_controller.mark_cryptid_defeated(defeated_cryptid.cryptid.name)
+	
+	# For player cryptids, trigger emergency swap
+	if is_player_cryptid:
+		print("Player cryptid defeated! Triggering emergency swap!")
+		
+		# Make hex walkable again for the new cryptid that will replace it
+		walkable_hexes.append(local_to_map(defeated_cryptid.position))
+		var point = a_star_hex_grid.get_closest_point(local_to_map(defeated_cryptid.position), true)
+		a_star_hex_grid.set_point_disabled(point, false)
+		
+		# Visual effect showing defeat
+		defeated_cryptid.modulate = Color(1, 0, 0, 0.5)
+		
+		# Find the game controller and trigger emergency swap
+		if game_controller and game_controller.has_method("emergency_swap_for_defeated_cryptid"):
+			game_controller.emergency_swap_for_defeated_cryptid(defeated_cryptid.cryptid)
+		else:
+			print("ERROR: GameController not found or missing emergency swap method")
+			# Try directly accessing the swap dialog as fallback
+			var swap_dialog = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
+			if swap_dialog:
+				print("FALLBACK: Triggering swap dialog directly")
+				# Create a temporary function here
+		return  # Early return since emergency swap will handle removal
+	
+	# For enemy cryptids or if no emergency swap triggered, remove normally
 	if defeated_cryptid in player_cryptids_in_play:
 		player_cryptids_in_play.erase(defeated_cryptid)
 	elif defeated_cryptid in enemy_cryptids_in_play:
@@ -1129,6 +1227,7 @@ func handle_cryptid_defeat(defeated_cryptid):
 	walkable_hexes.append(local_to_map(defeated_cryptid.position))
 	var point = a_star_hex_grid.get_closest_point(local_to_map(defeated_cryptid.position), true)
 	a_star_hex_grid.set_point_disabled(point, false)
+	
 	# Visual effect for defeat
 	defeated_cryptid.modulate = Color(1, 0, 0, 0.5)  # Red fade
 	
@@ -1137,6 +1236,85 @@ func handle_cryptid_defeat(defeated_cryptid):
 	tween.tween_property(defeated_cryptid, "modulate", Color(1, 0, 0, 0), 1.0)
 	tween.tween_callback(Callable(defeated_cryptid, "queue_free"))
 
+# Add a fallback emergency swap function - for redundancy
+# Add a fallback emergency swap function - for redundancy
+func _create_emergency_swap_team(defeated_cryptid):
+	# Create a temporary team with only available cryptids
+	var temp_team = Team.new()
+	
+	# Process all player team cryptids for potential swap options
+	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
+	if player_team_node:
+		# First add only non-defeated cryptids as swap options
+		for child in player_team_node.get_children():
+			if !child.has_property("cryptid") or !child.cryptid:
+				continue
+				
+			# Skip the defeated cryptid
+			if child.cryptid.name == defeated_cryptid.cryptid.name:
+				print("EXCLUDING defeated cryptid from options:", child.cryptid.name)
+				continue
+				
+			# Also skip any cryptid in the global defeated list
+			if GameController.globally_defeated_cryptids.has(child.cryptid.name):
+				print("EXCLUDING globally defeated cryptid:", child.cryptid.name)
+				continue
+				
+			# Add to swap options
+			temp_team.add_cryptid(child.cryptid)
+			print("Adding cryptid to filtered team:", child.cryptid.name)
+	
+	# Add a few extra cryptids for dev/testing (if needed)
+	if player_cryptids_in_play.size() > 0 && temp_team.get_cryptids().size() < 2:
+		var first_cryptid = null
+		for cryptid in player_cryptids_in_play:
+			if cryptid.cryptid.name != defeated_cryptid.cryptid.name and !GameController.globally_defeated_cryptids.has(cryptid.cryptid.name):
+				first_cryptid = cryptid.cryptid
+				break
+		
+		if first_cryptid:
+			for i in range(1, 4):
+				var new_name = first_cryptid.name + " " + str(400 + i)
+				
+				# Skip if already in globally defeated list
+				if GameController.globally_defeated_cryptids.has(new_name):
+					continue
+					
+				var new_cryptid = Cryptid.new()
+				new_cryptid.name = new_name
+				new_cryptid.scene = first_cryptid.scene
+				new_cryptid.icon = first_cryptid.icon
+				new_cryptid.health = 10  # Give it full health
+				
+				# Copy the deck
+				for card in first_cryptid.deck:
+					new_cryptid.deck.append(card.duplicate())
+				
+				temp_team.add_cryptid(new_cryptid)
+				print("Adding extra cryptid to filtered team:", new_cryptid.name)
+	
+	# Find the swap dialog
+	var swap_dialog = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
+	if swap_dialog:
+		# Open the dialog with the filtered team
+		swap_dialog.open(temp_team, defeated_cryptid.cryptid, player_cryptids_in_play)
+	else:
+		print("ERROR: Could not find SwapCryptidDialog!")
+
+func remove_defeated_cryptid(defeated_cryptid):
+	# Remove from appropriate lists
+	if defeated_cryptid in player_cryptids_in_play:
+		player_cryptids_in_play.erase(defeated_cryptid)
+	elif defeated_cryptid in enemy_cryptids_in_play:
+		enemy_cryptids_in_play.erase(defeated_cryptid)
+	
+	all_cryptids_in_play.erase(defeated_cryptid)
+	
+	# Remove with fade animation
+	var tween = get_tree().create_tween()
+	tween.tween_property(defeated_cryptid, "modulate", Color(1, 0, 0, 0), 1.0)
+	tween.tween_callback(Callable(defeated_cryptid, "queue_free"))
+	
 # Clean up attack indicators
 func delete_all_indicators():
 	for child in get_children():
