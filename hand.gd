@@ -866,3 +866,14 @@ func toggle_card_selection(card):
 			game_controller.game_instructions.text = "Select " + str(remaining) + " more card(s) to discard"
 		else:
 			game_controller.game_instructions.text = "Press Confirm to discard selected cards and proceed to next cryptid"
+
+func cancel_discard_mode():
+	# Reset the discard mode variables
+	in_discard_mode = false
+	cards_to_discard = 0
+	# Clear any visual indicators
+	for card in get_children():
+		if card.has_method("deselect"):
+			card.deselect()
+			
+	print("Discard mode canceled after emergency swap")

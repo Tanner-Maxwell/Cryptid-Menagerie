@@ -100,15 +100,22 @@ func advance_to_next_cryptid():
 	print("Advancing to next cryptid")
 	
 	# First, ensure the current cryptid's turn is properly ended
-	end_current_turn()
-	
-	# The end_current_turn function will handle any necessary discards
-	# If it returns early for discard, we should not proceed with advancing
-	
-	# Check if we're in discard mode
-	if discard_mode:
-		print("In discard mode, not advancing to next cryptid yet")
-		return
+	# But we need to be careful - when a cryptid is swapped in, it should already have both
+	# card actions marked as used, so it shouldn't trigger discard
+	var current_cryptid = hand.selected_cryptid
+	if current_cryptid:
+		# Mark the current cryptid's turn as completed if not already
+		current_cryptid.completed_turn = true
+		
+		# Only call end_current_turn if both actions aren't already used
+		# This prevents unnecessary discard prompts for swapped cryptids
+		if !current_cryptid.top_card_played or !current_cryptid.bottom_card_played:
+			end_current_turn()
+			
+			# If end_current_turn started discard mode, we should return early
+			if discard_mode:
+				print("In discard mode, not advancing to next cryptid yet")
+				return
 	
 	# After that, we manually advance to the next cryptid
 	var next_cryptid = find_next_cryptid()
@@ -156,7 +163,6 @@ func find_next_cryptid():
 	# If we've checked all cryptids and found none, return null
 	return null
 
-# Update the setup_cryptid_turn function to properly clear and rebuild the hand
 func setup_cryptid_turn(cryptid):
 	print("Setting up turn for cryptid:", cryptid.name)
 	
@@ -179,6 +185,29 @@ func setup_cryptid_turn(cryptid):
 	if tile_map_layer:
 		tile_map_layer.reset_card_action_values(cryptid)
 	
+	# Clear the hand before switching to prevent holding old cards
+	hand.clear_hand()
+	
+	# If the cryptid has already completed its turn, we should
+	# advance to the next cryptid based on the sorted order
+	if cryptid.completed_turn:
+		print("Cryptid", cryptid.name, "has already completed its turn, finding next cryptid...")
+		
+		# Find the next cryptid that hasn't completed its turn
+		var next_cryptid = find_next_cryptid_in_order()
+		
+		if next_cryptid:
+			print("Found next available cryptid:", next_cryptid.name)
+			# Call setup_cryptid_turn for the next cryptid
+			# Use call_deferred to avoid recursion issues
+			call_deferred("setup_cryptid_turn", next_cryptid)
+		else:
+			print("No more cryptids available this round, entering battle phase")
+			# Call battle phase if all cryptids have taken their turn
+			call_deferred("battle_phase")
+			
+		return
+	
 	# Check if this is an enemy cryptid
 	var is_enemy = false
 	var enemy_cryptid_node = null
@@ -187,9 +216,6 @@ func setup_cryptid_turn(cryptid):
 			is_enemy = true
 			enemy_cryptid_node = enemy_cryptid
 			break
-	
-	# Clear the hand before switching to prevent holding old cards
-	hand.clear_hand()
 	
 	if is_enemy:
 		print("Enemy cryptid's turn: ", cryptid.name)
@@ -243,117 +269,6 @@ func verify_cryptid_card_states(cryptid):
 		print("Fixed card states:", fixed_deck_cards, "deck cards,", fixed_discard_cards, "discard cards")
 	else:
 		print("All card states verified correct")
-
-func prompt_swap_cryptid():
-	print("Prompting player to swap cryptid")
-	game_instructions.text = "Select a cryptid to swap to"
-	
-	# Find the swap dialog if we haven't cached it yet
-	var swap_dialog_node = get_node_or_null("SwapCryptidDialog")
-	if not swap_dialog_node:
-		swap_dialog_node = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
-	if not swap_dialog_node:
-		swap_dialog_node = get_node_or_null("/root/VitaChrome/SwapCryptidDialog")
-	
-	if not swap_dialog_node:
-		print("ERROR: Could not find SwapCryptidDialog!")
-		game_instructions.text = "Error: Swap dialog not found!"
-		action_selection_menu.prompt_player_for_action()
-		return
-	
-	# Use the correct team path - use the TileMapLayer's player_team
-	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
-	var player_team_data = null
-	
-	print("DEBUG: Trying to get team data")
-	print("DEBUG: PlayerTeam node:", player_team_node)
-	
-	if player_team_node:
-		# Create a temporary Team instance for the swap dialog
-		var temp_team = Team.new()
-		
-		# First add all in-play cryptids that aren't defeated
-		for cryptid_node in tile_map_layer.player_cryptids_in_play:
-			if !defeated_cryptids.has(cryptid_node.cryptid.name):
-				temp_team.add_cryptid(cryptid_node.cryptid)
-				print("DEBUG: Added in-play cryptid:", cryptid_node.cryptid.name)
-		
-		# Then add any bench cryptids from player_team_node that aren't in play
-		# and aren't defeated
-		for child in player_team_node.get_children():
-			# Skip if not a cryptid node
-				
-			# Skip if already in play
-			var already_in_play = false
-			for in_play in tile_map_layer.player_cryptids_in_play:
-				if in_play.cryptid == child.cryptid:
-					already_in_play = true
-					break
-					
-			# Skip if defeated
-			if defeated_cryptids.has(child.cryptid.name):
-				continue
-				
-			# If it's a benched cryptid, add it
-			if !already_in_play:
-				temp_team.add_cryptid(child.cryptid)
-				print("DEBUG: Added bench cryptid:", child.cryptid.name)
-		
-		# Create some extra cryptids if needed (for testing/development only)
-		if tile_map_layer.player_cryptids_in_play.size() > 0 && temp_team.get_cryptids().size() < 2:
-			var first_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
-			
-			# Create additional cryptids only if needed
-			for i in range(3):
-				var new_name = "Extra " + first_cryptid.name + " " + str(i+1)
-				
-				# Skip if this cryptid is in the defeated list
-				if defeated_cryptids.has(new_name):
-					print("DEBUG: Skipping defeated extra cryptid:", new_name)
-					continue
-				
-				var new_cryptid = Cryptid.new()
-				new_cryptid.name = new_name
-				new_cryptid.scene = first_cryptid.scene
-				new_cryptid.icon = first_cryptid.icon
-				new_cryptid.health = first_cryptid.health
-				
-				# Copy the deck
-				for card in first_cryptid.deck:
-					new_cryptid.deck.append(card.duplicate())
-				
-				temp_team.add_cryptid(new_cryptid)
-				print("DEBUG: Added extra cryptid:", new_cryptid.name)
-		
-		player_team_data = temp_team
-		print("DEBUG: Created temporary team with", temp_team.get_cryptids().size(), "cryptids")
-	else:
-		print("ERROR: Could not find PlayerTeam node")
-		return
-	
-	# Extra safety check - filter out any defeated cryptids from team data
-	if player_team_data and player_team_data.has_method("get_cryptids"):
-		var all_team_cryptids = player_team_data.get_cryptids()
-		for i in range(all_team_cryptids.size()-1, -1, -1):  # Loop backwards for safe removal
-			if defeated_cryptids.has(all_team_cryptids[i].name):
-				print("DEBUG: Removing defeated cryptid from team data:", all_team_cryptids[i].name)
-				all_team_cryptids.remove_at(i)
-	
-	# Mark cryptid as having used its actions
-	if hand.selected_cryptid:
-		hand.selected_cryptid.top_card_played = true
-		hand.selected_cryptid.bottom_card_played = true
-		
-		# Show the swap dialog with our team data
-		print("DEBUG: Opening swap dialog")
-		swap_dialog_node.open(player_team_data, hand.selected_cryptid, tile_map_layer.player_cryptids_in_play)
-		
-		# Connect to the dialog's signal if not already connected
-		if not swap_dialog_node.is_connected("cryptid_selected", Callable(self, "_on_swap_cryptid_selected")):
-			swap_dialog_node.connect("cryptid_selected", Callable(self, "_on_swap_cryptid_selected"))
-		
-		# Update the UI to show only end turn button
-		action_selection_menu.show_end_turn_only()
 		
 func _on_swap_cryptid_selected(new_cryptid):
 	print("Swapping to cryptid: ", new_cryptid.name)
@@ -401,7 +316,8 @@ func _on_swap_cryptid_selected(new_cryptid):
 	new_cryptid_node.hand = hand
 	new_cryptid_node.position = position
 	
-	# Mark the new cryptid's turn as completed
+	# Mark the new cryptid's turn as completed - THIS IS A KEY FIX
+	# We need to mark both card actions as used for the swap cost
 	new_cryptid.completed_turn = true
 	new_cryptid.top_card_played = true
 	new_cryptid.bottom_card_played = true
@@ -457,8 +373,10 @@ func _on_swap_cryptid_selected(new_cryptid):
 	# Update game instructions
 	game_instructions.text = current_cryptid.name + " swapped out for " + new_cryptid.name
 	
-	# End the current turn
-	end_current_turn()
+	# End the current turn and advance to the next cryptid
+	# We're bypassing the end_current_turn check for discards here
+	# by directly calling advance_to_next_cryptid
+	advance_to_next_cryptid()
 
 # Update perform_rest function to properly update menu state
 func perform_rest():
@@ -519,6 +437,14 @@ func end_current_turn():
 		print("Checking if discard needed for", current_cryptid.name)
 		print("top_card_played =", current_cryptid.top_card_played, ", bottom_card_played =", current_cryptid.bottom_card_played)
 		
+		# IMPORTANT FIX: If both card actions are marked as played (such as after a swap),
+		# we should skip the discard logic entirely and proceed directly to complete_turn
+		if current_cryptid.top_card_played and current_cryptid.bottom_card_played:
+			print("Both card actions were used, no discard needed")
+			complete_turn()
+			return
+		
+		# If we get here, at least one card action wasn't used and may need discard
 		if !current_cryptid.top_card_played or !current_cryptid.bottom_card_played:
 			# Calculate how many cards need to be discarded
 			discard_count_needed = 0
@@ -548,8 +474,6 @@ func end_current_turn():
 				return  # Return early, will complete turn after discard
 			else:
 				print("No cards need to be discarded")
-		else:
-			print("Both card actions were used, no discard needed")
 		
 		# If we get here, no discard needed or already handled
 		complete_turn()
@@ -692,7 +616,6 @@ func battle_phase():
 		game_instructions.text = "Not all cryptids have completed their turns"
 		action_selection_menu.prompt_player_for_action()
 
-# Make sure process_end_of_round is also defined:
 func process_end_of_round():
 	# Reset all cryptid turns
 	reset_all_cryptid_turns()
@@ -700,13 +623,22 @@ func process_end_of_round():
 	# This is where you would add any end of round effects or scoring
 	print("Processing end of round " + str(current_round))
 	
-	# Here you could add code for:
-	# - Adding score points
-	# - Applying end of round damage or healing
-	# - Spawning new cryptids or items
-	# - Anything else that happens at round end
+	# Use the existing sort function in tile_map_layer
+	print("BEFORE SORTING - Cryptid order:")
+	action_selection_menu.log_cryptid_order()
 	
-	# For now, just transition to a new round state
+	# Sort cryptids by speed
+	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.all_cryptids_in_play)
+	
+	# Verify sorting worked by logging the sorted order
+	print("AFTER SORTING - Cryptid order:")
+	action_selection_menu.log_cryptid_order()
+	
+	# Update turn order display to reflect the new sort order
+	if turn_order:
+		turn_order.initialize_cryptid_labels()
+	
+	# Transition to a new round state
 	current_state = GameState.PLAYER_TURN
 	hand.show()
 	
@@ -714,45 +646,39 @@ func process_end_of_round():
 	
 # Modified reset_all_cryptid_turns function
 func reset_all_cryptid_turns():
+	print("Resetting turns for ALL cryptids")
+	
+	# Process all cryptids in play
 	for cryptid_in_play in tile_map_layer.all_cryptids_in_play:
 		var cryptid = cryptid_in_play.cryptid
 		
 		print("Resetting turn for cryptid:", cryptid.name)
+		
+		# CRITICAL: Reset the turn completion flag to false
 		cryptid.completed_turn = false
 		cryptid.top_card_played = false
 		cryptid.bottom_card_played = false
 		
-		# Reset all card action values
+		# Reset card action values
 		tile_map_layer.reset_card_action_values(cryptid)
 		
+		# Check if this is a player cryptid (by checking if it's in player_cryptids_in_play)
+		var is_player = false
+		for player_cryptid_node in tile_map_layer.player_cryptids_in_play:
+			if player_cryptid_node.cryptid == cryptid:
+				is_player = true
+				break
+		
+		# If this is a player cryptid, restore cards from discard to deck
+		if is_player:
+			restore_cards_from_discard(cryptid)
+		
 		# Verify all cards are in the correct state
-		
-		# First check deck cards
-		print("Checking deck cards for", cryptid.name)
-		for card in cryptid.deck:
-			print("Card:", card, "State:", card.current_state)
-			
-			# Only cards in discard pile should have IN_DISCARD state
-			if card.current_state == Card.CardState.IN_DISCARD:
-				var in_discard = false
-				for discard_card in cryptid.discard:
-					if discard_card == card:
-						in_discard = true
-						break
-				
-				if not in_discard:
-					print("Found card marked as IN_DISCARD but not in discard pile - fixing!")
-					card.current_state = Card.CardState.IN_DECK
-		
-		# Then check discard pile cards
-		print("Checking discard cards for", cryptid.name)
-		for card in cryptid.discard:
-			print("Discard card:", card, "State:", card.current_state)
-			
-			# All cards in discard should have IN_DISCARD state
-			if card.current_state != Card.CardState.IN_DISCARD:
-				print("Found card in discard pile with wrong state - fixing!")
-				card.current_state = Card.CardState.IN_DISCARD
+		verify_card_states(cryptid)
+	
+	# Update turn order display
+	if turn_order:
+		turn_order.initialize_cryptid_labels()
 
 
 func prompt_emergency_swap(defeated_cryptid):
@@ -858,10 +784,10 @@ func _on_emergency_swap_selected(new_cryptid):
 	new_cryptid_node.hand = hand
 	new_cryptid_node.position = position
 	
-	# The new cryptid can act in the current turn
-	new_cryptid.completed_turn = false
-	new_cryptid.top_card_played = false
-	new_cryptid.bottom_card_played = false
+	# The new cryptid should NOT act in the current turn - CRITICAL FIX
+	new_cryptid.completed_turn = true
+	new_cryptid.top_card_played = true
+	new_cryptid.bottom_card_played = true
 	
 	# Use the cryptid's stored health
 	var current_health = new_cryptid.health  # Default to max health
@@ -906,6 +832,9 @@ func _on_emergency_swap_selected(new_cryptid):
 	new_cryptid_node.modulate = flash_color
 	var tween = get_tree().create_tween()
 	tween.tween_property(new_cryptid_node, "modulate", Color(1, 1, 1, 1), 0.5)
+	
+	# Advance to the next cryptid's turn
+	advance_to_next_cryptid()
 	
 # Emergency test function - you can call this directly for testing
 func test_emergency_swap():
@@ -1027,17 +956,18 @@ func _on_emergency_swap_cryptid_selected(new_cryptid):
 			position = cryptid_node.position
 			break
 	
-	
 	# Create a new cryptid node
 	var new_cryptid_node = tile_map_layer.blank_cryptid.instantiate()
 	new_cryptid_node.cryptid = new_cryptid
 	new_cryptid_node.hand = hand
 	new_cryptid_node.position = position
 	
-	# Set cryptid state
-	new_cryptid.completed_turn = false
-	new_cryptid.top_card_played = false
-	new_cryptid.bottom_card_played = false
+	# Set cryptid state - CRITICAL FIX HERE
+	# Mark both top and bottom card actions as used
+	# This prevents the discard logic from triggering
+	new_cryptid.completed_turn = true
+	new_cryptid.top_card_played = true
+	new_cryptid.bottom_card_played = true
 	new_cryptid.currently_selected = true
 	
 	# Set health values
@@ -1069,6 +999,10 @@ func _on_emergency_swap_cryptid_selected(new_cryptid):
 	
 	# Update the turn order display
 	turn_order.initialize_cryptid_labels()
+	
+	# After swapping cryptids, advance to the next cryptid's turn
+	# This is the key addition - don't stay on the swapped-in cryptid's turn
+	advance_to_next_cryptid()
 
 func mark_cryptid_defeated(cryptid_name):
 	if !defeated_cryptids.has(cryptid_name):
@@ -1084,3 +1018,191 @@ func mark_cryptid_defeated(cryptid_name):
 	
 	# Print the current list for debugging
 	print("Current defeated cryptids list:", defeated_cryptids)
+
+func find_and_setup_next_cryptid():
+	var next_cryptid = find_next_cryptid()
+	
+	if next_cryptid:
+		# Set up the next cryptid's turn
+		setup_cryptid_turn(next_cryptid)
+	else:
+		# If no more cryptids to process, trigger battle phase
+		battle_phase()
+
+func prompt_swap_cryptid():
+	print("Prompting player to swap cryptid")
+	game_instructions.text = "Select a cryptid to swap to"
+	
+	# Find the swap dialog if we haven't cached it yet
+	var swap_dialog_node = get_node_or_null("SwapCryptidDialog")
+	if not swap_dialog_node:
+		swap_dialog_node = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
+	if not swap_dialog_node:
+		swap_dialog_node = get_node_or_null("/root/VitaChrome/SwapCryptidDialog")
+	
+	if not swap_dialog_node:
+		print("ERROR: Could not find SwapCryptidDialog!")
+		game_instructions.text = "Error: Swap dialog not found!"
+		action_selection_menu.prompt_player_for_action()
+		return
+	
+	# Use the correct team path - use the TileMapLayer's player_team
+	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
+	var player_team_data = null
+	
+	print("DEBUG: Trying to get team data")
+	print("DEBUG: PlayerTeam node:", player_team_node)
+	
+	if player_team_node:
+		# Create a temporary Team instance for the swap dialog
+		var temp_team = Team.new()
+		
+		# First add all in-play cryptids that aren't defeated
+		for cryptid_node in tile_map_layer.player_cryptids_in_play:
+			if !defeated_cryptids.has(cryptid_node.cryptid.name):
+				temp_team.add_cryptid(cryptid_node.cryptid)
+				print("DEBUG: Added in-play cryptid:", cryptid_node.cryptid.name)
+		
+		# Then add any bench cryptids from player_team_node that aren't in play
+		# and aren't defeated
+		for child in player_team_node.get_children():
+			# Skip if not a cryptid node
+				
+			# Skip if already in play
+			var already_in_play = false
+			for in_play in tile_map_layer.player_cryptids_in_play:
+				if in_play.cryptid == child.cryptid:
+					already_in_play = true
+					break
+					
+			# Skip if defeated
+			if defeated_cryptids.has(child.cryptid.name):
+				continue
+				
+			# If it's a benched cryptid, add it
+			if !already_in_play:
+				temp_team.add_cryptid(child.cryptid)
+				print("DEBUG: Added bench cryptid:", child.cryptid.name)
+		
+		# Create some extra cryptids if needed (for testing/development only)
+		if tile_map_layer.player_cryptids_in_play.size() > 0 && temp_team.get_cryptids().size() < 2:
+			var first_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
+			
+			# Create additional cryptids only if needed
+			for i in range(3):
+				var new_name = "Extra " + first_cryptid.name + " " + str(i+1)
+				
+				# Skip if this cryptid is in the defeated list
+				if defeated_cryptids.has(new_name):
+					print("DEBUG: Skipping defeated extra cryptid:", new_name)
+					continue
+				
+				var new_cryptid = Cryptid.new()
+				new_cryptid.name = new_name
+				new_cryptid.scene = first_cryptid.scene
+				new_cryptid.icon = first_cryptid.icon
+				new_cryptid.health = first_cryptid.health
+				
+				# Copy the deck
+				for card in first_cryptid.deck:
+					new_cryptid.deck.append(card.duplicate())
+				
+				temp_team.add_cryptid(new_cryptid)
+				print("DEBUG: Added extra cryptid:", new_cryptid.name)
+		
+		player_team_data = temp_team
+		print("DEBUG: Created temporary team with", temp_team.get_cryptids().size(), "cryptids")
+	else:
+		print("ERROR: Could not find PlayerTeam node")
+		return
+	
+	# Extra safety check - filter out any defeated cryptids from team data
+	if player_team_data and player_team_data.has_method("get_cryptids"):
+		var all_team_cryptids = player_team_data.get_cryptids()
+		for i in range(all_team_cryptids.size()-1, -1, -1):  # Loop backwards for safe removal
+			if defeated_cryptids.has(all_team_cryptids[i].name):
+				print("DEBUG: Removing defeated cryptid from team data:", all_team_cryptids[i].name)
+				all_team_cryptids.remove_at(i)
+	
+	# Mark cryptid as having used its actions
+	if hand.selected_cryptid:
+		hand.selected_cryptid.top_card_played = true
+		hand.selected_cryptid.bottom_card_played = true
+		
+		# Show the swap dialog with our team data
+		print("DEBUG: Opening swap dialog")
+		swap_dialog_node.open(player_team_data, hand.selected_cryptid, tile_map_layer.player_cryptids_in_play)
+		
+		# Connect to the dialog's signal if not already connected
+		if not swap_dialog_node.is_connected("cryptid_selected", Callable(self, "_on_swap_cryptid_selected")):
+			swap_dialog_node.connect("cryptid_selected", Callable(self, "_on_swap_cryptid_selected"))
+		
+		# Update the UI to show only end turn button
+		action_selection_menu.show_end_turn_only()
+		
+func restore_cards_from_discard(cryptid: Cryptid):
+	print("Restoring cards from discard for:", cryptid.name)
+	
+	# Check if there are any cards in discard
+	if cryptid.discard.size() == 0:
+		print("No cards in discard pile")
+		return
+	
+	print("Moving", cryptid.discard.size(), "cards from discard to deck")
+	
+	# Move all cards from discard back to deck state
+	for card in cryptid.discard:
+		# Update the card state
+		card.current_state = Card.CardState.IN_DECK
+		print("Restored card to deck:", card)
+	
+	# Clear the discard pile - cards are already in deck array
+	var cards_restored = cryptid.discard.size()
+	cryptid.discard.clear()
+	
+	print("Restored", cards_restored, "cards to deck")
+
+# Helper function to verify card states
+func verify_card_states(cryptid: Cryptid):
+	print("Verifying card states for", cryptid.name)
+	
+	# First check deck cards
+	for card in cryptid.deck:
+		# Check if card is in discard pile
+		var in_discard = cryptid.discard.has(card)
+		
+		# If card is in discard pile, it should be marked as IN_DISCARD
+		if in_discard:
+			if card.current_state != Card.CardState.IN_DISCARD:
+				print("Found card in discard pile with wrong state - fixing")
+				card.current_state = Card.CardState.IN_DISCARD
+		# If card is NOT in discard pile, it should be marked as IN_DECK
+		else:
+			if card.current_state != Card.CardState.IN_DECK:
+				print("Found card not in discard with wrong state - fixing")
+				card.current_state = Card.CardState.IN_DECK
+	
+	print("Card verification complete for", cryptid.name)
+
+func find_next_cryptid_in_order():
+	# Find the index of the current cryptid
+	var current_index = -1
+	for i in range(tile_map_layer.all_cryptids_in_play.size()):
+		if tile_map_layer.all_cryptids_in_play[i].cryptid == hand.selected_cryptid:
+			current_index = i
+			break
+	
+	if current_index == -1:
+		print("ERROR: Current cryptid not found in all_cryptids_in_play")
+		return null
+	
+	# Start from the next index and look for a cryptid that hasn't completed its turn
+	for i in range(1, tile_map_layer.all_cryptids_in_play.size()):
+		var next_index = (current_index + i) % tile_map_layer.all_cryptids_in_play.size()
+		var next_cryptid = tile_map_layer.all_cryptids_in_play[next_index].cryptid
+		
+		if not next_cryptid.completed_turn:
+			return next_cryptid
+	
+	# If we get here, all cryptids have completed their turns
+	return null

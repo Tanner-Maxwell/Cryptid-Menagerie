@@ -20,6 +20,6 @@ bottom_card_played = false
 strength = 10
 knowledge = 10
 willpower = 10
-dexterity = 20
+dexterity = 2
 vigor = 25
 level = 3

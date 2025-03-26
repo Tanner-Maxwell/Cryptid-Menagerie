@@ -363,14 +363,14 @@ icon = SubResource("CompressedTexture2D_7ayrg")
 deck = Array[ExtResource("10_jbw6i")]([ExtResource("11_17rov"), SubResource("Resource_4u70t"), ExtResource("11_17rov"), ExtResource("11_17rov"), ExtResource("11_17rov")])
 discard = Array[ExtResource("10_jbw6i")]([])
 completed_turn = false
-currently_selected = false
+currently_selected = true
 top_card_played = false
 bottom_card_played = false
 strength = 10
 knowledge = 10
 willpower = 10
 dexterity = 8
-vigor = 26
+vigor = 17
 level = 1
 
 [sub_resource type="CompressedTexture2D" id="CompressedTexture2D_ooxua"]
@@ -404,7 +404,7 @@ strength = 10
 knowledge = 10
 willpower = 10
 dexterity = 8
-vigor = 26
+vigor = 17
 level = 1
 
 [sub_resource type="CompressedTexture2D" id="CompressedTexture2D_d24hm"]
@@ -438,7 +438,7 @@ strength = 10
 knowledge = 10
 willpower = 10
 dexterity = 8
-vigor = 26
+vigor = 25
 level = 3
 
 [sub_resource type="Resource" id="Resource_q55uo"]
@@ -555,8 +555,8 @@ bottom_card_played = false
 strength = 10
 knowledge = 10
 willpower = 10
-dexterity = 6
-vigor = 6
+dexterity = 26
+vigor = 12
 level = 3
 
 [sub_resource type="Resource" id="Resource_jvkdo"]

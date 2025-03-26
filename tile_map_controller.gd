@@ -1071,8 +1071,35 @@ func compare_cryptids(a, b):
 	return a.cryptid.speed > b.cryptid.speed  # Use boolean comparison
 
 # Function to sort the array
-func sort_cryptids_by_speed(cryptid_array):
-	cryptid_array.sort_custom(Callable(self, "compare_cryptids"))
+func sort_cryptids_by_speed(cryptids_list):
+	print("Sorting cryptids list by speed...")
+	
+	# Make sure we're not trying to sort an empty list
+	if cryptids_list.size() <= 1:
+		print("List has 0 or 1 cryptids - no sorting needed")
+		return
+	
+	# Sort the list in-place using a bubble sort for clarity
+	# We use bubble sort here instead of sort_custom because we want to modify the original list
+	var n = cryptids_list.size()
+	for i in range(n):
+		for j in range(0, n - i - 1):
+			# Get speed values from cryptids, default to 0 if not set
+			var speed_j = cryptids_list[j].cryptid.get("speed") if cryptids_list[j].cryptid.get("speed") != null else 0
+			var speed_j_plus_1 = cryptids_list[j + 1].cryptid.get("speed") if cryptids_list[j + 1].cryptid.get("speed") != null else 0
+			
+			# Compare speeds (higher speed acts first, so we want descending order)
+			if speed_j < speed_j_plus_1:
+				# Swap elements
+				var temp = cryptids_list[j]
+				cryptids_list[j] = cryptids_list[j + 1]
+				cryptids_list[j + 1] = temp
+	
+	# Print the sorted list for debugging
+	print("Sorted cryptids by speed (higher speed first):")
+	for i in range(cryptids_list.size()):
+		var speed = cryptids_list[i].cryptid.get("speed") if cryptids_list[i].cryptid.get("speed") != null else 0
+		print("  " + str(i+1) + ". " + cryptids_list[i].cryptid.name + " - Speed: " + str(speed))
 
 func show_attackable_area(center_pos, max_range):
 	var center_hex = local_to_map(center_pos)

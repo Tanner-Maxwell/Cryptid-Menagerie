@@ -17,6 +17,8 @@ enum ActionType { SWAP, REST, CATCH, BATTLE_PHASE, END_TURN }
 @onready var end_turn_button = $VBoxContainer/EndTurnButton
 @onready var confirm_discard_button = $VBoxContainer/DiscardButton
 @onready var round_button = $VBoxContainer/RoundButton
+@onready var action_selection_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+@onready var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
 
 # Add a new variable to track the current round
 var current_round = 1
@@ -180,9 +182,35 @@ func _on_end_turn_pressed():
 
 # New function for round button
 func _on_round_button_pressed():
-	hide()
-	# This will trigger the battle phase or new round
-	emit_signal("action_selected", ActionType.BATTLE_PHASE)
+	print("Round " + str(current_round) + " started")
+	
+	# Explicitly hide the round button
+	action_selection_menu.hide_all_buttons()
+	
+	# Ensure the sort order is still correct
+	print("BEFORE ROUND START - Cryptid order:")
+	log_cryptid_order()
+	
+	# Resort just to be safe
+	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.all_cryptids_in_play)
+	
+	print("AFTER FINAL SORT - Cryptid order:")
+	log_cryptid_order()
+	
+	# Update the game instructions
+	game_instructions.text = "Starting Round " + str(current_round)
+	
+	# Find the first cryptid to take a turn in the new round (based on sorted speed)
+	var first_cryptid = find_first_cryptid_for_new_round()
+	var game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
+	
+	if first_cryptid:
+		print("Selected first cryptid for new round: " + first_cryptid.name)
+		# Set up the first cryptid's turn for the new round
+		game_controller.setup_cryptid_turn(first_cryptid)
+	else:
+		print("ERROR: No cryptids found for new round!")
+		game_instructions.text = "Error: No cryptids found for new round!"
 
 # Called when all player cryptids have completed their turns
 func trigger_battle_phase():
@@ -201,6 +229,12 @@ func show_round_button(round_number: int):
 	if round_button:
 		round_button.text = "Start Round " + str(round_number)
 		round_button.show()
+		# Apply a highlight effect to make it more prominent
+		round_button.modulate = Color(1, 1, 0.3, 1)  # Yellowish
+		
+		# Connect signal if not already connected
+		if not round_button.is_connected("pressed", Callable(self, "_on_round_button_pressed")):
+			round_button.connect("pressed", Callable(self, "_on_round_button_pressed"))
 	
 	show()
 
@@ -277,3 +311,21 @@ func show_end_turn_only():
 	
 	# Make sure the menu is visible
 	show()
+
+# Helper function to find the first cryptid that should take a turn in the new round
+func find_first_cryptid_for_new_round():
+	# The cryptids should be sorted by speed already, just get the first one
+	if tile_map_layer.all_cryptids_in_play.size() > 0:
+		var first_cryptid = tile_map_layer.all_cryptids_in_play[0].cryptid
+		print("First cryptid in turn order: " + first_cryptid.name)
+		return first_cryptid
+	
+	# If no cryptids found, return null
+	return null
+	
+func log_cryptid_order():
+	for i in range(tile_map_layer.all_cryptids_in_play.size()):
+		var cryptid_node = tile_map_layer.all_cryptids_in_play[i]
+		var cryptid = cryptid_node.cryptid
+		var speed = cryptid.get("speed") if cryptid.get("speed") != null else 0
+		print("  " + str(i+1) + ". " + cryptid.name + " - Speed: " + str(speed))
