@@ -24,13 +24,13 @@ unique_name_in_owner = true
 layout_mode = 2
 
 [node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/VBoxContainer"]
-custom_minimum_size = Vector2(0, 350)
+custom_minimum_size = Vector2(0, 430)
 layout_mode = 2
 
 [node name="GridContainer" type="GridContainer" parent="MarginContainer/VBoxContainer/ScrollContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-columns = 2
+columns = 3
 
 [node name="CloseButton" type="Button" parent="MarginContainer/VBoxContainer"]
 unique_name_in_owner = true

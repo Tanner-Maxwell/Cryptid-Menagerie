@@ -316,8 +316,7 @@ func _on_swap_cryptid_selected(new_cryptid):
 	new_cryptid_node.hand = hand
 	new_cryptid_node.position = position
 	
-	# Mark the new cryptid's turn as completed - THIS IS A KEY FIX
-	# We need to mark both card actions as used for the swap cost
+	# Mark the new cryptid's turn as completed
 	new_cryptid.completed_turn = true
 	new_cryptid.top_card_played = true
 	new_cryptid.bottom_card_played = true
@@ -1046,83 +1045,225 @@ func prompt_swap_cryptid():
 		action_selection_menu.prompt_player_for_action()
 		return
 	
-	# Use the correct team path - use the TileMapLayer's player_team
+	# Use the correct team path 
 	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
 	var player_team_data = null
 	
-	print("DEBUG: Trying to get team data")
+	print("DEBUG: Looking for ALL team cryptids")
 	print("DEBUG: PlayerTeam node:", player_team_node)
 	
+	# Create a temporary Team instance for the swap dialog
+	var temp_team = Team.new()
+	
+	# Track the current cryptid being swapped from
+	var current_cryptid = hand.selected_cryptid
+	
+	# First check if we have a cryptidTeam property in the player_team_node
+	var team_cryptids = []
 	if player_team_node:
-		# Create a temporary Team instance for the swap dialog
-		var temp_team = Team.new()
-		
-		# First add all in-play cryptids that aren't defeated
-		for cryptid_node in tile_map_layer.player_cryptids_in_play:
-			if !defeated_cryptids.has(cryptid_node.cryptid.name):
-				temp_team.add_cryptid(cryptid_node.cryptid)
-				print("DEBUG: Added in-play cryptid:", cryptid_node.cryptid.name)
-		
-		# Then add any bench cryptids from player_team_node that aren't in play
-		# and aren't defeated
+		if player_team_node.has_method("get_cryptids"):
+			print("DEBUG: Player team has get_cryptids method")
+			team_cryptids = player_team_node.get_cryptids()
+		elif player_team_node.get("cryptidTeam") != null and player_team_node.cryptidTeam.has_method("get_cryptids"):
+			print("DEBUG: Player team has cryptidTeam property")
+			team_cryptids = player_team_node.cryptidTeam.get_cryptids()
+	
+	print("DEBUG: Found", team_cryptids.size(), "cryptids in team methods")
+	
+	# If we found cryptids through methods, add them to the temp team
+	if team_cryptids.size() > 0:
+		for cryptid in team_cryptids:
+			if !defeated_cryptids.has(cryptid.name) or cryptid == current_cryptid:
+				temp_team.add_cryptid(cryptid)
+				print("DEBUG: Added team cryptid:", cryptid.name)
+	
+	# Now also check for cryptid nodes as children of PlayerTeam
+	if player_team_node:
 		for child in player_team_node.get_children():
-			# Skip if not a cryptid node
-				
-			# Skip if already in play
-			var already_in_play = false
-			for in_play in tile_map_layer.player_cryptids_in_play:
-				if in_play.cryptid == child.cryptid:
-					already_in_play = true
-					break
-					
-			# Skip if defeated
-			if defeated_cryptids.has(child.cryptid.name):
+			# Skip non-cryptid nodes
+			if not child.get("cryptid") or not child.cryptid:
 				continue
 				
-			# If it's a benched cryptid, add it
-			if !already_in_play:
-				temp_team.add_cryptid(child.cryptid)
-				print("DEBUG: Added bench cryptid:", child.cryptid.name)
-		
-		# Create some extra cryptids if needed (for testing/development only)
-		if tile_map_layer.player_cryptids_in_play.size() > 0 && temp_team.get_cryptids().size() < 2:
-			var first_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
-			
-			# Create additional cryptids only if needed
-			for i in range(3):
-				var new_name = "Extra " + first_cryptid.name + " " + str(i+1)
+			# Skip if defeated (except the current one being swapped)
+			if defeated_cryptids.has(child.cryptid.name) and child.cryptid != current_cryptid:
+				print("DEBUG: Skipping defeated cryptid:", child.cryptid.name)
+				continue
 				
-				# Skip if this cryptid is in the defeated list
+			# Skip if already added
+			var already_added = false
+			for existing_cryptid in temp_team.get_cryptids():
+				if existing_cryptid.name == child.cryptid.name:
+					already_added = true
+					break
+			
+			if already_added:
+				print("DEBUG: Skipping already added cryptid:", child.cryptid.name)
+				continue
+				
+			# Add the cryptid to the team
+			temp_team.add_cryptid(child.cryptid)
+			
+			# Check if it's in play or on bench for debugging
+			var in_play = false
+			for played_cryptid in tile_map_layer.player_cryptids_in_play:
+				if played_cryptid.cryptid == child.cryptid and played_cryptid.cryptid != current_cryptid:
+					in_play = true
+					break
+					
+			if in_play:
+				print("DEBUG: Added in-play cryptid:", child.cryptid.name)
+			else:
+				print("DEBUG: Added bench/swappable cryptid:", child.cryptid.name)
+	
+	# Also look for a "bench" or "reserves" node
+	var bench_node = get_node_or_null("/root/VitaChrome/TileMapLayer/Bench")
+	if not bench_node:
+		bench_node = get_node_or_null("/root/VitaChrome/TileMapLayer/Reserves")
+	if not bench_node:
+		bench_node = get_node_or_null("/root/VitaChrome/Bench")
+	
+	if bench_node:
+		print("DEBUG: Found bench node:", bench_node)
+		for child in bench_node.get_children():
+			# Skip non-cryptid nodes
+			if not child.has_property("cryptid") or not child.cryptid:
+				continue
+				
+			# Skip if defeated (except the current one being swapped)
+			if defeated_cryptids.has(child.cryptid.name) and child.cryptid != current_cryptid:
+				print("DEBUG: Skipping defeated bench cryptid:", child.cryptid.name)
+				continue
+				
+			# Skip if already added
+			var already_added = false
+			for existing_cryptid in temp_team.get_cryptids():
+				if existing_cryptid.name == child.cryptid.name:
+					already_added = true
+					break
+			
+			if already_added:
+				print("DEBUG: Skipping already added bench cryptid:", child.cryptid.name)
+				continue
+				
+			# Add the cryptid to the team
+			temp_team.add_cryptid(child.cryptid)
+			print("DEBUG: Added bench cryptid:", child.cryptid.name)
+	
+	# TEMPORARY: Look for global variables that might have all cryptids
+	if temp_team.get_cryptids().size() < 6:
+		print("DEBUG: Still missing cryptids, checking for global variables")
+		
+		# Autoloads or singletons that might have all cryptids
+		var possible_autoloads = ["GameData", "PlayerData", "CryptidManager", "TeamManager"]
+		
+		for autoload in possible_autoloads:
+			if Engine.has_singleton(autoload):
+				var singleton = Engine.get_singleton(autoload)
+				print("DEBUG: Found singleton:", autoload)
+				
+				# Try different methods/properties
+				if singleton.has_method("get_all_cryptids"):
+					var all_cryptids = singleton.get_all_cryptids()
+					for cryptid in all_cryptids:
+						if !defeated_cryptids.has(cryptid.name) or cryptid == current_cryptid:
+							# Skip if already added
+							var already_added = false
+							for existing_cryptid in temp_team.get_cryptids():
+								if existing_cryptid.name == cryptid.name:
+									already_added = true
+									break
+							
+							if not already_added:
+								temp_team.add_cryptid(cryptid)
+								print("DEBUG: Added global cryptid:", cryptid.name)
+	
+	# Get the main Player node
+	var player = get_node_or_null("/root/VitaChrome/Player")
+	if player:
+		print("DEBUG: Found Player node")
+		
+		# Try different properties that might contain the team
+		if player.get("team") != null:
+			var player_team = player.team
+			if player_team.has_method("get_cryptids"):
+				var team_list = player_team.get_cryptids()
+				for cryptid in team_list:
+					if !defeated_cryptids.has(cryptid.name) or cryptid == current_cryptid:
+						# Skip if already added
+						var already_added = false
+						for existing_cryptid in temp_team.get_cryptids():
+							if existing_cryptid.name == cryptid.name:
+								already_added = true
+								break
+						
+						if not already_added:
+							temp_team.add_cryptid(cryptid)
+							print("DEBUG: Added player team cryptid:", cryptid.name)
+	
+	# If we still don't have enough cryptids, add all the cryptids we can find from the TileMapLayer
+	if temp_team.get_cryptids().size() < 6:
+		print("DEBUG: Still need more cryptids, checking TileMapLayer")
+		var all_found_cryptids = []
+		
+		# Check player cryptids in play
+		for cryptid_node in tile_map_layer.player_cryptids_in_play:
+			if !all_found_cryptids.has(cryptid_node.cryptid):
+				all_found_cryptids.append(cryptid_node.cryptid)
+		
+		# Add all unique cryptids found
+		for cryptid in all_found_cryptids:
+			if !defeated_cryptids.has(cryptid.name) or cryptid == current_cryptid:
+				# Skip if already added
+				var already_added = false
+				for existing_cryptid in temp_team.get_cryptids():
+					if existing_cryptid.name == cryptid.name:
+						already_added = true
+						break
+				
+				if not already_added:
+					temp_team.add_cryptid(cryptid)
+					print("DEBUG: Added found cryptid:", cryptid.name)
+	
+	# Use our temp_team as the player team data
+	player_team_data = temp_team
+	print("DEBUG: Created team with", temp_team.get_cryptids().size(), "total cryptids")
+	
+	# If we STILL don't have all 6 cryptids, add hard-coded ones as a last resort
+	if temp_team.get_cryptids().size() < 6 and tile_map_layer.player_cryptids_in_play.size() > 0:
+		print("DEBUG: Adding hard-coded cryptids to reach 6 total")
+		
+		# Get a template cryptid
+		var template_cryptid = null
+		for cryptid in temp_team.get_cryptids():
+			template_cryptid = cryptid
+			break
+		
+		if template_cryptid:
+			var needed = 6 - temp_team.get_cryptids().size()
+			for i in range(needed):
+				var new_name = "Cryptid " + str(i+1)
+				
+				# Skip if already defeated
 				if defeated_cryptids.has(new_name):
-					print("DEBUG: Skipping defeated extra cryptid:", new_name)
 					continue
 				
 				var new_cryptid = Cryptid.new()
 				new_cryptid.name = new_name
-				new_cryptid.scene = first_cryptid.scene
-				new_cryptid.icon = first_cryptid.icon
-				new_cryptid.health = first_cryptid.health
+				if template_cryptid.get("scene") != null:
+					new_cryptid.scene = template_cryptid.scene
+				if template_cryptid.get("icon") != null:
+					new_cryptid.icon = template_cryptid.icon
+				new_cryptid.health = 10
+				if template_cryptid.get("speed") != null:
+					new_cryptid.speed = template_cryptid.speed
 				
-				# Copy the deck
-				for card in first_cryptid.deck:
-					new_cryptid.deck.append(card.duplicate())
+				# Copy the deck if possible
+				if template_cryptid.has_method("get_deck") or template_cryptid.get("deck") != null:
+					for card in template_cryptid.deck:
+						new_cryptid.deck.append(card.duplicate())
 				
 				temp_team.add_cryptid(new_cryptid)
-				print("DEBUG: Added extra cryptid:", new_cryptid.name)
-		
-		player_team_data = temp_team
-		print("DEBUG: Created temporary team with", temp_team.get_cryptids().size(), "cryptids")
-	else:
-		print("ERROR: Could not find PlayerTeam node")
-		return
-	
-	# Extra safety check - filter out any defeated cryptids from team data
-	if player_team_data and player_team_data.has_method("get_cryptids"):
-		var all_team_cryptids = player_team_data.get_cryptids()
-		for i in range(all_team_cryptids.size()-1, -1, -1):  # Loop backwards for safe removal
-			if defeated_cryptids.has(all_team_cryptids[i].name):
-				print("DEBUG: Removing defeated cryptid from team data:", all_team_cryptids[i].name)
-				all_team_cryptids.remove_at(i)
+				print("DEBUG: Added hard-coded cryptid:", new_cryptid.name)
 	
 	# Mark cryptid as having used its actions
 	if hand.selected_cryptid:
@@ -1130,7 +1271,7 @@ func prompt_swap_cryptid():
 		hand.selected_cryptid.bottom_card_played = true
 		
 		# Show the swap dialog with our team data
-		print("DEBUG: Opening swap dialog")
+		print("DEBUG: Opening swap dialog with", temp_team.get_cryptids().size(), "cryptids")
 		swap_dialog_node.open(player_team_data, hand.selected_cryptid, tile_map_layer.player_cryptids_in_play)
 		
 		# Connect to the dialog's signal if not already connected

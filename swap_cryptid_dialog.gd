@@ -29,15 +29,14 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 	print("DIALOG: Swap cryptid:", cryptid_to_swap.name)
 	print("DIALOG: Cryptids in play:", cryptids_in_play.size())
 	
-	# Add the currently swapped cryptid to the persistent defeated list
-	if !all_defeated_cryptids.has(cryptid_to_swap.name):
-		all_defeated_cryptids.append(cryptid_to_swap.name)
-		print("Added to permanently defeated list:", cryptid_to_swap.name)
+	# !!! REMOVE THIS SECTION - Do not add swapped cryptids to the defeated list !!!
+	# If a cryptid is swapped out, it should still be available for future swaps
 	
-	print("Current defeated cryptids list:", all_defeated_cryptids)
-	
-	# Set the current cryptid
+	# Just set the current cryptid without adding to defeated list
 	current_cryptid = cryptid_to_swap
+	
+	# For debugging, print the current defeated list
+	print("Current defeated cryptids list:", all_defeated_cryptids)
 	
 	# Update title
 	title_label.text = "Select Cryptid to Swap with " + cryptid_to_swap.name
@@ -76,13 +75,13 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 	else:
 		print("ERROR: Could not get cryptids from team object:", team)
 	
-	# Filter out cryptids that have been previously defeated
+	# Filter out cryptids that have been permanently defeated
 	var valid_cryptids = []
 	for cryptid in all_cryptids:
 		if cryptid == null:
 			continue
 			
-		# Check if this cryptid has been permanently defeated
+		# Only check against the actual defeated list, not swapped cryptids
 		if all_defeated_cryptids.has(cryptid.name):
 			print("DIALOG: EXCLUDING defeated cryptid:", cryptid.name)
 			continue
@@ -110,7 +109,7 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 		# Check if this cryptid is already in play
 		var in_play = false
 		for played_cryptid in cryptids_in_play:
-			if played_cryptid.cryptid == cryptid:
+			if played_cryptid.cryptid == cryptid && played_cryptid.cryptid != cryptid_to_swap:
 				in_play = true
 				print("DIALOG: Cryptid", cryptid.name, "is in play")
 				break
@@ -145,6 +144,12 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 
 func create_slot(cryptid: Cryptid, in_play: bool) -> PanelContainer:
 	print("DIALOG: create_slot for", cryptid.name)
+	
+	# Special case: If this is the current cryptid (the one being swapped from)
+	# Mark it as in_play to prevent selecting it
+	if cryptid == current_cryptid:
+		print("DIALOG: This is the current cryptid being swapped from - marking as not selectable")
+		in_play = true
 	
 	# Create the panel container
 	var slot = PanelContainer.new()
@@ -182,6 +187,12 @@ func create_slot(cryptid: Cryptid, in_play: bool) -> PanelContainer:
 	var name_label = Label.new()
 	name_label.add_theme_font_size_override("font_size", 18)
 	name_label.text = cryptid.name
+	
+	# Special handling for current cryptid
+	if cryptid == current_cryptid:
+		name_label.text += " (Current)"
+		name_label.add_theme_color_override("font_color", Color(0.7, 0.3, 0.3))  # Reddish
+	
 	name_label.horizontal_alignment = 1  # CENTER = 1
 	vbox.add_child(name_label)
 	
@@ -254,7 +265,7 @@ func create_slot(cryptid: Cryptid, in_play: bool) -> PanelContainer:
 	style_box.corner_radius_bottom_right = 5
 	slot.add_theme_stylebox_override("panel", style_box)
 	
-	# Handle if in play
+	# Handle if in play (or is current cryptid)
 	if in_play:
 		# Gray out the slot
 		slot.modulate = Color(0.5, 0.5, 0.5, 1.0)
@@ -268,6 +279,20 @@ func create_slot(cryptid: Cryptid, in_play: bool) -> PanelContainer:
 		# Set the overlay to cover the whole slot
 		overlay.set_anchors_preset(8)  # PRESET_FULL_RECT = 8
 		overlay.position = Vector2.ZERO
+		
+		# If this is the current cryptid, add an extra "CURRENT" indicator
+		if cryptid == current_cryptid:
+			var current_label = Label.new()
+			current_label.text = "CURRENT"
+			current_label.add_theme_font_size_override("font_size", 16)
+			current_label.add_theme_color_override("font_color", Color(1, 0.3, 0.3, 1))  # Red
+			current_label.horizontal_alignment = 1  # CENTER = 1
+			
+			# Position at top of card
+			current_label.set_anchors_preset(5)  # PRESET_CENTER_TOP = 5
+			current_label.position.y = 5
+			
+			slot.add_child(current_label)
 	else:
 		# Make clickable and setup for signals
 		slot.mouse_filter = Control.MOUSE_FILTER_STOP
