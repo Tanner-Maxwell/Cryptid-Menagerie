@@ -316,23 +316,27 @@ func _on_swap_cryptid_selected(new_cryptid):
 	new_cryptid.bottom_card_played = true
 	
 	# IMPORTANT: Use the cryptid's stored health if available
-	var current_health = new_cryptid.health  # Default to max health
+	var current_health = 0  # Start with 0, will be set properly below
 	var max_health = new_cryptid.health
 	
 	# Check for metadata FIRST as our standard health storage method
-	if new_cryptid.has_meta("current_health") and new_cryptid.get_meta("current_health") > 0:
+	if new_cryptid.has_meta("current_health"):
 		current_health = new_cryptid.get_meta("current_health")
 		print("Found stored health metadata for " + new_cryptid.name + ": " + str(current_health))
 	# Fallback to property for backward compatibility
-	elif new_cryptid.get("current_health") != null and new_cryptid.current_health > 0:
+	elif new_cryptid.get("current_health") != null:
 		current_health = new_cryptid.current_health
 		print("Found stored health property for " + new_cryptid.name + ": " + str(current_health))
 		# Also set metadata for consistency going forward
 		new_cryptid.set_meta("current_health", current_health)
 	else:
-		print("No stored health found for " + new_cryptid.name + ", using default: " + str(current_health))
+		# If no health data found, use maximum health
+		current_health = max_health
+		print("No stored health found for " + new_cryptid.name + ", using max health: " + str(current_health))
+		new_cryptid.set_meta("current_health", current_health)
 	
-	# Set health values to the stored value
+	# CRITICAL: Now set health values to the stored value, not max health
+	print("Setting health values to:", current_health, "/", max_health)
 	new_cryptid_node.set_health_values(current_health, max_health)
 	new_cryptid_node.update_health_bar()
 	
@@ -784,24 +788,28 @@ func _on_emergency_swap_selected(new_cryptid):
 	new_cryptid.top_card_played = true
 	new_cryptid.bottom_card_played = true
 	
-	# Use the cryptid's stored health
-	var swap_current_health = new_cryptid.health  # Default to max health
+	# IMPORTANT: Use the cryptid's stored health if available
+	var swap_current_health = 0  # Start with 0, will be set properly below
 	var swap_max_health = new_cryptid.health
 	
 	# Check stored health using metadata FIRST
-	if new_cryptid.has_meta("current_health") and new_cryptid.get_meta("current_health") > 0:
+	if new_cryptid.has_meta("current_health"):
 		swap_current_health = new_cryptid.get_meta("current_health")
 		print("Using stored health metadata for " + new_cryptid.name + ": " + str(swap_current_health))
 	# Fallback to property for backward compatibility
-	elif new_cryptid.get("current_health") != null and new_cryptid.current_health > 0:
+	elif new_cryptid.get("current_health") != null:
 		swap_current_health = new_cryptid.current_health
 		print("Using stored health property for " + new_cryptid.name + ": " + str(swap_current_health))
 		# Also set metadata for consistency going forward
 		new_cryptid.set_meta("current_health", swap_current_health)
 	else:
-		print("No stored health found for " + new_cryptid.name + ", using default: " + str(swap_current_health))
+		# If no health data found, use maximum health
+		swap_current_health = swap_max_health
+		print("No stored health found for " + new_cryptid.name + ", using max health: " + str(swap_current_health))
+		new_cryptid.set_meta("current_health", swap_current_health)
 	
-	# Set health values
+	# CRITICAL: Now set health values to the stored value, not max health
+	print("Setting health values to:", swap_current_health, "/", swap_max_health)
 	emergency_cryptid_node.set_health_values(swap_current_health, swap_max_health)
 	emergency_cryptid_node.update_health_bar()
 	
@@ -1102,6 +1110,14 @@ func find_and_setup_next_cryptid():
 
 func prompt_swap_cryptid():
 	print("Prompting player to swap cryptid")
+	
+	# CRITICAL: First check if we have any bench cryptids available
+	if !has_bench_cryptids():
+		print("No bench cryptids available - preventing swap")
+		game_instructions.text = "No cryptids available for swap!"
+		action_selection_menu.prompt_player_for_action()
+		return
+	
 	game_instructions.text = "Select a cryptid to swap to"
 	
 	# Find the swap dialog if we haven't cached it yet
@@ -1126,7 +1142,7 @@ func prompt_swap_cryptid():
 		hand.selected_cryptid.bottom_card_played = true
 		
 		# Show the swap dialog with our team data
-		# IMPORTANT: We'll use a slightly modified approach to filter out defeated cryptids
+		# Build the filtered team of valid cryptids for swapping
 		var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
 		if player_team_node:
 			# Get all cryptids from the team
@@ -1183,6 +1199,25 @@ func prompt_swap_cryptid():
 			for cryptid in valid_cryptids:
 				temp_team.add_cryptid(cryptid)
 			
+			# Double-check we have available cryptids after filtering
+			var bench_cryptids = 0
+			for cryptid in valid_cryptids:
+				# Skip if on battlefield already
+				var on_battlefield = false
+				for cryptid_node in tile_map_layer.player_cryptids_in_play:
+					if cryptid_node.cryptid == cryptid:
+						on_battlefield = true
+						break
+						
+				if !on_battlefield:
+					bench_cryptids += 1
+			
+			if bench_cryptids == 0:
+				print("No bench cryptids available after filtering - preventing swap")
+				game_instructions.text = "No cryptids available for swap!"
+				action_selection_menu.prompt_player_for_action()
+				return
+			
 			print("Opening swap dialog with", temp_team.get_cryptids().size(), "valid cryptids")
 			
 			# Open the dialog with the filtered team
@@ -1198,6 +1233,61 @@ func prompt_swap_cryptid():
 			print("ERROR: PlayerTeam node not found!")
 			game_instructions.text = "Error: Player team not found!"
 			action_selection_menu.prompt_player_for_action()
+
+# Add the helper function to check if bench cryptids are available
+func has_bench_cryptids():
+	# Get the player team
+	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
+	if player_team_node:
+		# Count valid cryptids (not defeated)
+		var valid_cryptids = 0
+		var cryptids = []
+		
+		if player_team_node.has_method("get_cryptids"):
+			cryptids = player_team_node.get_cryptids()
+		elif player_team_node.get("_content") != null:
+			cryptids = player_team_node._content
+		elif player_team_node.get("cryptidTeam") != null:
+			var team = player_team_node.cryptidTeam
+			if team.has_method("get_cryptids"):
+				cryptids = team.get_cryptids()
+			elif team.get("_content") != null:
+				cryptids = team._content
+		
+		# Check for valid cryptids (not on battlefield and not defeated)
+		for cryptid in cryptids:
+			if cryptid == null:
+				continue
+			
+			# Skip if defeated
+			var is_defeated = false
+			if defeated_cryptids.has(cryptid.name):
+				is_defeated = true
+			elif GameController.globally_defeated_cryptids.has(cryptid.name):
+				is_defeated = true
+			elif Engine.has_singleton("DefeatedCryptidsTracker"):
+				var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
+				if tracker.is_defeated(cryptid.name):
+					is_defeated = true
+			
+			if !is_defeated:
+				# Check if this cryptid is already on the battlefield
+				var on_battlefield = false
+				for cryptid_node in tile_map_layer.player_cryptids_in_play:
+					if cryptid_node.cryptid.name == cryptid.name:
+						on_battlefield = true
+						break
+				
+				if !on_battlefield:
+					valid_cryptids += 1
+		
+		print("Found", valid_cryptids, "valid bench cryptids")
+		
+		# Must have at least one bench cryptid
+		return valid_cryptids > 0
+	
+	# Default to false if we couldn't determine
+	return false
 		
 func restore_cards_from_discard(cryptid: Cryptid):
 	print("Restoring cards from discard for:", cryptid.name)

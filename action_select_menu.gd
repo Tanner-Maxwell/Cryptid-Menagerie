@@ -141,7 +141,12 @@ func prompt_player_for_action():
 	
 	# Show the basic buttons if they exist
 	if swap_button:
-		swap_button.show()
+		# IMPORTANT: Check if we have bench cryptids before showing swap button
+		if has_bench_cryptids():
+			swap_button.show()
+		else:
+			swap_button.hide()
+			print("No bench cryptids available - hiding swap button")
 	if rest_button:
 		rest_button.show()
 	if catch_button:
@@ -157,7 +162,7 @@ func prompt_player_for_action():
 			print("ERROR: No selected_cryptid found in hand!")
 	else:
 		print("ERROR: hand reference invalid or missing switch_cryptid_deck method!")
-
+		
 # Function to explicitly force-update the menu state
 func force_update():
 	if hand and hand.selected_cryptid:
@@ -165,6 +170,17 @@ func force_update():
 	
 # Functions for each action button
 func _on_swap_pressed():
+	# First check if there are any bench cryptids available
+	var have_bench_cryptids = has_bench_cryptids()
+	if !have_bench_cryptids:
+		# Don't hide the menu, but show an informative message instead
+		var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+		if game_instructions:
+			game_instructions.text = "No cryptids available for swap!"
+		print("Swap button pressed, but no bench cryptids available")
+		return
+	
+	# If there are bench cryptids, proceed with the swap
 	hide()
 	emit_signal("action_selected", ActionType.SWAP)
 
@@ -329,3 +345,36 @@ func log_cryptid_order():
 		var cryptid = cryptid_node.cryptid
 		var speed = cryptid.get("speed") if cryptid.get("speed") != null else 0
 		print("  " + str(i+1) + ". " + cryptid.name + " - Speed: " + str(speed))
+
+# New function to check if bench cryptids are available
+func has_bench_cryptids():
+	# Get the player team
+	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
+	if player_team_node:
+		# Count total cryptids
+		var total_cryptids = 0
+		if player_team_node.has_method("get_cryptids"):
+			total_cryptids = player_team_node.get_cryptids().size()
+		elif player_team_node.get("_content") != null:
+			total_cryptids = player_team_node._content.size()
+		elif player_team_node.get("cryptidTeam") != null:
+			var team = player_team_node.cryptidTeam
+			if team.has_method("get_cryptids"):
+				total_cryptids = team.get_cryptids().size()
+			elif team.get("_content") != null:
+				total_cryptids = team._content.size()
+		
+		# Count cryptids currently in play
+		var cryptids_in_play = 0
+		var tile_map_layer = get_node_or_null("/root/VitaChrome/TileMapLayer")
+		if tile_map_layer and tile_map_layer.get("player_cryptids_in_play") != null:
+			cryptids_in_play = tile_map_layer.player_cryptids_in_play.size()
+		
+		# Check if we have any bench cryptids
+		var bench_cryptids = total_cryptids - cryptids_in_play
+		print("Total cryptids:", total_cryptids, ", In play:", cryptids_in_play, ", On bench:", bench_cryptids)
+		
+		return bench_cryptids > 0
+	
+	# Default to false if we couldn't determine
+	return false
