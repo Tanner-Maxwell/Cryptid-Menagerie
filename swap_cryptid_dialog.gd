@@ -29,9 +29,6 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 	print("DIALOG: Swap cryptid:", cryptid_to_swap.name)
 	print("DIALOG: Cryptids in play:", cryptids_in_play.size())
 	
-	# !!! REMOVE THIS SECTION - Do not add swapped cryptids to the defeated list !!!
-	# If a cryptid is swapped out, it should still be available for future swaps
-	
 	# Just set the current cryptid without adding to defeated list
 	current_cryptid = cryptid_to_swap
 	
@@ -81,16 +78,37 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 		if cryptid == null:
 			continue
 			
-		# Only check against the actual defeated list, not swapped cryptids
-		if all_defeated_cryptids.has(cryptid.name):
-			print("DIALOG: EXCLUDING defeated cryptid:", cryptid.name)
-			continue
+		# Check against all sources of defeated cryptids
+		var is_defeated = false
 		
-		valid_cryptids.append(cryptid)
-		print("DIALOG: KEEPING valid cryptid:", cryptid.name)
+		# Check the local static list
+		if all_defeated_cryptids.has(cryptid.name):
+			print("DIALOG: EXCLUDING defeated cryptid (static list):", cryptid.name)
+			is_defeated = true
+		
+		# Check GameController's global list
+		if !is_defeated and get_tree().get_root().has_node("VitaChrome/TileMapLayer/GameController"):
+			var game_controller = get_tree().get_root().get_node("VitaChrome/TileMapLayer/GameController")
+			if "globally_defeated_cryptids" in game_controller:
+				if game_controller.globally_defeated_cryptids.has(cryptid.name):
+					print("DIALOG: EXCLUDING defeated cryptid (global list):", cryptid.name)
+					is_defeated = true
+		
+		# Check the DefeatedCryptidsTracker singleton
+		if !is_defeated and Engine.has_singleton("DefeatedCryptidsTracker"):
+			var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
+			if tracker.is_defeated(cryptid.name):
+				print("DIALOG: EXCLUDING defeated cryptid (singleton):", cryptid.name)
+				is_defeated = true
+		
+		# Only add if not defeated in any list or if it's the current cryptid
+		if !is_defeated || cryptid == cryptid_to_swap:
+			valid_cryptids.append(cryptid)
+			print("DIALOG: KEEPING valid cryptid:", cryptid.name)
 	
 	all_cryptids = valid_cryptids
 	
+	# Rest of the original function follows...
 	# Counter for eligible cryptids
 	var eligible_count = 0
 	

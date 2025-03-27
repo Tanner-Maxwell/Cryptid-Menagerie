@@ -1152,6 +1152,12 @@ func apply_damage(target_cryptid, damage_amount):
 		if new_health <= 0:
 			print("Cryptid " + target_cryptid.cryptid.name + " has been defeated!")
 			
+			# CRITICAL: Store health metadata before handling defeat
+			# This ensures we don't restore a defeated cryptid's health if they're 
+			# somehow added back to the team later
+			target_cryptid.cryptid.set_meta("current_health", 0)
+			print("Set current_health metadata to 0 for defeated cryptid")
+			
 			# IMMEDIATE CHECK: Is this a player cryptid?
 			var is_player_cryptid = target_cryptid in player_cryptids_in_play
 			print("Is player cryptid: " + str(is_player_cryptid))
@@ -1175,14 +1181,23 @@ func apply_damage(target_cryptid, damage_amount):
 				target_cryptid.set_meta("defeated_position", defeated_position)
 				target_cryptid.set_meta("defeated_map_pos", map_pos)
 				
-				# Get game controller and call emergency swap DIRECTLY
+				# Get game controller
 				var game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
-				if game_controller and game_controller.has_method("prompt_emergency_swap"):
-					# No delay - call immediately
-					game_controller.prompt_emergency_swap(target_cryptid)
+				if game_controller:
+					# CRITICAL: Mark as defeated BEFORE emergency swap to prevent reuse
+					if game_controller.has_method("mark_cryptid_defeated"):
+						game_controller.mark_cryptid_defeated(target_cryptid.cryptid.name)
+						print("Marked as defeated BEFORE emergency swap:", target_cryptid.cryptid.name)
+					
+					# Now call emergency swap
+					if game_controller.has_method("prompt_emergency_swap"):
+						game_controller.prompt_emergency_swap(target_cryptid)
+					else:
+						print("ERROR: Could not find prompt_emergency_swap method!")
+						# If we can't find the controller, just handle defeat normally
+						handle_cryptid_defeat(target_cryptid)
 				else:
-					print("ERROR: Could not find GameController or prompt_emergency_swap method!")
-					# If we can't find the controller, just handle defeat normally
+					print("ERROR: Could not find GameController!")
 					handle_cryptid_defeat(target_cryptid)
 			else:
 				# For enemy cryptids, handle defeat normally
@@ -1191,12 +1206,29 @@ func apply_damage(target_cryptid, damage_amount):
 		print("ERROR: Could not find health bar on target cryptid!")
 
 func handle_cryptid_defeat(defeated_cryptid):
-	# CRITICAL: Add to the defeat tracker immediately
-	if Engine.has_singleton("DefeatedCryptidsTracker"):
-		var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
-		tracker.add_defeated(defeated_cryptid.cryptid.name)
-		print("Added to defeat tracker:", defeated_cryptid.cryptid.name)
+	# CRITICAL: Make sure we get the GameController first, before anything else
+	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
+	
+	if game_controller and game_controller.has_method("mark_cryptid_defeated"):
+		# Record this cryptid as permanently defeated in all lists at once
+		game_controller.mark_cryptid_defeated(defeated_cryptid.cryptid.name)
+		print("Marked cryptid as permanently defeated:", defeated_cryptid.cryptid.name)
+	else:
+		print("ERROR: Could not find GameController or mark_cryptid_defeated method")
 		
+		# Fallback: Add to direct trackers
+		if Engine.has_singleton("DefeatedCryptidsTracker"):
+			var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
+			tracker.add_defeated(defeated_cryptid.cryptid.name)
+			print("Added to global tracker:", defeated_cryptid.cryptid.name)
+			
+		# Also try to access the static list directly if possible
+		if "GameController" in get_script().get_script_constant_map():
+			var globally_defeated = get_script().get_script_constant_map()["GameController"].globally_defeated_cryptids
+			if !globally_defeated.has(defeated_cryptid.cryptid.name):
+				globally_defeated.append(defeated_cryptid.cryptid.name)
+				print("Added to global static list (fallback):", defeated_cryptid.cryptid.name)
+	
 	var is_player_cryptid = false
 	for player_cryptid in player_cryptids_in_play:
 		if player_cryptid == defeated_cryptid:
@@ -1204,19 +1236,6 @@ func handle_cryptid_defeat(defeated_cryptid):
 			break
 	
 	print("Is player cryptid:", is_player_cryptid)
-	
-	# Direct access to the global tracker
-	if Engine.has_singleton("DefeatedCryptidsTracker"):
-		var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
-		tracker.add_defeated(defeated_cryptid.cryptid.name)
-		print("Added to global tracker:", defeated_cryptid.cryptid.name)
-	
-	# Get access to the GameController with the correct path
-	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
-	
-	if game_controller:
-		# Record this cryptid as permanently defeated
-		game_controller.mark_cryptid_defeated(defeated_cryptid.cryptid.name)
 	
 	# For player cryptids, trigger emergency swap
 	if is_player_cryptid:
@@ -1231,15 +1250,10 @@ func handle_cryptid_defeat(defeated_cryptid):
 		defeated_cryptid.modulate = Color(1, 0, 0, 0.5)
 		
 		# Find the game controller and trigger emergency swap
-		if game_controller and game_controller.has_method("emergency_swap_for_defeated_cryptid"):
-			game_controller.emergency_swap_for_defeated_cryptid(defeated_cryptid.cryptid)
+		if game_controller and game_controller.has_method("prompt_emergency_swap"):
+			game_controller.prompt_emergency_swap(defeated_cryptid)
 		else:
 			print("ERROR: GameController not found or missing emergency swap method")
-			# Try directly accessing the swap dialog as fallback
-			var swap_dialog = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
-			if swap_dialog:
-				print("FALLBACK: Triggering swap dialog directly")
-				# Create a temporary function here
 		return  # Early return since emergency swap will handle removal
 	
 	# For enemy cryptids or if no emergency swap triggered, remove normally

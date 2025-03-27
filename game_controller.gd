@@ -287,34 +287,28 @@ func _on_swap_cryptid_selected(new_cryptid):
 		return
 	
 	# Get the position of the current cryptid
-	var position = current_cryptid_node.position
+	var cryptid_position = current_cryptid_node.position
 	
 	# Make sure the hex position remains occupied during the swap
-	var map_pos = tile_map_layer.local_to_map(position)
+	var map_pos = tile_map_layer.local_to_map(cryptid_position)
 	var point = tile_map_layer.a_star_hex_grid.get_closest_point(map_pos, true)
 	tile_map_layer.a_star_hex_grid.set_point_disabled(point, true)
 	
 	# IMPORTANT: Save the current cryptid's health before removing it
-	# This ensures its health is preserved when it's off the battlefield
 	var health_bar = current_cryptid_node.get_node_or_null("HealthBar")
 	if health_bar:
 		print("Preserving health for " + current_cryptid.name + ": " + 
 			  str(health_bar.value) + "/" + str(health_bar.max_value))
 		
-		# If the cryptid has a 'current_health' property, use it to store the value
-		if current_cryptid.get("current_health") != null:
-			current_cryptid.current_health = health_bar.value
-			print("Set current_health property to " + str(current_cryptid.current_health))
-		# Otherwise use metadata to store the health
-		else:
-			current_cryptid.set_meta("current_health", health_bar.value)
-			print("Set current_health metadata to " + str(current_cryptid.get_meta("current_health")))
+		# ALWAYS use metadata for health tracking for consistency
+		current_cryptid.set_meta("current_health", health_bar.value)
+		print("Set current_health metadata to " + str(current_cryptid.get_meta("current_health")))
 	
 	# Create a new cryptid node with the selected cryptid data
 	var new_cryptid_node = tile_map_layer.blank_cryptid.instantiate()
 	new_cryptid_node.cryptid = new_cryptid
 	new_cryptid_node.hand = hand
-	new_cryptid_node.position = position
+	new_cryptid_node.position = cryptid_position
 	
 	# Mark the new cryptid's turn as completed
 	new_cryptid.completed_turn = true
@@ -325,14 +319,16 @@ func _on_swap_cryptid_selected(new_cryptid):
 	var current_health = new_cryptid.health  # Default to max health
 	var max_health = new_cryptid.health
 	
-	# Check if the cryptid has stored health first
-	if new_cryptid.get("current_health") != null and new_cryptid.current_health > 0:
-		current_health = new_cryptid.current_health
-		print("Found stored health property for " + new_cryptid.name + ": " + str(current_health))
-	# Then check for metadata
-	elif new_cryptid.has_meta("current_health") and new_cryptid.get_meta("current_health") > 0:
+	# Check for metadata FIRST as our standard health storage method
+	if new_cryptid.has_meta("current_health") and new_cryptid.get_meta("current_health") > 0:
 		current_health = new_cryptid.get_meta("current_health")
 		print("Found stored health metadata for " + new_cryptid.name + ": " + str(current_health))
+	# Fallback to property for backward compatibility
+	elif new_cryptid.get("current_health") != null and new_cryptid.current_health > 0:
+		current_health = new_cryptid.current_health
+		print("Found stored health property for " + new_cryptid.name + ": " + str(current_health))
+		# Also set metadata for consistency going forward
+		new_cryptid.set_meta("current_health", current_health)
 	else:
 		print("No stored health found for " + new_cryptid.name + ", using default: " + str(current_health))
 	
@@ -768,20 +764,20 @@ func _on_emergency_swap_selected(new_cryptid):
 		return
 	
 	# Get the position of the defeated cryptid
-	var position = emergency_swap_cryptid.get_meta("defeated_position")
-	var map_pos = emergency_swap_cryptid.get_meta("defeated_map_pos")
+	var defeated_position = emergency_swap_cryptid.get_meta("defeated_position")
+	var defeated_map_pos = emergency_swap_cryptid.get_meta("defeated_map_pos")
 	
-	print("Placing new cryptid at position:", map_pos)
+	print("Placing new cryptid at position:", defeated_map_pos)
 	
 	# Make sure the hex position is available
-	var point = tile_map_layer.a_star_hex_grid.get_closest_point(map_pos, true)
-	tile_map_layer.a_star_hex_grid.set_point_disabled(point, false)
+	var defeated_point = tile_map_layer.a_star_hex_grid.get_closest_point(defeated_map_pos, true)
+	tile_map_layer.a_star_hex_grid.set_point_disabled(defeated_point, false)
 	
 	# Create a new cryptid node with the selected cryptid data
-	var new_cryptid_node = tile_map_layer.blank_cryptid.instantiate()
-	new_cryptid_node.cryptid = new_cryptid
-	new_cryptid_node.hand = hand
-	new_cryptid_node.position = position
+	var emergency_cryptid_node = tile_map_layer.blank_cryptid.instantiate()
+	emergency_cryptid_node.cryptid = new_cryptid
+	emergency_cryptid_node.hand = hand
+	emergency_cryptid_node.position = defeated_position
 	
 	# The new cryptid should NOT act in the current turn - CRITICAL FIX
 	new_cryptid.completed_turn = true
@@ -789,31 +785,38 @@ func _on_emergency_swap_selected(new_cryptid):
 	new_cryptid.bottom_card_played = true
 	
 	# Use the cryptid's stored health
-	var current_health = new_cryptid.health  # Default to max health
-	var max_health = new_cryptid.health
+	var swap_current_health = new_cryptid.health  # Default to max health
+	var swap_max_health = new_cryptid.health
 	
-	# Check stored health
-	if new_cryptid.get("current_health") != null and new_cryptid.current_health > 0:
-		current_health = new_cryptid.current_health
-	elif new_cryptid.has_meta("current_health") and new_cryptid.get_meta("current_health") > 0:
-		current_health = new_cryptid.get_meta("current_health")
+	# Check stored health using metadata FIRST
+	if new_cryptid.has_meta("current_health") and new_cryptid.get_meta("current_health") > 0:
+		swap_current_health = new_cryptid.get_meta("current_health")
+		print("Using stored health metadata for " + new_cryptid.name + ": " + str(swap_current_health))
+	# Fallback to property for backward compatibility
+	elif new_cryptid.get("current_health") != null and new_cryptid.current_health > 0:
+		swap_current_health = new_cryptid.current_health
+		print("Using stored health property for " + new_cryptid.name + ": " + str(swap_current_health))
+		# Also set metadata for consistency going forward
+		new_cryptid.set_meta("current_health", swap_current_health)
+	else:
+		print("No stored health found for " + new_cryptid.name + ", using default: " + str(swap_current_health))
 	
 	# Set health values
-	new_cryptid_node.set_health_values(current_health, max_health)
-	new_cryptid_node.update_health_bar()
+	emergency_cryptid_node.set_health_values(swap_current_health, swap_max_health)
+	emergency_cryptid_node.update_health_bar()
 	
 	# Actually remove the defeated cryptid now
 	tile_map_layer.remove_defeated_cryptid(emergency_swap_cryptid)
 	emergency_swap_cryptid = null
 	
 	# Add the new cryptid to player_cryptids_in_play
-	tile_map_layer.player_cryptids_in_play.append(new_cryptid_node)
+	tile_map_layer.player_cryptids_in_play.append(emergency_cryptid_node)
 	
 	# Add to all_cryptids_in_play
-	tile_map_layer.all_cryptids_in_play.append(new_cryptid_node)
+	tile_map_layer.all_cryptids_in_play.append(emergency_cryptid_node)
 	
 	# Add the new cryptid to the scene tree
-	tile_map_layer.get_node("PlayerTeam").add_child(new_cryptid_node)
+	tile_map_layer.get_node("PlayerTeam").add_child(emergency_cryptid_node)
 	
 	# Update the selected cryptid in the hand
 	hand.selected_cryptid = new_cryptid
@@ -828,9 +831,9 @@ func _on_emergency_swap_selected(new_cryptid):
 	# Show some visual effect for the new cryptid
 	# Create a flash effect
 	var flash_color = Color(0, 1, 0, 0.5)  # Green flash
-	new_cryptid_node.modulate = flash_color
+	emergency_cryptid_node.modulate = flash_color
 	var tween = get_tree().create_tween()
-	tween.tween_property(new_cryptid_node, "modulate", Color(1, 1, 1, 1), 0.5)
+	tween.tween_property(emergency_cryptid_node, "modulate", Color(1, 1, 1, 1), 0.5)
 	
 	# Advance to the next cryptid's turn
 	advance_to_next_cryptid()
@@ -1012,6 +1015,75 @@ func mark_cryptid_defeated(cryptid_name):
 		if Engine.has_singleton("DefeatedCryptidsTracker"):
 			var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
 			tracker.add_defeated(cryptid_name)
+		
+		# Add to the static globally_defeated_cryptids list
+		if !GameController.globally_defeated_cryptids.has(cryptid_name):
+			GameController.globally_defeated_cryptids.append(cryptid_name)
+			print("Added to global static list:", cryptid_name)
+		
+		# Also update SwapCryptidDialog's static list
+		var swap_dialog = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
+		if swap_dialog and "all_defeated_cryptids" in swap_dialog:
+			if !swap_dialog.all_defeated_cryptids.has(cryptid_name):
+				swap_dialog.all_defeated_cryptids.append(cryptid_name)
+				print("Added to swap dialog static list:", cryptid_name)
+		
+		# CRITICAL FIX: Remove the cryptid from the player team directly
+		var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
+		if player_team_node:
+			if player_team_node.has_method("get_cryptids") and player_team_node.has_method("remove_cryptid"):
+				# First find the cryptid object by name
+				var cryptids = player_team_node.get_cryptids()
+				for cryptid in cryptids:
+					if cryptid.name == cryptid_name:
+						print("REMOVING CRYPTID FROM PLAYER TEAM:", cryptid_name)
+						player_team_node.remove_cryptid(cryptid)
+						break
+			elif player_team_node.get("_content") != null:
+				# Direct access to _content array
+				var cryptids = player_team_node._content
+				for i in range(cryptids.size() - 1, -1, -1):
+					if cryptids[i].name == cryptid_name:
+						print("REMOVING CRYPTID FROM PLAYER TEAM _content:", cryptid_name)
+						cryptids.remove_at(i)
+						break
+			
+			# Also check if there's a cryptidTeam property
+			if player_team_node.get("cryptidTeam") != null:
+				var team = player_team_node.cryptidTeam
+				if team.has_method("get_cryptids") and team.has_method("remove_cryptid"):
+					var cryptids = team.get_cryptids()
+					for cryptid in cryptids:
+						if cryptid.name == cryptid_name:
+							print("REMOVING CRYPTID FROM cryptidTeam:", cryptid_name)
+							team.remove_cryptid(cryptid)
+							break
+				elif team.get("_content") != null:
+					var cryptids = team._content
+					for i in range(cryptids.size() - 1, -1, -1):
+						if cryptids[i].name == cryptid_name:
+							print("REMOVING CRYPTID FROM cryptidTeam _content:", cryptid_name)
+							cryptids.remove_at(i)
+							break
+		
+		# Also check for any standalone Player node
+		var player = get_node_or_null("/root/VitaChrome/Player")
+		if player and player.get("cryptidTeam") != null:
+			var team = player.cryptidTeam
+			if team.has_method("get_cryptids") and team.has_method("remove_cryptid"):
+				var cryptids = team.get_cryptids()
+				for cryptid in cryptids:
+					if cryptid.name == cryptid_name:
+						print("REMOVING CRYPTID FROM Player's cryptidTeam:", cryptid_name)
+						team.remove_cryptid(cryptid)
+						break
+			elif team.get("_content") != null:
+				var cryptids = team._content
+				for i in range(cryptids.size() - 1, -1, -1):
+					if cryptids[i].name == cryptid_name:
+						print("REMOVING CRYPTID FROM Player's cryptidTeam _content:", cryptid_name)
+						cryptids.remove_at(i)
+						break
 	else:
 		print("Cryptid already marked as defeated:", cryptid_name)
 	
@@ -1045,225 +1117,8 @@ func prompt_swap_cryptid():
 		action_selection_menu.prompt_player_for_action()
 		return
 	
-	# Use the correct team path 
-	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
-	var player_team_data = null
-	
-	print("DEBUG: Looking for ALL team cryptids")
-	print("DEBUG: PlayerTeam node:", player_team_node)
-	
-	# Create a temporary Team instance for the swap dialog
-	var temp_team = Team.new()
-	
 	# Track the current cryptid being swapped from
 	var current_cryptid = hand.selected_cryptid
-	
-	# First check if we have a cryptidTeam property in the player_team_node
-	var team_cryptids = []
-	if player_team_node:
-		if player_team_node.has_method("get_cryptids"):
-			print("DEBUG: Player team has get_cryptids method")
-			team_cryptids = player_team_node.get_cryptids()
-		elif player_team_node.get("cryptidTeam") != null and player_team_node.cryptidTeam.has_method("get_cryptids"):
-			print("DEBUG: Player team has cryptidTeam property")
-			team_cryptids = player_team_node.cryptidTeam.get_cryptids()
-	
-	print("DEBUG: Found", team_cryptids.size(), "cryptids in team methods")
-	
-	# If we found cryptids through methods, add them to the temp team
-	if team_cryptids.size() > 0:
-		for cryptid in team_cryptids:
-			if !defeated_cryptids.has(cryptid.name) or cryptid == current_cryptid:
-				temp_team.add_cryptid(cryptid)
-				print("DEBUG: Added team cryptid:", cryptid.name)
-	
-	# Now also check for cryptid nodes as children of PlayerTeam
-	if player_team_node:
-		for child in player_team_node.get_children():
-			# Skip non-cryptid nodes
-			if not child.get("cryptid") or not child.cryptid:
-				continue
-				
-			# Skip if defeated (except the current one being swapped)
-			if defeated_cryptids.has(child.cryptid.name) and child.cryptid != current_cryptid:
-				print("DEBUG: Skipping defeated cryptid:", child.cryptid.name)
-				continue
-				
-			# Skip if already added
-			var already_added = false
-			for existing_cryptid in temp_team.get_cryptids():
-				if existing_cryptid.name == child.cryptid.name:
-					already_added = true
-					break
-			
-			if already_added:
-				print("DEBUG: Skipping already added cryptid:", child.cryptid.name)
-				continue
-				
-			# Add the cryptid to the team
-			temp_team.add_cryptid(child.cryptid)
-			
-			# Check if it's in play or on bench for debugging
-			var in_play = false
-			for played_cryptid in tile_map_layer.player_cryptids_in_play:
-				if played_cryptid.cryptid == child.cryptid and played_cryptid.cryptid != current_cryptid:
-					in_play = true
-					break
-					
-			if in_play:
-				print("DEBUG: Added in-play cryptid:", child.cryptid.name)
-			else:
-				print("DEBUG: Added bench/swappable cryptid:", child.cryptid.name)
-	
-	# Also look for a "bench" or "reserves" node
-	var bench_node = get_node_or_null("/root/VitaChrome/TileMapLayer/Bench")
-	if not bench_node:
-		bench_node = get_node_or_null("/root/VitaChrome/TileMapLayer/Reserves")
-	if not bench_node:
-		bench_node = get_node_or_null("/root/VitaChrome/Bench")
-	
-	if bench_node:
-		print("DEBUG: Found bench node:", bench_node)
-		for child in bench_node.get_children():
-			# Skip non-cryptid nodes
-			if not child.has_property("cryptid") or not child.cryptid:
-				continue
-				
-			# Skip if defeated (except the current one being swapped)
-			if defeated_cryptids.has(child.cryptid.name) and child.cryptid != current_cryptid:
-				print("DEBUG: Skipping defeated bench cryptid:", child.cryptid.name)
-				continue
-				
-			# Skip if already added
-			var already_added = false
-			for existing_cryptid in temp_team.get_cryptids():
-				if existing_cryptid.name == child.cryptid.name:
-					already_added = true
-					break
-			
-			if already_added:
-				print("DEBUG: Skipping already added bench cryptid:", child.cryptid.name)
-				continue
-				
-			# Add the cryptid to the team
-			temp_team.add_cryptid(child.cryptid)
-			print("DEBUG: Added bench cryptid:", child.cryptid.name)
-	
-	# TEMPORARY: Look for global variables that might have all cryptids
-	if temp_team.get_cryptids().size() < 6:
-		print("DEBUG: Still missing cryptids, checking for global variables")
-		
-		# Autoloads or singletons that might have all cryptids
-		var possible_autoloads = ["GameData", "PlayerData", "CryptidManager", "TeamManager"]
-		
-		for autoload in possible_autoloads:
-			if Engine.has_singleton(autoload):
-				var singleton = Engine.get_singleton(autoload)
-				print("DEBUG: Found singleton:", autoload)
-				
-				# Try different methods/properties
-				if singleton.has_method("get_all_cryptids"):
-					var all_cryptids = singleton.get_all_cryptids()
-					for cryptid in all_cryptids:
-						if !defeated_cryptids.has(cryptid.name) or cryptid == current_cryptid:
-							# Skip if already added
-							var already_added = false
-							for existing_cryptid in temp_team.get_cryptids():
-								if existing_cryptid.name == cryptid.name:
-									already_added = true
-									break
-							
-							if not already_added:
-								temp_team.add_cryptid(cryptid)
-								print("DEBUG: Added global cryptid:", cryptid.name)
-	
-	# Get the main Player node
-	var player = get_node_or_null("/root/VitaChrome/Player")
-	if player:
-		print("DEBUG: Found Player node")
-		
-		# Try different properties that might contain the team
-		if player.get("team") != null:
-			var player_team = player.team
-			if player_team.has_method("get_cryptids"):
-				var team_list = player_team.get_cryptids()
-				for cryptid in team_list:
-					if !defeated_cryptids.has(cryptid.name) or cryptid == current_cryptid:
-						# Skip if already added
-						var already_added = false
-						for existing_cryptid in temp_team.get_cryptids():
-							if existing_cryptid.name == cryptid.name:
-								already_added = true
-								break
-						
-						if not already_added:
-							temp_team.add_cryptid(cryptid)
-							print("DEBUG: Added player team cryptid:", cryptid.name)
-	
-	# If we still don't have enough cryptids, add all the cryptids we can find from the TileMapLayer
-	if temp_team.get_cryptids().size() < 6:
-		print("DEBUG: Still need more cryptids, checking TileMapLayer")
-		var all_found_cryptids = []
-		
-		# Check player cryptids in play
-		for cryptid_node in tile_map_layer.player_cryptids_in_play:
-			if !all_found_cryptids.has(cryptid_node.cryptid):
-				all_found_cryptids.append(cryptid_node.cryptid)
-		
-		# Add all unique cryptids found
-		for cryptid in all_found_cryptids:
-			if !defeated_cryptids.has(cryptid.name) or cryptid == current_cryptid:
-				# Skip if already added
-				var already_added = false
-				for existing_cryptid in temp_team.get_cryptids():
-					if existing_cryptid.name == cryptid.name:
-						already_added = true
-						break
-				
-				if not already_added:
-					temp_team.add_cryptid(cryptid)
-					print("DEBUG: Added found cryptid:", cryptid.name)
-	
-	# Use our temp_team as the player team data
-	player_team_data = temp_team
-	print("DEBUG: Created team with", temp_team.get_cryptids().size(), "total cryptids")
-	
-	# If we STILL don't have all 6 cryptids, add hard-coded ones as a last resort
-	if temp_team.get_cryptids().size() < 6 and tile_map_layer.player_cryptids_in_play.size() > 0:
-		print("DEBUG: Adding hard-coded cryptids to reach 6 total")
-		
-		# Get a template cryptid
-		var template_cryptid = null
-		for cryptid in temp_team.get_cryptids():
-			template_cryptid = cryptid
-			break
-		
-		if template_cryptid:
-			var needed = 6 - temp_team.get_cryptids().size()
-			for i in range(needed):
-				var new_name = "Cryptid " + str(i+1)
-				
-				# Skip if already defeated
-				if defeated_cryptids.has(new_name):
-					continue
-				
-				var new_cryptid = Cryptid.new()
-				new_cryptid.name = new_name
-				if template_cryptid.get("scene") != null:
-					new_cryptid.scene = template_cryptid.scene
-				if template_cryptid.get("icon") != null:
-					new_cryptid.icon = template_cryptid.icon
-				new_cryptid.health = 10
-				if template_cryptid.get("speed") != null:
-					new_cryptid.speed = template_cryptid.speed
-				
-				# Copy the deck if possible
-				if template_cryptid.has_method("get_deck") or template_cryptid.get("deck") != null:
-					for card in template_cryptid.deck:
-						new_cryptid.deck.append(card.duplicate())
-				
-				temp_team.add_cryptid(new_cryptid)
-				print("DEBUG: Added hard-coded cryptid:", new_cryptid.name)
 	
 	# Mark cryptid as having used its actions
 	if hand.selected_cryptid:
@@ -1271,15 +1126,78 @@ func prompt_swap_cryptid():
 		hand.selected_cryptid.bottom_card_played = true
 		
 		# Show the swap dialog with our team data
-		print("DEBUG: Opening swap dialog with", temp_team.get_cryptids().size(), "cryptids")
-		swap_dialog_node.open(player_team_data, hand.selected_cryptid, tile_map_layer.player_cryptids_in_play)
-		
-		# Connect to the dialog's signal if not already connected
-		if not swap_dialog_node.is_connected("cryptid_selected", Callable(self, "_on_swap_cryptid_selected")):
-			swap_dialog_node.connect("cryptid_selected", Callable(self, "_on_swap_cryptid_selected"))
-		
-		# Update the UI to show only end turn button
-		action_selection_menu.show_end_turn_only()
+		# IMPORTANT: We'll use a slightly modified approach to filter out defeated cryptids
+		var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
+		if player_team_node:
+			# Get all cryptids from the team
+			var all_cryptids = []
+			
+			if player_team_node.has_method("get_cryptids"):
+				all_cryptids = player_team_node.get_cryptids()
+			elif player_team_node.get("_content") != null:
+				all_cryptids = player_team_node._content.duplicate()
+			elif player_team_node.get("cryptidTeam") != null:
+				var team = player_team_node.cryptidTeam
+				if team.has_method("get_cryptids"):
+					all_cryptids = team.get_cryptids()
+				elif team.get("_content") != null:
+					all_cryptids = team._content.duplicate()
+			
+			print("Found", all_cryptids.size(), "cryptids in team")
+			
+			# Filter out defeated cryptids
+			var valid_cryptids = []
+			for cryptid in all_cryptids:
+				if cryptid == null:
+					continue
+					
+				var is_defeated = false
+				
+				# Check against all sources of defeated cryptids
+				if defeated_cryptids.has(cryptid.name):
+					print("Filtering out defeated cryptid:", cryptid.name)
+					is_defeated = true
+					
+				if !is_defeated && GameController.globally_defeated_cryptids.has(cryptid.name):
+					print("Filtering out globally defeated cryptid:", cryptid.name)
+					is_defeated = true
+					
+				if !is_defeated && Engine.has_singleton("DefeatedCryptidsTracker"):
+					var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
+					if tracker.is_defeated(cryptid.name):
+						print("Filtering out singleton-tracked defeated cryptid:", cryptid.name)
+						is_defeated = true
+						
+				# Also check the swap dialog's static list if available
+				if !is_defeated && "all_defeated_cryptids" in swap_dialog_node && swap_dialog_node.all_defeated_cryptids.has(cryptid.name):
+					print("Filtering out dialog-tracked defeated cryptid:", cryptid.name)
+					is_defeated = true
+				
+				# Keep if not defeated
+				if !is_defeated:
+					valid_cryptids.append(cryptid)
+					print("Keeping valid cryptid:", cryptid.name)
+			
+			# Create a temporary team with the filtered cryptids
+			var temp_team = Team.new()
+			for cryptid in valid_cryptids:
+				temp_team.add_cryptid(cryptid)
+			
+			print("Opening swap dialog with", temp_team.get_cryptids().size(), "valid cryptids")
+			
+			# Open the dialog with the filtered team
+			swap_dialog_node.open(temp_team, current_cryptid, tile_map_layer.player_cryptids_in_play)
+			
+			# Connect to the dialog's signal if not already connected
+			if not swap_dialog_node.is_connected("cryptid_selected", Callable(self, "_on_swap_cryptid_selected")):
+				swap_dialog_node.connect("cryptid_selected", Callable(self, "_on_swap_cryptid_selected"))
+			
+			# Update the UI to show only end turn button
+			action_selection_menu.show_end_turn_only()
+		else:
+			print("ERROR: PlayerTeam node not found!")
+			game_instructions.text = "Error: Player team not found!"
+			action_selection_menu.prompt_player_for_action()
 		
 func restore_cards_from_discard(cryptid: Cryptid):
 	print("Restoring cards from discard for:", cryptid.name)

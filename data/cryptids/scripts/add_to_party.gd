@@ -62,10 +62,40 @@ func _on_area_2d_input_event(viewport, event, shape_idx):
 			discard_cards.hide()
 			
 
-func set_health_values(_health: int, _max_health: int):
-	max_health = _max_health
-	health = _health
+func set_health_values(current, maximum):
+	# Update the health bar
+	var health_bar = get_node_or_null("HealthBar")
+	if health_bar:
+		health_bar.value = current
+		health_bar.max_value = maximum
+	
+	# IMPORTANT: Always update the metadata for consistent tracking
+	cryptid.set_meta("current_health", current)
+	
+	# For compatibility, also set the property if it exists
+	if cryptid.get("current_health") != null:
+		cryptid.current_health = current
 
 func update_health_bar():
-	($HealthBar as ProgressBar).max_value = max_health
-	($HealthBar as ProgressBar).value = health
+	var health_bar = get_node_or_null("HealthBar")
+	if health_bar and cryptid:
+		# Update the label text
+		var health_label = get_node_or_null("HealthNumber")
+		if health_label:
+			health_label.text = str(health_bar.value) + "/" + str(health_bar.max_value)
+		
+		# IMPORTANT: Always make sure metadata is in sync
+		cryptid.set_meta("current_health", health_bar.value)
+		
+		# For compatibility, also update the property if it exists
+		if cryptid.get("current_health") != null:
+			cryptid.current_health = health_bar.value
+			
+		# Tint the health bar based on current health percentage
+		var health_percent = float(health_bar.value) / health_bar.max_value
+		if health_percent <= 0.25:
+			health_bar.modulate = Color(1, 0, 0, 1)  # Red for critical health
+		elif health_percent <= 0.5:
+			health_bar.modulate = Color(1, 0.5, 0, 1)  # Orange for low health
+		else:
+			health_bar.modulate = Color(0, 1, 0, 1)  # Green for good health
