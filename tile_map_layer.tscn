@@ -1134,6 +1134,11 @@ offset_right = 979.0
 offset_bottom = 587.0
 
 [node name="CatchDialog" parent="UIRoot" instance=ExtResource("25_ipf80")]
+z_index = 100
+offset_left = 31.0
+offset_top = 56.0
+offset_right = 225.0
+offset_bottom = 189.0
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(577, 330)

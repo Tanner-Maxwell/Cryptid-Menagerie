@@ -59,6 +59,14 @@ func _ready():
 	#catch_dialog = preload("res://path_to_catch_dialog.tscn").instantiate()
 	#get_node("/root/VitaChrome/UIRoot").add_child(catch_dialog)
 	#catch_dialog.hide()  # Hide until needed
+	# Add this to your _ready function in game_controller.gd
+	var test_button = Button.new()
+	test_button.text = "Test Catch Dialog"
+	test_button.position = Vector2(100, 100)
+	test_button.connect("pressed", Callable(self, "_on_test_button_pressed"))
+	get_node("/root/VitaChrome/UIRoot").add_child(test_button)
+	
+	
 # Add this to the bottom of the file, make it accessible via a keystroke
 func _input(event):
 	# Press F8 to test emergency swap
@@ -1452,8 +1460,11 @@ func attempt_catch(target_cryptid, catch_probability):
 	# Generate a random number between 0 and 1
 	var random_value = randf()
 	
-	# Catch is successful if random value is less than catch probability
-	var is_successful = random_value < catch_probability
+	# FOR TESTING: Force catch to succeed
+	var is_successful = true  # Change this to force success
+	
+	# Normal code (commented out during testing)
+	# var is_successful = random_value < catch_probability
 	
 	print("Catch attempt: random value = ", random_value, ", needed <= ", catch_probability)
 	print("Catch ", "successful" if is_successful else "failed")
@@ -1635,7 +1646,7 @@ func end_battle_with_victory():
 	
 	# Show a continue button or return to overworld
 	# This would depend on your game's structure
-# New function to initialize the catch dialog
+# Function to initialize the catch dialog
 func initialize_catch_dialog():
 	# Only initialize once
 	if catch_dialog != null:
@@ -1644,16 +1655,28 @@ func initialize_catch_dialog():
 	# Try to find an existing dialog first
 	catch_dialog = get_node_or_null("/root/VitaChrome/UIRoot/CatchDialog")
 	
-	# If not found, instantiate a new one
 	if catch_dialog == null:
-		var catch_dialog_scene = load("res://path_to_catch_dialog.tscn")
+		# Try other paths
+		catch_dialog = get_node_or_null("../UIRoot/CatchDialog")
+	
+	if catch_dialog == null:
+		# Search entire scene tree if needed
+		var dialogs = get_tree().get_nodes_in_group("catch_dialog")
+		if dialogs.size() > 0:
+			catch_dialog = dialogs[0]
+	
+	# Only instantiate if not found (you can comment this out if you added it to the scene)
+	if catch_dialog == null:
+		var catch_dialog_scene = load("res://catch_dialog.tscn")
 		if catch_dialog_scene:
 			catch_dialog = catch_dialog_scene.instantiate()
 			get_node("/root/VitaChrome/UIRoot").add_child(catch_dialog)
 			print("Initialized catch dialog")
 		else:
 			print("ERROR: Could not load catch dialog scene")
-	
+	else:
+		print("Found existing catch dialog")
+		
 	# Ensure it starts hidden
 	if catch_dialog:
 		catch_dialog.hide()
@@ -1763,3 +1786,28 @@ func _on_continue_button_pressed():
 	# Show action menu again
 	action_selection_menu.show()
 	action_selection_menu.prompt_player_for_action()
+
+func _on_test_button_pressed():
+	# Create a test cryptid
+	var test_cryptid = Cryptid.new()
+	test_cryptid.name = "Test Caught Cryptid"
+	
+	# Show the dialog directly
+	initialize_catch_dialog()
+	
+	if catch_dialog:
+		var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
+		var player_team = null
+		
+		if player_team_node:
+			if player_team_node.has_method("get_cryptids"):
+				player_team = player_team_node
+		
+		if player_team:
+			catch_dialog.open(player_team, test_cryptid, tile_map_layer.player_cryptids_in_play)
+			catch_dialog.show()
+			print("TEST: Showed catch dialog directly")
+		else:
+			print("TEST: Failed to get player team")
+	else:
+		print("TEST: Failed to initialize catch dialog")
