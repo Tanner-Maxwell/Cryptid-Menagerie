@@ -91,8 +91,18 @@ func _ready():
 	
 
 func _process(delta):
+	# Only handle mouse motion during player turns, not during AI turns
 	if move_action_bool:
-		handle_mouse_motion()
+		# Check if the current cryptid is an enemy (AI controlled)
+		var current_cryptid = currently_selected_cryptid()
+		var is_enemy_turn = false
+		
+		if current_cryptid:
+			is_enemy_turn = current_cryptid in enemy_cryptids_in_play
+		
+		# Only process mouse motion if it's not an enemy's turn
+		if not is_enemy_turn:
+			handle_mouse_motion()
 	if debug_enabled and Engine.get_frames_drawn() % 30 == 0:  # Update every 30 frames
 		update_all_debug_indicators()
 
@@ -1444,6 +1454,15 @@ func _on_movement_tween_finished():
 	# Reset any visual cues used during movement
 	delete_all_lines()
 	
+	# IMPORTANT: Check if selected_cryptid is still valid before accessing it
+	if !is_instance_valid(selected_cryptid):
+		print("WARNING: selected_cryptid is no longer valid in _on_movement_tween_finished")
+		# Clean up any movement indicators just to be safe
+		remove_movement_indicator()
+		# Update debug display after movement completes
+		update_all_debug_indicators()
+		return
+	
 	# Get the current position of the selected cryptid
 	var current_pos = local_to_map(selected_cryptid.position)
 	
@@ -1491,6 +1510,11 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 		print("Movement already in progress, ignoring new movement command")
 		return
 	
+	# Ensure cryptid_node is still valid
+	if !is_instance_valid(cryptid_node):
+		print("ERROR: cryptid_node is no longer valid in animate_movement_along_path")
+		return
+	
 	# First, make the original hex walkable again
 	walkable_hexes.append(start_pos)
 	var point = a_star_hex_grid.get_closest_point(start_pos, true)
@@ -1505,6 +1529,7 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 	
 	# Use our debug-aware function instead of direct call
 	a_star_hex_grid.set_point_disabled(point, true)
+	
 	# Create a temp variable to store the full path
 	var movement_path = vector_path.duplicate()
 	
@@ -1520,6 +1545,9 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 	
 	# Create visual trail for the movement
 	var trail = create_movement_trail(cryptid_node, needed_path)
+	
+	# Save reference to the cryptid node to access in the tween completion
+	var safe_cryptid_reference = cryptid_node
 	
 	# Create a tween for smooth movement
 	var tween = create_movement_tween()
@@ -1589,10 +1617,17 @@ func clean_up_movement_effects():
 func animate_attack(attacker, target):
 	print("Starting attack animation from", attacker, "to", target)
 	
+	# Check if attacker and target are still valid
+	if !is_instance_valid(attacker) or !is_instance_valid(target):
+		print("ERROR: attacker or target is no longer valid in animate_attack")
+		# Reset movement flag
+		movement_in_progress = false
+		return null
+	
 	# If movement is already in progress, don't start another one
 	if movement_in_progress:
 		print("Movement already in progress, ignoring attack animation")
-		return
+		return null
 		
 	print("Animation will proceed - movement_in_progress is false")
 	
@@ -1604,8 +1639,7 @@ func animate_attack(attacker, target):
 	var direction = (target.position - original_position).normalized()
 	print("Direction vector:", direction)
 	
-	# Calculate how far to bump (40% of the way to the target, max 60 pixels)
-	# Increased values to make animation more noticeable
+	# Calculate how far to bump
 	var bump_distance = min((target.position - original_position).length() * 0.4, 60.0)
 	var bump_position = original_position + direction * bump_distance
 	print("Bump distance:", bump_distance, "New position:", bump_position)
@@ -1614,14 +1648,17 @@ func animate_attack(attacker, target):
 	movement_in_progress = true
 	print("Set movement_in_progress to true")
 	
-	# Create a tween for the animation - using direct create_tween() instead of helper function
+	# Store the attacker, target, and damage for the callback
+	var attack_data = [target, damage]
+	
+	# Create a tween for the animation
 	var tween = create_tween()
 	tween.set_trans(Tween.TRANS_QUAD)
 	tween.set_ease(Tween.EASE_OUT)
 	print("Created new tween:", tween)
 	
-	# Connect finished signal
-	tween.finished.connect(Callable(self, "_on_attack_tween_finished").bind([target, damage]))
+	# Connect finished signal with attack data
+	tween.finished.connect(Callable(self, "_on_attack_tween_finished").bind(attack_data))
 	
 	# Disable input during animation
 	set_process_input(false)
@@ -1635,10 +1672,11 @@ func animate_attack(attacker, target):
 	print("Adding return animation to original position:", original_position)
 	tween.tween_property(attacker, "position", original_position, 0.3)
 	
-	# Create attack visual effect - using more noticeable effects
+	# Create attack visual effect
 	create_attack_effect(attacker.position, target.position)
 	
 	return tween
+
 
 
 # Create a visual effect for the attack
@@ -1727,9 +1765,18 @@ func _on_attack_tween_finished(params):
 	# Re-enable input
 	set_process_input(true)
 	
-	# Apply damage
+	# Get the target and damage from params
 	var target_cryptid = params[0]
 	var damage_amount = params[1]
+	
+	# Check if target_cryptid is still valid
+	if !is_instance_valid(target_cryptid):
+		print("WARNING: target_cryptid is no longer valid in _on_attack_tween_finished")
+		# Still clean up
+		attack_action_bool = false
+		delete_all_lines()
+		delete_all_indicators()
+		return
 	
 	print("Applying", damage_amount, "damage to", target_cryptid)
 	apply_damage(target_cryptid, damage_amount)

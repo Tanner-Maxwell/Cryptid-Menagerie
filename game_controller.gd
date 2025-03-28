@@ -288,11 +288,10 @@ func _on_swap_cryptid_selected(new_cryptid):
 	
 	# Get the position of the current cryptid
 	var cryptid_position = current_cryptid_node.position
+	var cryptid_map_pos = tile_map_layer.local_to_map(cryptid_position)
 	
-	# Make sure the hex position remains occupied during the swap
-	var map_pos = tile_map_layer.local_to_map(cryptid_position)
-	var point = tile_map_layer.a_star_hex_grid.get_closest_point(map_pos, true)
-	tile_map_layer.a_star_hex_grid.set_point_disabled(point, true)
+	# We'll disable this position at the end, after the new cryptid is placed
+	var point = tile_map_layer.a_star_hex_grid.get_closest_point(cryptid_map_pos, true)
 	
 	# IMPORTANT: Save the current cryptid's health before removing it
 	var health_bar = current_cryptid_node.get_node_or_null("HealthBar")
@@ -371,6 +370,17 @@ func _on_swap_cryptid_selected(new_cryptid):
 	
 	# Update game instructions
 	game_instructions.text = current_cryptid.name + " swapped out for " + new_cryptid.name
+	
+	# CRITICAL: Make sure the position is still marked as disabled
+	# This is necessary because the old cryptid is gone but the new one
+	# occupies the same position on the grid
+	tile_map_layer.a_star_hex_grid.set_point_disabled(point, true)
+	print("Ensuring position", cryptid_map_pos, "remains disabled after swap")
+	
+	# For debugging, check if it's actually disabled
+	if !tile_map_layer.a_star_hex_grid.is_point_disabled(point):
+		print("WARNING: Failed to disable position after swap, trying again")
+		tile_map_layer.a_star_hex_grid.set_point_disabled(point, true)
 	
 	# End the current turn and advance to the next cryptid
 	# We're bypassing the end_current_turn check for discards here
@@ -773,8 +783,10 @@ func _on_emergency_swap_selected(new_cryptid):
 	
 	print("Placing new cryptid at position:", defeated_map_pos)
 	
-	# Make sure the hex position is available
+	# Get the point for the position, we'll disable it again after placing the new cryptid
 	var defeated_point = tile_map_layer.a_star_hex_grid.get_closest_point(defeated_map_pos, true)
+	
+	# Make sure the hex position is available for the new cryptid
 	tile_map_layer.a_star_hex_grid.set_point_disabled(defeated_point, false)
 	
 	# Create a new cryptid node with the selected cryptid data
@@ -835,6 +847,15 @@ func _on_emergency_swap_selected(new_cryptid):
 	
 	# Update game instructions
 	game_instructions.text = "Emergency swap complete! " + new_cryptid.name + " has joined the battle!"
+	
+	# CRITICAL: Disable the position again now that it's occupied by the new cryptid
+	tile_map_layer.a_star_hex_grid.set_point_disabled(defeated_point, true)
+	print("Ensuring position", defeated_map_pos, "is disabled after emergency swap")
+	
+	# For debugging, check if it's actually disabled
+	if !tile_map_layer.a_star_hex_grid.is_point_disabled(defeated_point):
+		print("WARNING: Failed to disable position after emergency swap, trying again")
+		tile_map_layer.a_star_hex_grid.set_point_disabled(defeated_point, true)
 	
 	# Show some visual effect for the new cryptid
 	# Create a flash effect

@@ -59,7 +59,7 @@ func take_enemy_turn(enemy_cryptid):
 				print("AI: Used bottom attack action")
 				
 			# Wait for animations to complete
-			await get_tree().create_timer(1.0).timeout
+			await get_tree().create_timer(0.5).timeout
 		else:
 			print("AI: No immediate attack targets found")
 	
@@ -92,7 +92,7 @@ func take_enemy_turn(enemy_cryptid):
 					print("AI: Still waiting for movement to finish...")
 
 			# Add a safety delay to ensure any animation state is fully reset
-			await get_tree().create_timer(1.5).timeout
+			await get_tree().create_timer(1.0).timeout
 			
 			# After waiting for movement to complete
 			print("AI: Movement finished, cryptid at position:", tile_map_layer.local_to_map(enemy_cryptid.position))
@@ -123,7 +123,7 @@ func take_enemy_turn(enemy_cryptid):
 							print("AI: Used bottom attack action after move")
 							
 						# Wait for animations to complete
-						await get_tree().create_timer(1.5).timeout
+						await get_tree().create_timer(1.0).timeout
 				else:
 					print("AI: No attack opportunities found after moving")
 		else:
@@ -997,7 +997,7 @@ func perform_attack(enemy_cryptid, attack_info):
 		print("AI: Attack was not successful, not marking as used")
 	
 	# Wait for animation to complete
-	await get_tree().create_timer(1.5).timeout
+	await get_tree().create_timer(1.0).timeout
 	
 	# Update card state
 	card.current_state = Card.CardState.IN_DISCARD
