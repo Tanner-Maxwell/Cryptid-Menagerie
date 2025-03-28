@@ -23,6 +23,9 @@ var discard_mode = false
 var discard_count_needed = 0
 var end_turn_after_discard = false
 var current_round = 1
+var is_trainer_battle: bool = false  # Default to wild battle
+var catch_dialog: PanelContainer = null
+
 
 enum GameState {
 	PLAYER_TURN,
@@ -36,7 +39,11 @@ enum GameState {
 func _ready():
 	# Start with the player's turn when the game begins
 	transition(GameState.PLAYER_TURN)
-	
+	# Connect buttons to the respective functions
+	swap_button.connect("pressed", Callable(self, "_on_swap_button_pressed"))
+	rest_button.connect("pressed", Callable(self, "_on_rest_button_pressed"))
+	catch_button.connect("pressed", Callable(self, "_on_catch_button_pressed"))
+	#end_turn_button.connect("pressed", Callable(self, "_on_end_turn_button_pressed"))
 	# Explicitly prompt for action to ensure menu is visible
 	await get_tree().create_timer(0.2).timeout
 	if Engine.has_singleton("DefeatedCryptidsTracker"):
@@ -45,7 +52,13 @@ func _ready():
 		print("Loaded defeated_cryptids from global tracker:", defeated_cryptids)
 	else:
 		print("Initialized new defeated_cryptids list:", defeated_cryptids)
-
+	
+	catch_button.connect("pressed", Callable(self, "_on_catch_pressed"))
+	
+	initialize_catch_dialog()
+	#catch_dialog = preload("res://path_to_catch_dialog.tscn").instantiate()
+	#get_node("/root/VitaChrome/UIRoot").add_child(catch_dialog)
+	#catch_dialog.hide()  # Hide until needed
 # Add this to the bottom of the file, make it accessible via a keystroke
 func _input(event):
 	# Press F8 to test emergency swap
@@ -117,6 +130,7 @@ func advance_to_next_cryptid():
 				print("In discard mode, not advancing to next cryptid yet")
 				return
 	
+	tile_map_layer.verify_grid_state()
 	# After that, we manually advance to the next cryptid
 	var next_cryptid = find_next_cryptid()
 	
@@ -419,7 +433,21 @@ func perform_rest():
 # Update prompt_catch_cryptid function to update menu
 func prompt_catch_cryptid():
 	print("Prompting player to catch a cryptid")
-	game_instructions.text = "Select a cryptid to catch"
+	
+	# Can't catch in trainer battles
+	if is_trainer_battle:
+		game_instructions.text = "You can't catch cryptids in trainer battles!"
+		action_selection_menu.prompt_player_for_action()
+		return
+	
+	# Check if there's only one enemy left
+	if tile_map_layer.enemy_cryptids_in_play.size() != 1:
+		game_instructions.text = "You can only catch the last remaining enemy cryptid!"
+		action_selection_menu.prompt_player_for_action()
+		return
+	
+	# Get the target cryptid
+	var target_cryptid = tile_map_layer.enemy_cryptids_in_play[0]
 	
 	# Mark top and bottom card played to prevent confusion
 	if hand.selected_cryptid:
@@ -429,6 +457,17 @@ func prompt_catch_cryptid():
 		# Update the UI to show only end turn button
 		action_selection_menu.show_end_turn_only()
 	
+	# Calculate catch probability based on health
+	var catch_chance = calculate_catch_probability(target_cryptid)
+	
+	# Attempt to catch
+	var catch_successful = attempt_catch(target_cryptid, catch_chance)
+	
+	if catch_successful:
+		handle_successful_catch(target_cryptid)
+	else:
+		handle_failed_catch(target_cryptid)
+	
 # Fix the end_current_turn function to properly check if discard is needed
 func end_current_turn():
 	print("Ending current cryptid's turn")
@@ -437,6 +476,9 @@ func end_current_turn():
 	if tile_map_layer and tile_map_layer.move_action_bool and tile_map_layer.move_leftover > 0:
 		print("Finishing active movement before ending turn")
 		tile_map_layer.finish_movement()
+	
+	# Verify the grid state to ensure all hexes are correctly enabled/disabled
+	tile_map_layer.verify_grid_state()
 	
 	# Get the current cryptid
 	var current_cryptid = hand.selected_cryptid
@@ -522,6 +564,10 @@ func complete_turn():
 	if current_cryptid:
 		current_cryptid.completed_turn = true
 		current_cryptid.currently_selected = true  # Keep it selected
+	
+	# Verify the grid state
+	tile_map_layer.verify_grid_state()
+	
 	
 	# Check if all cryptids have completed their turns
 	if not tile_map_layer.any_cryptid_not_completed():
@@ -1376,3 +1422,344 @@ func find_next_cryptid_in_order():
 	
 	# If we get here, all cryptids have completed their turns
 	return null
+
+func _on_catch_pressed():
+	prompt_catch_cryptid()
+
+# Calculate catch probability based on health percentage
+func calculate_catch_probability(target_cryptid):
+	# Get health values
+	var health_bar = target_cryptid.get_node("HealthBar")
+	if not health_bar:
+		return 0.5  # Default if no health bar found
+	
+	var current_health = health_bar.value
+	var max_health = health_bar.max_value
+	
+	# Calculate health percentage
+	var health_percentage = float(current_health) / max_health
+	
+	# Calculate catch probability: 50% at full health, 100% near 0 health
+	var catch_probability = 1.0 - (health_percentage * 0.5)
+	
+	print("Cryptid health: ", current_health, "/", max_health, " (", health_percentage * 100, "%)")
+	print("Calculated catch probability: ", catch_probability * 100, "%")
+	
+	return catch_probability
+
+# Attempt to catch the cryptid based on probability
+func attempt_catch(target_cryptid, catch_probability):
+	# Generate a random number between 0 and 1
+	var random_value = randf()
+	
+	# Catch is successful if random value is less than catch probability
+	var is_successful = random_value < catch_probability
+	
+	print("Catch attempt: random value = ", random_value, ", needed <= ", catch_probability)
+	print("Catch ", "successful" if is_successful else "failed")
+	
+	return is_successful
+
+# Handle a successful catch
+func handle_successful_catch(target_cryptid):
+	print("Successfully caught ", target_cryptid.cryptid.name)
+	game_instructions.text = "You caught " + target_cryptid.cryptid.name + "!"
+	
+	# Get a reference to the caught cryptid's data
+	var caught_cryptid = target_cryptid.cryptid
+	
+	# Check if player team has space
+	var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
+	var has_space = true
+	
+	if player_team_node:
+		if player_team_node.has_method("has_space"):
+			has_space = player_team_node.has_space()
+		else:
+			# Count cryptids manually
+			var cryptid_count = 0
+			if player_team_node.has_method("get_cryptids"):
+				cryptid_count = player_team_node.get_cryptids().size()
+			elif player_team_node.get("_content") != null:
+				cryptid_count = player_team_node._content.size()
+			elif player_team_node.get("cryptidTeam") != null:
+				var team = player_team_node.cryptidTeam
+				if team.has_method("get_cryptids"):
+					cryptid_count = team.get_cryptids().size()
+				elif team.get("_content") != null:
+					cryptid_count = team._content.size()
+			
+			has_space = cryptid_count < Team.MAX_TEAM_SIZE
+	
+	# Store current health and other state in the cryptid
+	preserve_cryptid_state(target_cryptid)
+	
+	# If there's space, add directly to team
+	if has_space:
+		add_cryptid_to_team(caught_cryptid)
+		
+		# Remove the caught cryptid from the enemy team
+		remove_cryptid_from_enemy_team(target_cryptid)
+		
+		# End battle (since this was the last enemy)
+		end_battle_with_victory()
+	else:
+		# Otherwise, open the replacement dialog
+		prompt_replace_cryptid(caught_cryptid, target_cryptid)
+	
+	# Disable input to prevent actions during catch process
+	set_process_input(false)
+	
+	# Play a success animation/effect
+	animate_catch_success(target_cryptid)
+
+func handle_failed_catch(target_cryptid):
+	print("Failed to catch ", target_cryptid.cryptid.name)
+	game_instructions.text = "The cryptid broke free!"
+	
+	# Update UI to show the end turn button
+	action_selection_menu.show_end_turn_only()
+	
+	# Play a failure animation/effect
+	animate_catch_failure(target_cryptid)
+	
+# Add cryptid directly to player team
+func add_cryptid_to_team(cryptid):
+	var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
+	if player_team_node:
+		if player_team_node.has_method("add_cryptid"):
+			player_team_node.add_cryptid(cryptid)
+		elif player_team_node.get("cryptidTeam") != null:
+			var team = player_team_node.cryptidTeam
+			if team.has_method("add_cryptid"):
+				team.add_cryptid(cryptid)
+	
+	print(cryptid.name, " added to player's team")
+
+# Show dialog to replace an existing cryptid
+func prompt_replace_cryptid(new_cryptid, original_cryptid_node):
+	print("Team is full - showing replacement dialog")
+	
+	# Make sure catch dialog is initialized
+	initialize_catch_dialog()
+	
+	if catch_dialog:
+		# Build the player's team
+		var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
+		var player_team = Team.new()
+		
+		if player_team_node:
+			if player_team_node.has_method("get_cryptids"):
+				var cryptids = player_team_node.get_cryptids()
+				for cryptid in cryptids:
+					player_team.add_cryptid(cryptid)
+			elif player_team_node.get("_content") != null:
+				for cryptid in player_team_node._content:
+					player_team.add_cryptid(cryptid)
+			elif player_team_node.get("cryptidTeam") != null:
+				var team = player_team_node.cryptidTeam
+				if team.has_method("get_cryptids"):
+					var cryptids = team.get_cryptids()
+					for cryptid in cryptids:
+						player_team.add_cryptid(cryptid)
+		
+		# Store reference to original cryptid node for later
+		catch_dialog.set_meta("original_cryptid_node", original_cryptid_node)
+		
+		# Open the dialog
+		if catch_dialog.is_connected("cryptid_selected", Callable(self, "_on_replace_cryptid_selected")):
+			catch_dialog.disconnect("cryptid_selected", Callable(self, "_on_replace_cryptid_selected"))
+		catch_dialog.connect("cryptid_selected", Callable(self, "_on_replace_cryptid_selected"))
+		catch_dialog.open(player_team, new_cryptid, tile_map_layer.player_cryptids_in_play)
+		catch_dialog.show()
+	else:
+		print("ERROR: Could not find or create catch dialog")
+		
+		# Fall back to direct team add and end battle
+		add_cryptid_to_team(new_cryptid)
+		remove_cryptid_from_enemy_team(original_cryptid_node)
+		end_battle_with_victory()
+
+# Handle cryptid replacement selection
+func _on_replace_cryptid_selected(replaced_cryptid, new_cryptid):
+	print("Replacing ", replaced_cryptid.name, " with ", new_cryptid.name)
+	
+	# Get the original cryptid node that was caught
+	var original_cryptid_node = null
+	if catch_dialog and catch_dialog.has_meta("original_cryptid_node"):
+		original_cryptid_node = catch_dialog.get_meta("original_cryptid_node")
+	
+	# Remove the selected cryptid from the team
+	var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
+	if player_team_node:
+		if player_team_node.has_method("remove_cryptid"):
+			player_team_node.remove_cryptid(replaced_cryptid)
+		elif player_team_node.get("cryptidTeam") != null:
+			var team = player_team_node.cryptidTeam
+			if team.has_method("remove_cryptid"):
+				team.remove_cryptid(replaced_cryptid)
+	
+	# Add the new cryptid
+	add_cryptid_to_team(new_cryptid)
+	
+	# Remove the caught cryptid from the enemy team
+	if original_cryptid_node:
+		remove_cryptid_from_enemy_team(original_cryptid_node)
+	
+	# Clean up the catch dialog signal connection
+	if catch_dialog and catch_dialog.is_connected("cryptid_selected", Callable(self, "_on_replace_cryptid_selected")):
+		catch_dialog.disconnect("cryptid_selected", Callable(self, "_on_replace_cryptid_selected"))
+	
+	# End battle with victory
+	end_battle_with_victory()
+	
+	# Add the new cryptid
+	add_cryptid_to_team(new_cryptid)
+	
+	# End battle with victory
+	end_battle_with_victory()
+
+# End the battle with a victory
+func end_battle_with_victory():
+	print("Victory! Battle has ended.")
+	game_instructions.text = "Victory! Battle has ended."
+	
+	# Reset all cryptid states
+	reset_all_cryptid_turns()
+	
+	# Hide battle UI elements
+	action_selection_menu.hide()
+	
+	# Add a "continue" button to return to the overworld
+	add_continue_button()
+	
+	# Show a continue button or return to overworld
+	# This would depend on your game's structure
+# New function to initialize the catch dialog
+func initialize_catch_dialog():
+	# Only initialize once
+	if catch_dialog != null:
+		return
+		
+	# Try to find an existing dialog first
+	catch_dialog = get_node_or_null("/root/VitaChrome/UIRoot/CatchDialog")
+	
+	# If not found, instantiate a new one
+	if catch_dialog == null:
+		var catch_dialog_scene = load("res://path_to_catch_dialog.tscn")
+		if catch_dialog_scene:
+			catch_dialog = catch_dialog_scene.instantiate()
+			get_node("/root/VitaChrome/UIRoot").add_child(catch_dialog)
+			print("Initialized catch dialog")
+		else:
+			print("ERROR: Could not load catch dialog scene")
+	
+	# Ensure it starts hidden
+	if catch_dialog:
+		catch_dialog.hide()
+
+func preserve_cryptid_state(cryptid_node):
+	var health_bar = cryptid_node.get_node("HealthBar")
+	if health_bar:
+		var current_health = health_bar.value
+		var max_health = health_bar.max_value
+		
+		# Store health using metadata for consistency
+		cryptid_node.cryptid.set_meta("current_health", current_health)
+		print("Preserved cryptid health:", current_health, "/", max_health)
+
+func animate_catch_success(target_cryptid):
+	# Create a flash effect
+	var flash = ColorRect.new()
+	flash.color = Color(1, 1, 0, 0.7)  # Bright yellow, semitransparent
+	flash.size = Vector2(2000, 2000)  # Make it large to cover the screen
+	flash.position = Vector2(-1000, -1000)  # Center it
+	flash.z_index = 100  # Make sure it appears above everything
+	get_node("/root/VitaChrome").add_child(flash)
+	
+	# Create a tween to fade out the flash
+	var tween = create_tween()
+	tween.tween_property(flash, "color", Color(1, 1, 0, 0), 1.0)
+	tween.tween_callback(Callable(flash, "queue_free"))
+	
+	# Add a short delay for the effect to be visible
+	await get_tree().create_timer(1.2).timeout
+	
+	# Re-enable input
+	set_process_input(true)
+
+# Create catch failure animation
+func animate_catch_failure(target_cryptid):
+	# Create a flash effect
+	var flash = ColorRect.new()
+	flash.color = Color(1, 0, 0, 0.5)  # Red, semitransparent
+	flash.size = Vector2(2000, 2000)  # Make it large to cover the screen
+	flash.position = Vector2(-1000, -1000)  # Center it
+	flash.z_index = 100  # Make sure it appears above everything
+	get_node("/root/VitaChrome").add_child(flash)
+	
+	# Create a tween to fade out the flash
+	var tween = create_tween()
+	tween.tween_property(flash, "color", Color(1, 0, 0, 0), 0.5)
+	tween.tween_callback(Callable(flash, "queue_free"))
+	
+	# Add a short delay for the effect to be visible
+	await get_tree().create_timer(0.6).timeout
+
+
+# Remove the cryptid from the enemy team
+func remove_cryptid_from_enemy_team(cryptid_node):
+	# Remove from enemy_cryptids_in_play
+	if cryptid_node in tile_map_layer.enemy_cryptids_in_play:
+		tile_map_layer.enemy_cryptids_in_play.erase(cryptid_node)
+	
+	# Remove from all_cryptids_in_play
+	if cryptid_node in tile_map_layer.all_cryptids_in_play:
+		tile_map_layer.all_cryptids_in_play.erase(cryptid_node)
+	
+	# Make its position walkable again
+	var map_pos = tile_map_layer.local_to_map(cryptid_node.position)
+	if not map_pos in tile_map_layer.walkable_hexes:
+		tile_map_layer.walkable_hexes.append(map_pos)
+	
+	# Remove visual node from scene tree
+	cryptid_node.queue_free()
+
+# Add a continue button to return to the overworld/next scene
+func add_continue_button():
+	# Create a button
+	var continue_button = Button.new()
+	continue_button.text = "Continue"
+	continue_button.custom_minimum_size = Vector2(150, 50)
+	
+	# Position it in the center bottom of the screen
+	continue_button.anchor_left = 0.5
+	continue_button.anchor_top = 0.9
+	continue_button.anchor_right = 0.5
+	continue_button.anchor_bottom = 0.9
+	continue_button.offset_left = -75
+	continue_button.offset_top = -25
+	continue_button.offset_right = 75
+	continue_button.offset_bottom = 25
+	
+	# Connect its pressed signal
+	continue_button.connect("pressed", Callable(self, "_on_continue_button_pressed"))
+	
+	# Add it to the UI
+	get_node("/root/VitaChrome/UIRoot").add_child(continue_button)
+
+# Handle continue button press
+func _on_continue_button_pressed():
+	# Hide the button
+	get_node("/root/VitaChrome/UIRoot/Button").queue_free()
+	
+	# Implement transition to next scene or overworld
+	# This would depend on your game's structure
+	game_instructions.text = "Returning to overworld..."
+	
+	# For now, just reset the battle state
+	reset_all_cryptid_turns()
+	
+	# Show action menu again
+	action_selection_menu.show()
+	action_selection_menu.prompt_player_for_action()

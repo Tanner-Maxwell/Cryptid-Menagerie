@@ -1,4 +1,4 @@
-[gd_scene load_steps=146 format=4 uid="uid://citawmf1hj211"]
+[gd_scene load_steps=147 format=4 uid="uid://citawmf1hj211"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="1_2lacv"]
 [ext_resource type="Texture2D" uid="uid://bp3tbgcfeh5e5" path="res://Cryptid-Menagerie/assets/hex_grid.png" id="1_ot6rc"]
@@ -24,6 +24,7 @@
 [ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://swap_cryptid_slot.tscn" id="18_q6lla"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/selected_cards.gd" id="20_c4vra"]
 [ext_resource type="PackedScene" uid="uid://d154xbku5vvla" path="res://Cryptid-Menagerie/swap_cryptid_dialog.tscn" id="24_kvvei"]
+[ext_resource type="PackedScene" uid="uid://dwehis51bbln4" path="res://catch_dialog.tscn" id="25_ipf80"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_twunu"]
 texture = ExtResource("1_ot6rc")
@@ -130,7 +131,7 @@ strength = 10
 knowledge = 10
 willpower = 10
 dexterity = 100
-vigor = 8
+vigor = 30
 level = 1
 
 [sub_resource type="Resource" id="Resource_gil8w"]
@@ -183,7 +184,7 @@ strength = 10
 knowledge = 10
 willpower = 10
 dexterity = 56
-vigor = 8
+vigor = 30
 level = 3
 
 [sub_resource type="Resource" id="Resource_epu5x"]
@@ -306,7 +307,7 @@ strength = 10
 knowledge = 10
 willpower = 10
 dexterity = 16
-vigor = 8
+vigor = 30
 level = 1
 
 [sub_resource type="Resource" id="Resource_5288u"]
@@ -1131,6 +1132,8 @@ offset_left = 179.0
 offset_top = 56.0
 offset_right = 979.0
 offset_bottom = 587.0
+
+[node name="CatchDialog" parent="UIRoot" instance=ExtResource("25_ipf80")]
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(577, 330)

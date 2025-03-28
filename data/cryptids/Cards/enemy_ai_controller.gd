@@ -232,6 +232,7 @@ func take_enemy_turn(enemy_cryptid):
 func show_end_turn_button_for_enemy():
 	print("AI: Showing end turn button for enemy")
 	
+	tile_map_layer.verify_grid_state()
 	# Get the action menu
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu:
@@ -517,11 +518,11 @@ func find_move_to_attack(enemy_cryptid):
 				# Skip hexes that are already occupied
 				var occupied = false
 				for cryptid in tile_map_layer.all_cryptids_in_play:
-					if tile_map_layer.local_to_map(cryptid.position) == walkable_hex:
+					if tile_map_layer.local_to_map(cryptid.position) == Vector2i(walkable_hex):
 						occupied = true
 						break
 				
-				if occupied or walkable_hex == player_pos:
+				if occupied or Vector2i(walkable_hex) == player_pos:
 					continue
 				
 				# Calculate if we can reach this position
@@ -713,7 +714,7 @@ func find_retreat_position(enemy_cryptid):
 			# Skip hexes that are already occupied
 			var occupied = false
 			for cryptid in tile_map_layer.all_cryptids_in_play:
-				if tile_map_layer.local_to_map(cryptid.position) == walkable_hex:
+				if tile_map_layer.local_to_map(cryptid.position) == Vector2i(walkable_hex):
 					occupied = true
 					break
 			

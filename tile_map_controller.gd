@@ -81,14 +81,6 @@ func _ready():
 	# Call this at the end of _ready() to set up initial debug display
 	call_deferred("setup_debug_display")
 	
-	var grid_check_timer = Timer.new()
-	grid_check_timer.name = "GridStateVerifier"
-	grid_check_timer.wait_time = 5.0  # Check every 5 seconds
-	grid_check_timer.autostart = true
-	grid_check_timer.one_shot = false
-	grid_check_timer.timeout.connect(verify_grid_state)
-	add_child(grid_check_timer)
-	
 
 func _process(delta):
 	# Only handle mouse motion during player turns, not during AI turns
@@ -293,7 +285,7 @@ func handle_move_action(pos_clicked):
 				for action in card_dialog.card_resource.top_move.actions:
 					if action.action_types == [0]:
 						# Verify the move is actually changing position
-						var new_position = pos_clicked
+						var new_position = Vector2i(pos_clicked)
 						move_performed = (original_position != new_position)
 						
 						if move_performed:
@@ -2437,34 +2429,83 @@ func cleanup_failed_move_target(target_pos):
 	else:
 		print("Target point was not disabled, no cleanup needed")
 
-# Function to verify and fix A* grid state
 func verify_grid_state():
 	print("Verifying A* grid state...")
 	var fixed_count = 0
 	
-	# Verify each hex corresponds to the correct state
-	for i in range(walkable_hexes.size()):
-		var hex_pos = walkable_hexes[i]
-		var point = a_star_hex_grid.get_closest_point(hex_pos, true)
+	# First, gather all positions occupied by cryptids
+	var occupied_positions = []
+	var active_cryptid_position = null
+	
+	# Get the currently selected cryptid's position
+	var selected = currently_selected_cryptid()
+	if selected and is_instance_valid(selected):
+		active_cryptid_position = local_to_map(selected.position)
+		print("Active cryptid position: ", active_cryptid_position)
+	
+	# Get all other occupied positions
+	for cryptid in all_cryptids_in_play:
+		if is_instance_valid(cryptid):
+			var pos = local_to_map(cryptid.position)
+			# Don't include the active cryptid's position
+			if active_cryptid_position == null or pos.x != active_cryptid_position.x or pos.y != active_cryptid_position.y:
+				occupied_positions.append(pos)
+				print("Position occupied by non-active cryptid: ", pos)
+	
+	# Check all points in the A* grid
+	for point_id in a_star_hex_grid.get_point_ids():
+		var hex_pos = a_star_hex_grid.get_point_position(point_id)
+		var is_point_disabled = a_star_hex_grid.is_point_disabled(point_id)
 		
-		# Check if the point is disabled
-		if a_star_hex_grid.is_point_disabled(point):
-			# Check if there's a cryptid occupying this position
-			var is_occupied = false
-			for cryptid in all_cryptids_in_play:
-				if local_to_map(cryptid.position) == hex_pos:
-					is_occupied = true
-					break
+		# Check if this is the active cryptid's position
+		var is_active_position = false
+		if active_cryptid_position and hex_pos.x == active_cryptid_position.x and hex_pos.y == active_cryptid_position.y:
+			is_active_position = true
+		
+		# Check if this position is occupied by a non-active cryptid
+		var is_occupied = false
+		for occupied_pos in occupied_positions:
+			if hex_pos.x == occupied_pos.x and hex_pos.y == occupied_pos.y:
+				is_occupied = true
+				break
+		
+		# Handle active cryptid position - should always be enabled
+		if is_active_position and is_point_disabled:
+			print("Found active cryptid at disabled point ", hex_pos, " - enabling")
+			set_point_disabled(point_id, false)
 			
-			# If not occupied, this should be enabled
-			if not is_occupied:
-				print("Found incorrectly disabled point at", hex_pos, "- fixing")
-				set_point_disabled(point, false)
-				fixed_count += 1
+			# Ensure it's in walkable_hexes
+			if not hex_pos in walkable_hexes:
+				walkable_hexes.append(hex_pos)
+				print("Added active cryptid position to walkable_hexes: ", hex_pos)
+			
+			fixed_count += 1
+		# Handle other occupied positions - should be disabled
+		elif is_occupied and not is_point_disabled:
+			print("Found occupied but enabled point at ", hex_pos, " - disabling")
+			set_point_disabled(point_id, true)
+			
+			# Remove from walkable_hexes if present
+			if hex_pos in walkable_hexes:
+				walkable_hexes.erase(hex_pos)
+				print("Removed occupied position from walkable_hexes: ", hex_pos)
+			
+			fixed_count += 1
+		# Handle unoccupied positions - should be enabled
+		elif not is_occupied and not is_active_position and is_point_disabled:
+			print("Found incorrectly disabled point at ", hex_pos, " - fixing")
+			set_point_disabled(point_id, false)
+			
+			# Ensure it's in walkable_hexes
+			if not hex_pos in walkable_hexes:
+				walkable_hexes.append(hex_pos)
+				print("Added unoccupied position to walkable_hexes: ", hex_pos)
+			
+			fixed_count += 1
 	
 	# Report results
 	if fixed_count > 0:
-		print("Fixed", fixed_count, "incorrectly disabled grid points")
+		print("Fixed ", fixed_count, " grid points")
 	else:
 		print("Grid state verified - no issues found")
 	
