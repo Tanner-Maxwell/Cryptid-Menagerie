@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BiomeCryptids" load_steps=6 format=3 uid="uid://de8kc5kndqomo"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/biomes/biome_cryptids.gd" id="1_orgpb"]
+[ext_resource type="Resource" uid="uid://cdtvoobccjat8" path="res://Cryptid-Menagerie/data/cryptids/CryptidResources/peremalfait.tres" id="1_wkj41"]
+[ext_resource type="Resource" uid="uid://hpfrvp35j0va" path="res://Cryptid-Menagerie/data/cryptids/CryptidResources/barkbear.tres" id="2_3pn82"]
+[ext_resource type="Resource" uid="uid://dowpy6tkxy8fl" path="res://Cryptid-Menagerie/data/cryptids/CryptidResources/wendigo.tres" id="3_qhf2i"]
+[ext_resource type="Resource" uid="uid://br56bhx3ppp4w" path="res://Cryptid-Menagerie/data/cryptids/CryptidResources/glowfly.tres" id="4_np01c"]
+
+[resource]
+script = ExtResource("1_orgpb")
+biome_name = "Forest"
+cryptids = Array[Resource]([ExtResource("1_wkj41"), ExtResource("2_3pn82"), ExtResource("3_qhf2i"), ExtResource("4_np01c")])
+encounter_weights = Array[int]([60, 30, 10])

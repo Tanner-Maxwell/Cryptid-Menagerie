@@ -27,18 +27,18 @@ var is_trainer_battle: bool = false  # Default to wild battle
 var catch_dialog: PanelContainer = null
 
 
-enum GameState {
+enum BattleState {
 	PLAYER_TURN,
 	ENEMY_TURN,
 	GAMEOVER,
 	VICTORY
 }
 
-@onready var current_state: GameState = GameState.PLAYER_TURN
+@onready var current_state: BattleState = BattleState.PLAYER_TURN
 
 func _ready():
 	# Start with the player's turn when the game begins
-	transition(GameState.PLAYER_TURN)
+	transition(BattleState.PLAYER_TURN)
 	# Connect buttons to the respective functions
 	swap_button.connect("pressed", Callable(self, "_on_swap_button_pressed"))
 	rest_button.connect("pressed", Callable(self, "_on_rest_button_pressed"))
@@ -74,11 +74,11 @@ func _input(event):
 		print("F8 pressed, testing emergency swap")
 		test_emergency_swap()
 
-func transition(next_state: GameState):
+func transition(next_state: BattleState):
 	match current_state:
-		GameState.PLAYER_TURN:
+		BattleState.PLAYER_TURN:
 			start_player_turn()
-		GameState.ENEMY_TURN:
+		BattleState.ENEMY_TURN:
 			start_enemy_turn()
 		# Handle other states (GAMEOVER, VICTORY)
 	
@@ -702,7 +702,7 @@ func process_end_of_round():
 		turn_order.initialize_cryptid_labels()
 	
 	# Transition to a new round state
-	current_state = GameState.PLAYER_TURN
+	current_state = BattleState.PLAYER_TURN
 	hand.show()
 	
 
@@ -1630,23 +1630,33 @@ func _on_replace_cryptid_selected(replaced_cryptid, new_cryptid):
 	# End battle with victory
 	end_battle_with_victory()
 
-# End the battle with a victory
+# Call this when all enemy cryptids are defeated/caught
 func end_battle_with_victory():
 	print("Victory! Battle has ended.")
 	game_instructions.text = "Victory! Battle has ended."
 	
-	# Reset all cryptid states
-	reset_all_cryptid_turns()
+	# Get reference to the battle scene
+	var battle_scene = get_node("/root/VitaChrome")
 	
-	# Hide battle UI elements
-	action_selection_menu.hide()
+	# Check if battle_scene is actually our BattleScene class
+	if battle_scene and battle_scene.has_method("end_battle"):
+		battle_scene.end_battle(true)  # true means victory
+	else:
+		print("Warning: Couldn't find battle scene with end_battle method")
+		
+		# Fallback - create a button to return to map
+		var continue_button = Button.new()
+		continue_button.text = "Return to Map"
+		continue_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		continue_button.custom_minimum_size = Vector2(150, 50)
+		continue_button.position = Vector2(get_viewport_rect().size.x / 2 - 75, get_viewport_rect().size.y * 0.8)
+		continue_button.connect("pressed", Callable(self, "_on_return_to_map"))
+		get_node("/root/VitaChrome/UIRoot").add_child(continue_button)
 	
-	# Add a "continue" button to return to the overworld
-	add_continue_button()
-	
-	# Show a continue button or return to overworld
-	# This would depend on your game's structure
-# Function to initialize the catch dialog
+# Return to map button handler
+func _on_return_to_map():
+	get_tree().change_scene_to_file("res://Cryptid-Menagerie/scenes/overworld_map.tscn")
+
 func initialize_catch_dialog():
 	# Only initialize once
 	if catch_dialog != null:

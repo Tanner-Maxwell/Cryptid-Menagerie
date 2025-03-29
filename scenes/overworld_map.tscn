@@ -1,0 +1,179 @@
+[gd_scene load_steps=4 format=3 uid="uid://clrmrcm0igcl5"]
+
+[ext_resource type="Script" path="res://encounter_node.gd" id="1_fwvvd"]
+[ext_resource type="Script" path="res://overworld_map.gd" id="1_o0jxx"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/scenes/path_drawer.gd" id="2_fmvw5"]
+
+[node name="OverworldMap" type="Node2D"]
+script = ExtResource("1_o0jxx")
+
+[node name="BiomeBackground" type="Node2D" parent="."]
+
+[node name="ForestBackground" type="Sprite2D" parent="BiomeBackground"]
+
+[node name="VolcanoBackground" type="Sprite2D" parent="BiomeBackground"]
+
+[node name="BeachBackground" type="Sprite2D" parent="BiomeBackground"]
+
+[node name="EncounterNodes" type="Node2D" parent="."]
+
+[node name="StartNode" type="Button" parent="EncounterNodes"]
+offset_left = 40.0
+offset_top = 312.0
+offset_right = 48.0
+offset_bottom = 320.0
+script = ExtResource("1_fwvvd")
+encounter_type = ""
+node_id = "start_node"
+connected_nodes = Array[String](["forest_wild1", "forest_wild4"])
+
+[node name="ForestWild1" type="Button" parent="EncounterNodes"]
+offset_left = 148.0
+offset_top = 174.0
+offset_right = 156.0
+offset_bottom = 182.0
+script = ExtResource("1_fwvvd")
+node_id = "forest_wild1"
+connected_nodes = Array[String](["reward1"])
+
+[node name="Reward1" type="Button" parent="EncounterNodes"]
+offset_left = 295.0
+offset_top = 111.0
+offset_right = 303.0
+offset_bottom = 119.0
+script = ExtResource("1_fwvvd")
+encounter_type = ""
+node_id = "reward1"
+connected_nodes = Array[String](["forest_wild2"])
+
+[node name="ForestWild2" type="Button" parent="EncounterNodes"]
+offset_left = 461.0
+offset_top = 79.0
+offset_right = 469.0
+offset_bottom = 87.0
+script = ExtResource("1_fwvvd")
+node_id = "forest_wild2"
+connected_nodes = Array[String](["reward2"])
+
+[node name="Reward2" type="Button" parent="EncounterNodes"]
+offset_left = 635.0
+offset_top = 79.0
+offset_right = 643.0
+offset_bottom = 87.0
+script = ExtResource("1_fwvvd")
+encounter_type = ""
+node_id = "reward2"
+connected_nodes = Array[String](["forest_wild3"])
+
+[node name="ForestWild3" type="Button" parent="EncounterNodes"]
+offset_left = 792.0
+offset_top = 87.0
+offset_right = 800.0
+offset_bottom = 95.0
+script = ExtResource("1_fwvvd")
+node_id = "forest_wild3"
+connected_nodes = Array[String](["reward3"])
+
+[node name="Reward3" type="Button" parent="EncounterNodes"]
+offset_left = 928.0
+offset_top = 141.0
+offset_right = 936.0
+offset_bottom = 149.0
+script = ExtResource("1_fwvvd")
+encounter_type = ""
+node_id = "reward3"
+connected_nodes = Array[String](["rest1"])
+
+[node name="ForestWild4" type="Button" parent="EncounterNodes"]
+offset_left = 148.0
+offset_top = 455.0
+offset_right = 156.0
+offset_bottom = 463.0
+script = ExtResource("1_fwvvd")
+node_id = "forest_wild4"
+connected_nodes = Array[String](["reward4"])
+
+[node name="Reward4" type="Button" parent="EncounterNodes"]
+offset_left = 295.0
+offset_top = 562.0
+offset_right = 303.0
+offset_bottom = 570.0
+script = ExtResource("1_fwvvd")
+encounter_type = ""
+node_id = "reward4"
+connected_nodes = Array[String](["forest_wild5"])
+
+[node name="ForestWild5" type="Button" parent="EncounterNodes"]
+offset_left = 461.0
+offset_top = 585.0
+offset_right = 469.0
+offset_bottom = 593.0
+script = ExtResource("1_fwvvd")
+node_id = "forest_wild5"
+connected_nodes = Array[String](["reward5"])
+
+[node name="Reward5" type="Button" parent="EncounterNodes"]
+offset_left = 635.0
+offset_top = 585.0
+offset_right = 643.0
+offset_bottom = 593.0
+script = ExtResource("1_fwvvd")
+encounter_type = ""
+node_id = "reward5"
+connected_nodes = Array[String](["forest_wild6"])
+
+[node name="ForestWild6" type="Button" parent="EncounterNodes"]
+offset_left = 792.0
+offset_top = 585.0
+offset_right = 800.0
+offset_bottom = 593.0
+script = ExtResource("1_fwvvd")
+node_id = "forest_wild6"
+connected_nodes = Array[String](["reward6"])
+
+[node name="Reward6" type="Button" parent="EncounterNodes"]
+offset_left = 920.0
+offset_top = 534.0
+offset_right = 928.0
+offset_bottom = 542.0
+script = ExtResource("1_fwvvd")
+encounter_type = ""
+node_id = "reward6"
+connected_nodes = Array[String](["rest1"])
+
+[node name="Rest1" type="Button" parent="EncounterNodes"]
+offset_left = 972.0
+offset_top = 312.0
+offset_right = 980.0
+offset_bottom = 320.0
+script = ExtResource("1_fwvvd")
+encounter_type = ""
+node_id = "rest1"
+connected_nodes = Array[String](["trainer1"])
+
+[node name="ForestTrainer" type="Button" parent="EncounterNodes"]
+offset_left = 1096.0
+offset_top = 312.0
+offset_right = 1104.0
+offset_bottom = 320.0
+script = ExtResource("1_fwvvd")
+encounter_type = "trainer"
+trainer_id = "ryan"
+node_id = "trainer1"
+
+[node name="PathLines" type="Node2D" parent="."]
+script = ExtResource("2_fmvw5")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="FloorLabel" type="Label" parent="UI"]
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="TeamButton" type="Button" parent="UI"]
+offset_right = 8.0
+offset_bottom = 8.0
+
+[node name="BiomeLabel" type="Label" parent="UI"]
+offset_right = 40.0
+offset_bottom = 23.0
