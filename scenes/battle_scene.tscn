@@ -1,4 +1,4 @@
-[gd_scene load_steps=147 format=4 uid="uid://bpufc4uaek6r0"]
+[gd_scene load_steps=124 format=4 uid="uid://bpufc4uaek6r0"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/scenes/battle_scene.gd" id="1_q6ftd"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Cards/enemy_ai_controller.gd" id="2_ijliv"]
@@ -14,7 +14,6 @@
 [ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="12_rhrse"]
 [ext_resource type="PackedScene" uid="uid://bejk4igyv1d0e" path="res://Cryptid-Menagerie/assets/grove_starter_sprite.tscn" id="13_88uyl"]
 [ext_resource type="PackedScene" uid="uid://dqdftw8v1sq3c" path="res://Cryptid-Menagerie/assets/fire_turtle_sprite.tscn" id="14_w5ipm"]
-[ext_resource type="Resource" uid="uid://boav0u128li10" path="res://Cryptid-Menagerie/data/cryptids/fire_turtle.tres" id="15_rj7tq"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="16_h4cen"]
 [ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://swap_cryptid_slot.tscn" id="17_1k65k"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/ui_root.gd" id="18_nln6q"]
@@ -772,167 +771,6 @@ dexterity = 8
 vigor = 26
 level = 3
 
-[sub_resource type="Resource" id="Resource_q55uo"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_nrua0"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_wla03"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_a3wmq"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_pnolf"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_wfi7k"]
-load_path = "res://.godot/imported/icon.svg-2194ec2d4d4006ba4bc754876170d4ab.ctex"
-
-[sub_resource type="PackedScene" id="PackedScene_fb73x"]
-_bundled = {
-"conn_count": 0,
-"conns": PackedInt32Array(),
-"editable_instances": [],
-"names": PackedStringArray("FireTurtleSprite", "modulate", "scale", "texture", "Sprite2D"),
-"node_count": 1,
-"node_paths": [],
-"nodes": PackedInt32Array(-1, -1, 4, 0, -1, 3, 1, 0, 2, 1, 3, 2, 0),
-"variants": [Color(0.803922, 0.176471, 0, 1), Vector2(0.4, 0.4), ExtResource("12_rhrse")],
-"version": 3
-}
-
-[sub_resource type="Resource" id="Resource_b8npm"]
-script = ExtResource("8_0do2s")
-name = "Fire Turtle (enemy 3)"
-scene = SubResource("PackedScene_fb73x")
-icon = SubResource("CompressedTexture2D_wfi7k")
-deck = Array[ExtResource("9_kgicv")]([SubResource("Resource_q55uo"), SubResource("Resource_nrua0"), SubResource("Resource_wla03"), SubResource("Resource_a3wmq"), SubResource("Resource_pnolf")])
-discard = Array[ExtResource("9_kgicv")]([])
-completed_turn = false
-currently_selected = false
-top_card_played = false
-bottom_card_played = false
-strength = 10
-knowledge = 10
-willpower = 10
-dexterity = 98
-vigor = 12
-level = 3
-
-[sub_resource type="Resource" id="Resource_e1obd"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_dfuj6"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_ppra1"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_7itwi"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_8ka6i"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_cowd6"]
-load_path = "res://.godot/imported/icon.svg-2194ec2d4d4006ba4bc754876170d4ab.ctex"
-
-[sub_resource type="PackedScene" id="PackedScene_tpgo7"]
-_bundled = {
-"conn_count": 0,
-"conns": PackedInt32Array(),
-"editable_instances": [],
-"names": PackedStringArray("FireTurtleSprite", "modulate", "scale", "texture", "Sprite2D"),
-"node_count": 1,
-"node_paths": [],
-"nodes": PackedInt32Array(-1, -1, 4, 0, -1, 3, 1, 0, 2, 1, 3, 2, 0),
-"variants": [Color(0.803922, 0.176471, 0, 1), Vector2(0.4, 0.4), ExtResource("12_rhrse")],
-"version": 3
-}
-
-[sub_resource type="Resource" id="Resource_m1ovu"]
-script = ExtResource("8_0do2s")
-name = "Fire Turtle (enemy 2)"
-scene = SubResource("PackedScene_tpgo7")
-icon = SubResource("CompressedTexture2D_cowd6")
-deck = Array[ExtResource("9_kgicv")]([SubResource("Resource_e1obd"), SubResource("Resource_dfuj6"), SubResource("Resource_ppra1"), SubResource("Resource_7itwi"), SubResource("Resource_8ka6i")])
-discard = Array[ExtResource("9_kgicv")]([])
-completed_turn = false
-currently_selected = false
-top_card_played = false
-bottom_card_played = false
-strength = 10
-knowledge = 10
-willpower = 10
-dexterity = 6
-vigor = 6
-level = 3
-
-[sub_resource type="Resource" id="Resource_jvkdo"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_5tsfd"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_2h04o"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_sv7fr"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_axdsc"]
-script = ExtResource("9_kgicv")
-top_move = SubResource("Resource_atvuc")
-bottom_move = SubResource("Resource_2k767")
-
-[sub_resource type="Resource" id="Resource_stun3"]
-script = ExtResource("8_0do2s")
-name = "Fire Turtle (enemy 1)"
-scene = ExtResource("14_w5ipm")
-icon = ExtResource("12_rhrse")
-deck = Array[ExtResource("9_kgicv")]([SubResource("Resource_jvkdo"), SubResource("Resource_5tsfd"), SubResource("Resource_2h04o"), SubResource("Resource_sv7fr"), SubResource("Resource_axdsc")])
-discard = Array[ExtResource("9_kgicv")]([])
-completed_turn = false
-currently_selected = false
-top_card_played = false
-bottom_card_played = false
-strength = 10
-knowledge = 10
-willpower = 10
-dexterity = 18
-vigor = 12
-level = 3
-
 [sub_resource type="Theme" id="Theme_xmvd3"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_7qv3a"]
@@ -976,7 +814,6 @@ _content = Array[ExtResource("8_0do2s")]([SubResource("Resource_20ouo"), SubReso
 [node name="EnemyTeam" type="Node2D" parent="TileMapLayer" groups=["enemy"]]
 unique_name_in_owner = true
 script = ExtResource("7_k6cyo")
-_content = Array[ExtResource("8_0do2s")]([SubResource("Resource_b8npm"), SubResource("Resource_m1ovu"), SubResource("Resource_stun3"), ExtResource("15_rj7tq"), ExtResource("15_rj7tq"), ExtResource("15_rj7tq")])
 
 [node name="GameController" type="Node2D" parent="TileMapLayer"]
 unique_name_in_owner = true

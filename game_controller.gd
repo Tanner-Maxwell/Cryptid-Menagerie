@@ -1635,22 +1635,22 @@ func end_battle_with_victory():
 	print("Victory! Battle has ended.")
 	game_instructions.text = "Victory! Battle has ended."
 	
-	# Get reference to the battle scene
-	var battle_scene = get_node("/root/VitaChrome")
+	# Get the battle scene (parent of this script)
+	var battle_scene = get_tree().current_scene
 	
-	# Check if battle_scene is actually our BattleScene class
+	# Call the end_battle function to return to the overworld
 	if battle_scene and battle_scene.has_method("end_battle"):
+		print("Calling end_battle on battle scene")
 		battle_scene.end_battle(true)  # true means victory
 	else:
-		print("Warning: Couldn't find battle scene with end_battle method")
+		print("WARNING: Could not find battle scene's end_battle method")
 		
 		# Fallback - create a button to return to map
 		var continue_button = Button.new()
 		continue_button.text = "Return to Map"
-		continue_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		continue_button.custom_minimum_size = Vector2(150, 50)
 		continue_button.position = Vector2(get_viewport_rect().size.x / 2 - 75, get_viewport_rect().size.y * 0.8)
-		continue_button.connect("pressed", Callable(self, "_on_return_to_map"))
+		continue_button.connect("pressed", Callable(self, "_on_return_to_map_pressed"))
 		get_node("/root/VitaChrome/UIRoot").add_child(continue_button)
 	
 # Return to map button handler
@@ -1821,3 +1821,8 @@ func _on_test_button_pressed():
 			print("TEST: Failed to get player team")
 	else:
 		print("TEST: Failed to initialize catch dialog")
+
+
+# Add this fallback function
+func _on_return_to_map_pressed():
+	get_tree().change_scene_to_file("res://Cryptid-Menagerie/scenes/overworld_map.tscn")

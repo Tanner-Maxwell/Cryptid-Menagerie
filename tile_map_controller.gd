@@ -16,7 +16,6 @@ const MAIN_ATLAS_ID = 0
 var debug_indicators = {}  # Dictionary to track all debug indicators by point ID
 var debug_enabled = true   # Toggle for the debug display
 
-
 @onready var player_team = %PlayerTeam
 @onready var enemy_team = %EnemyTeam
 @onready var player_starting_positions = [Vector2i(-4, -1), Vector2i(-2, 1), Vector2i(0, 1)]
@@ -55,9 +54,12 @@ func _ready():
 	create_hex_map_a_star(cur_position)
 	show_coordinates_label(cur_position)
 	
-	#Place player and enemy teams on map
+	##Place player and enemy teams on map
+	#player_cryptids_in_play = initialize_starting_positions(player_starting_positions, player_team)
+	#enemy_cryptids_in_play = initialize_starting_positions(enemy_starting_positions, enemy_team)
+	
 	player_cryptids_in_play = initialize_starting_positions(player_starting_positions, player_team)
-	enemy_cryptids_in_play = initialize_starting_positions(enemy_starting_positions, enemy_team)
+	
 	all_cryptids_in_play.append_array(player_cryptids_in_play)
 	all_cryptids_in_play.append_array(enemy_cryptids_in_play)
 	print(all_cryptids_in_play)
@@ -99,21 +101,53 @@ func _process(delta):
 		update_all_debug_indicators()
 
 #Place player and enemy teams on map
-func initialize_starting_positions(starting_positions : Array, team):
+func initialize_starting_positions(starting_positions: Array, team, specific_cryptids = null):
 	var cryptids_in_play = []
-	for positions in starting_positions:
-		var cryptid
-		cryptid = blank_cryptid.instantiate()
-		cryptid.cryptid = team._content[cryptids_in_play.size()]
+	
+	# Determine how many cryptids to place
+	var cryptid_count = 0
+	if specific_cryptids != null:
+		# Use specific cryptids array if provided
+		cryptid_count = specific_cryptids.size()
+	elif team._content != null:
+		# Otherwise use team content, but limit to available positions
+		cryptid_count = min(team._content.size(), starting_positions.size())
+	else:
+		# No cryptids available
+		return cryptids_in_play
+	
+	print("Initializing", cryptid_count, "cryptids")
+	
+	# Place each cryptid
+	for i in range(cryptid_count):
+		var cryptid = blank_cryptid.instantiate()
+		
+		# Use provided cryptids if available, otherwise use team content
+		if specific_cryptids != null and i < specific_cryptids.size():
+			cryptid.cryptid = specific_cryptids[i]
+		elif team._content != null and i < team._content.size():
+			cryptid.cryptid = team._content[i]
+		else:
+			print("Warning: Not enough cryptids available")
+			break
+			
 		team.add_child(cryptid)
 		
-		cryptid.position = map_to_local(starting_positions[cryptids_in_play.size()])
+		# Set position
+		if i < starting_positions.size():
+			cryptid.position = map_to_local(starting_positions[i])
+		else:
+			print("Warning: Not enough starting positions")
+			# Use first position as fallback
+			cryptid.position = map_to_local(starting_positions[0])
+			
 		cryptid.hand = %Hand
 		cryptids_in_play.append(cryptid)
 		
-		# Use our debug-enabled function instead of directly calling A*
-		var point = a_star_hex_grid.get_closest_point(positions, true)
-		a_star_hex_grid.set_point_disabled(point, true)  # Use our wrapper function
+		# Mark position as occupied in A* grid
+		var point = a_star_hex_grid.get_closest_point(starting_positions[i], true)
+		a_star_hex_grid.set_point_disabled(point, true)
+	
 	return cryptids_in_play
 
 # Add a helper function to update all debug indicators
@@ -1281,7 +1315,10 @@ func handle_cryptid_defeat(defeated_cryptid):
 	elif defeated_cryptid in enemy_cryptids_in_play:
 		print("Removing defeated enemy cryptid from enemy_cryptids_in_play:", defeated_cryptid.cryptid.name)
 		enemy_cryptids_in_play.erase(defeated_cryptid)
-	
+		print("Enemy defeated! Remaining enemies: " + str(enemy_cryptids_in_play.size()))
+		if enemy_cryptids_in_play.size() == 0:
+			print("All enemies defeated! Triggering victory")
+			game_controller.end_battle_with_victory()
 	# Also remove from all_cryptids_in_play
 	if defeated_cryptid in all_cryptids_in_play:
 		print("Removing defeated cryptid from all_cryptids_in_play:", defeated_cryptid.cryptid.name)
