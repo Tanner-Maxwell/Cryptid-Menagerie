@@ -11,10 +11,17 @@ var encounter_data = null
 
 # Called when the node enters the scene tree
 func _ready():
-	# Any initialization from your main.gd that you want to keep
-	
-	# Set default battle type (wild battle where catching is allowed)
-	game_controller.is_trainer_battle = false
+	# Make sure critical references are set first
+	tile_map_layer = $TileMapLayer
+	game_controller = $TileMapLayer/GameController
+	game_instructions = $UIRoot/GameInstructions
+	if "initialize_player_team_with_test_cryptids" in GameState:
+		GameState.initialize_player_team_with_test_cryptids()
+	# Ensure tile_map_layer has a selected_cryptid
+	if tile_map_layer and tile_map_layer.get("selected_cryptid") == null:
+		# Initialize with a default value if needed
+		print("No selected_cryptid found, initializing with default")
+		tile_map_layer.selected_cryptid = null
 	
 	# Retrieve encounter data from GameState
 	if "current_encounter" in GameState and GameState.current_encounter != null:
@@ -28,9 +35,6 @@ func _ready():
 
 # Set up the battle based on encounter data
 func setup_encounter():
-	# Clear any existing cryptids first
-	clear_existing_cryptids()
-	
 	# Determine if this is a wild encounter
 	is_wild_encounter = encounter_data.has("is_wild_encounter") and encounter_data.is_wild_encounter
 	
@@ -42,8 +46,8 @@ func setup_encounter():
 	if encounter_data.has("cryptids") and encounter_data.cryptids.size() > 0:
 		spawn_enemy_cryptids(encounter_data.cryptids)
 		
-		# Limit player cryptids to match enemy count
-		limit_player_cryptids(encounter_data.cryptids.size())
+		# Set up player cryptids to match enemy count
+		setup_player_cryptids(encounter_data.cryptids.size())
 	
 	# Update UI elements
 	if game_instructions:
@@ -51,43 +55,57 @@ func setup_encounter():
 			game_instructions.text = "A wild encounter has appeared in the " + encounter_data.biome + "!"
 		else:
 			game_instructions.text = "Trainer battle!"
-	
-	# Make sure the turn order is updated
+			
+	# Sort cryptids by speed
 	if tile_map_layer:
 		tile_map_layer.sort_cryptids_by_speed(tile_map_layer.all_cryptids_in_play)
 		
-	# Update turn order UI
+	# Initialize the turn order display
 	var turn_order = $UIRoot/TurnOrder
 	if turn_order and turn_order.has_method("initialize_cryptid_labels"):
 		turn_order.initialize_cryptid_labels()
 	
-	# Initialize the first cryptid's turn
-	initialize_first_cryptid_turn()
+	# Initialize the first player cryptid as selected
+	initialize_first_player_cryptid()
+	
+	# Set up the action menu
+	var action_menu = $UIRoot/ActionSelectMenu
+	if action_menu and action_menu.has_method("prompt_player_for_action"):
+		action_menu.prompt_player_for_action()
+	
+	## Initialize the first cryptid's turn
+	#initialize_first_cryptid_turn()
 # Spawn enemy cryptids based on encounter data
 func spawn_enemy_cryptids(cryptids):
 	# Get references to necessary nodes
 	var enemy_team = $TileMapLayer/EnemyTeam
-	var tile_map_layer = $TileMapLayer
 	
 	if !enemy_team or !tile_map_layer:
-		print("Error: Could not find enemy team or tile map layer")
+		print("Error: Required nodes not found")
 		return
 	
-	print("Spawning", cryptids.size(), "enemy cryptids")
+	# Clear any existing enemy cryptids first
+	for child in enemy_team.get_children():
+		if child.has_method("set_health_values"):  # Identify cryptid nodes
+			if tile_map_layer.enemy_cryptids_in_play.has(child):
+				tile_map_layer.enemy_cryptids_in_play.erase(child)
+			if tile_map_layer.all_cryptids_in_play.has(child):
+				tile_map_layer.all_cryptids_in_play.erase(child)
+			enemy_team.remove_child(child)
+			child.queue_free()
 	
-	# Use the existing initialize_starting_positions function with our wild cryptids
-	tile_map_layer.enemy_cryptids_in_play = tile_map_layer.initialize_starting_positions(
+	# Use the modified initialize_starting_positions function with our wild cryptids
+	var spawned_cryptids = tile_map_layer.initialize_starting_positions(
 		tile_map_layer.enemy_starting_positions, 
 		enemy_team,
 		cryptids
 	)
 	
-	# Update all_cryptids_in_play to include these new cryptids
-	for cryptid in tile_map_layer.enemy_cryptids_in_play:
-		tile_map_layer.all_cryptids_in_play.append(cryptid)
-	
-	# Sort by speed
-	tile_map_layer.sort_cryptids_by_speed(tile_map_layer.all_cryptids_in_play)
+	# Update tracking arrays
+	tile_map_layer.enemy_cryptids_in_play = spawned_cryptids
+	for cryptid in spawned_cryptids:
+		if !tile_map_layer.all_cryptids_in_play.has(cryptid):
+			tile_map_layer.all_cryptids_in_play.append(cryptid)
 
 # End battle and return to overworld
 func end_battle(was_victorious = true):
@@ -193,3 +211,123 @@ func initialize_first_cryptid_turn():
 			# Initialize game controller
 			if game_controller and game_controller.has_method("setup_cryptid_turn"):
 				game_controller.setup_cryptid_turn(first_cryptid.cryptid)
+
+func reset_battle_state():
+	# Reset all critical variables to safe defaults
+	if tile_map_layer:
+		tile_map_layer.selected_cryptid = null
+		tile_map_layer.enemy_cryptids_in_play.clear()
+		tile_map_layer.player_cryptids_in_play.clear()
+		tile_map_layer.all_cryptids_in_play.clear()
+		
+		# Reset action flags
+		tile_map_layer.move_action_bool = false
+		tile_map_layer.attack_action_bool = false
+		
+		# Reset any other tile_map_layer state
+		if tile_map_layer.has_method("reset_for_new_cryptid"):
+			tile_map_layer.reset_for_new_cryptid()
+
+func setup_player_cryptids(num_enemies):
+	print("Setting up player cryptids to match", num_enemies, "enemies")
+	
+	# Get references to necessary nodes
+	var player_team_node = $TileMapLayer/PlayerTeam
+	var tile_map_layer = $TileMapLayer
+	
+	if !player_team_node || !tile_map_layer:
+		print("Error: Required nodes not found for player setup")
+		return
+	
+	# Clear existing player cryptids
+	for child in player_team_node.get_children():
+		# Skip nodes that aren't cryptids (like labels)
+		if !child.has_method("set_health_values"):
+			continue
+			
+		# Remove from tracking arrays before removing from scene
+		if tile_map_layer.player_cryptids_in_play.has(child):
+			tile_map_layer.player_cryptids_in_play.erase(child)
+		if tile_map_layer.all_cryptids_in_play.has(child):
+			tile_map_layer.all_cryptids_in_play.erase(child)
+			
+		# Remove from scene
+		player_team_node.remove_child(child)
+		child.queue_free()
+	
+	# Reset player cryptids array
+	tile_map_layer.player_cryptids_in_play.clear()
+	
+	# Get the player's team from GameState
+	var player_cryptids = []
+	if GameState.player_team:
+		if GameState.player_team.has_method("get_cryptids"):
+			player_cryptids = GameState.player_team.get_cryptids()
+		elif "_content" in GameState.player_team:
+			player_cryptids = GameState.player_team._content
+			
+		print("Got", player_cryptids.size(), "cryptids from GameState:")
+		for cryptid in player_cryptids:
+			print("- ", cryptid.name)
+	else:
+		print("WARNING: No player team found in GameState")
+		return
+	
+	# Limit to the number of enemies
+	var count = min(num_enemies, player_cryptids.size())
+	print("Using", count, "player cryptids for this battle")
+	
+	# Create and position player cryptids
+	for i in range(count):
+		# Skip if we've run out of available positions
+		if i >= tile_map_layer.player_starting_positions.size():
+			print("WARNING: Not enough starting positions for all player cryptids")
+			break
+			
+		var cryptid_resource = player_cryptids[i]
+		print("Spawning player cryptid:", cryptid_resource.name)
+		
+		# Create the cryptid instance
+		var blank_cryptid = tile_map_layer.blank_cryptid.instantiate()
+		blank_cryptid.cryptid = cryptid_resource
+		blank_cryptid.hand = $UIRoot/Hand
+		
+		# Position it
+		var pos = tile_map_layer.player_starting_positions[i]
+		blank_cryptid.position = tile_map_layer.map_to_local(pos)
+		
+		# Add to scene
+		player_team_node.add_child(blank_cryptid)
+		
+		# Add to tracking arrays
+		tile_map_layer.player_cryptids_in_play.append(blank_cryptid)
+		tile_map_layer.all_cryptids_in_play.append(blank_cryptid)
+	
+	# First cryptid should be selected initially
+	if tile_map_layer.player_cryptids_in_play.size() > 0:
+		tile_map_layer.player_cryptids_in_play[0].cryptid.currently_selected = true
+
+	if GameState:
+		GameState.debug_player_team()
+
+func initialize_first_player_cryptid():
+	var tile_map_layer = $TileMapLayer
+	
+	if tile_map_layer and tile_map_layer.player_cryptids_in_play.size() > 0:
+		# Get the first player cryptid
+		var first_cryptid_node = tile_map_layer.player_cryptids_in_play[0]
+		var first_cryptid = first_cryptid_node.cryptid
+		
+		# Set it as the selected cryptid
+		tile_map_layer.selected_cryptid = first_cryptid_node
+		first_cryptid.currently_selected = true
+		
+		print("Initialized", first_cryptid.name, "as selected cryptid")
+		
+		# Initialize the hand with this cryptid's cards
+		var hand = $UIRoot/Hand
+		if hand and hand.has_method("switch_cryptid_deck"):
+			hand.switch_cryptid_deck(first_cryptid)
+			print("Initialized hand with", first_cryptid.name, "cards")
+		else:
+			print("ERROR: Could not initialize hand with cryptid cards")

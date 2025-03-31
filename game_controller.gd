@@ -1195,16 +1195,19 @@ func prompt_swap_cryptid():
 	
 	game_instructions.text = "Select a cryptid to swap to"
 	
-	# Find the swap dialog if we haven't cached it yet
-	var swap_dialog_node = get_node_or_null("SwapCryptidDialog")
-	if not swap_dialog_node:
-		swap_dialog_node = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
-	if not swap_dialog_node:
-		swap_dialog_node = get_node_or_null("/root/VitaChrome/SwapCryptidDialog")
-	
+	# Find the swap dialog
+	var swap_dialog_node = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
 	if not swap_dialog_node:
 		print("ERROR: Could not find SwapCryptidDialog!")
 		game_instructions.text = "Error: Swap dialog not found!"
+		action_selection_menu.prompt_player_for_action()
+		return
+	
+	# Get the tile_map_layer reference
+	var tile_map_layer = get_node_or_null("/root/VitaChrome/TileMapLayer")
+	if !tile_map_layer:
+		print("ERROR: TileMapLayer not found!")
+		game_instructions.text = "Error: TileMapLayer not found!"
 		action_selection_menu.prompt_player_for_action()
 		return
 	
@@ -1212,157 +1215,96 @@ func prompt_swap_cryptid():
 	var current_cryptid = hand.selected_cryptid
 	
 	# Mark cryptid as having used its actions
-	if hand.selected_cryptid:
-		hand.selected_cryptid.top_card_played = true
-		hand.selected_cryptid.bottom_card_played = true
+	if current_cryptid:
+		current_cryptid.top_card_played = true
+		current_cryptid.bottom_card_played = true
+	
+		# Create a team from GameState for the swap dialog
+		var temp_team = Team.new()
 		
-		# Show the swap dialog with our team data
-		# Build the filtered team of valid cryptids for swapping
-		var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
-		if player_team_node:
-			# Get all cryptids from the team
-			var all_cryptids = []
-			
-			if player_team_node.has_method("get_cryptids"):
-				all_cryptids = player_team_node.get_cryptids()
-			elif player_team_node.get("_content") != null:
-				all_cryptids = player_team_node._content.duplicate()
-			elif player_team_node.get("cryptidTeam") != null:
-				var team = player_team_node.cryptidTeam
-				if team.has_method("get_cryptids"):
-					all_cryptids = team.get_cryptids()
-				elif team.get("_content") != null:
-					all_cryptids = team._content.duplicate()
-			
-			print("Found", all_cryptids.size(), "cryptids in team")
-			
-			# Filter out defeated cryptids
-			var valid_cryptids = []
-			for cryptid in all_cryptids:
-				if cryptid == null:
-					continue
-					
-				var is_defeated = false
+		# Get all cryptids from GameState
+		var all_cryptids = []
+		if GameState.player_team:
+			if GameState.player_team.has_method("get_cryptids"):
+				all_cryptids = GameState.player_team.get_cryptids()
+			elif "_content" in GameState.player_team:
+				all_cryptids = GameState.player_team._content
 				
-				# Check against all sources of defeated cryptids
-				if defeated_cryptids.has(cryptid.name):
-					print("Filtering out defeated cryptid:", cryptid.name)
-					is_defeated = true
-					
-				if !is_defeated && GameController.globally_defeated_cryptids.has(cryptid.name):
-					print("Filtering out globally defeated cryptid:", cryptid.name)
-					is_defeated = true
-					
-				if !is_defeated && Engine.has_singleton("DefeatedCryptidsTracker"):
-					var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
-					if tracker.is_defeated(cryptid.name):
-						print("Filtering out singleton-tracked defeated cryptid:", cryptid.name)
-						is_defeated = true
-						
-				# Also check the swap dialog's static list if available
-				if !is_defeated && "all_defeated_cryptids" in swap_dialog_node && swap_dialog_node.all_defeated_cryptids.has(cryptid.name):
-					print("Filtering out dialog-tracked defeated cryptid:", cryptid.name)
-					is_defeated = true
-				
-				# Keep if not defeated
-				if !is_defeated:
-					valid_cryptids.append(cryptid)
-					print("Keeping valid cryptid:", cryptid.name)
-			
-			# Create a temporary team with the filtered cryptids
-			var temp_team = Team.new()
-			for cryptid in valid_cryptids:
+			print("Found", all_cryptids.size(), "cryptids in GameState")
+		
+		# Get names of cryptids in play
+		var in_play_names = []
+		for cryptid_node in tile_map_layer.player_cryptids_in_play:
+			if cryptid_node.cryptid:
+				in_play_names.append(cryptid_node.cryptid.name)
+		
+		# Add only bench cryptids to temp team
+		for cryptid in all_cryptids:
+			if cryptid.name not in in_play_names or cryptid == current_cryptid:
 				temp_team.add_cryptid(cryptid)
-			
-			# Double-check we have available cryptids after filtering
-			var bench_cryptids = 0
-			for cryptid in valid_cryptids:
-				# Skip if on battlefield already
-				var on_battlefield = false
-				for cryptid_node in tile_map_layer.player_cryptids_in_play:
-					if cryptid_node.cryptid == cryptid:
-						on_battlefield = true
-						break
-						
-				if !on_battlefield:
-					bench_cryptids += 1
-			
-			if bench_cryptids == 0:
-				print("No bench cryptids available after filtering - preventing swap")
-				game_instructions.text = "No cryptids available for swap!"
-				action_selection_menu.prompt_player_for_action()
-				return
-			
-			print("Opening swap dialog with", temp_team.get_cryptids().size(), "valid cryptids")
-			
-			# Open the dialog with the filtered team
-			swap_dialog_node.open(temp_team, current_cryptid, tile_map_layer.player_cryptids_in_play)
-			
-			# Connect to the dialog's signal if not already connected
-			if not swap_dialog_node.is_connected("cryptid_selected", Callable(self, "_on_swap_cryptid_selected")):
-				swap_dialog_node.connect("cryptid_selected", Callable(self, "_on_swap_cryptid_selected"))
-			
-			# Update the UI to show only end turn button
-			action_selection_menu.show_end_turn_only()
-		else:
-			print("ERROR: PlayerTeam node not found!")
-			game_instructions.text = "Error: Player team not found!"
-			action_selection_menu.prompt_player_for_action()
+				print("Added to swap options:", cryptid.name)
+		
+		# Open the swap dialog
+		swap_dialog_node.open(temp_team, current_cryptid, tile_map_layer.player_cryptids_in_play)
+		
+		# Connect to the dialog's signal if not already connected
+		if not swap_dialog_node.is_connected("cryptid_selected", Callable(self, "_on_swap_cryptid_selected")):
+			swap_dialog_node.connect("cryptid_selected", Callable(self, "_on_swap_cryptid_selected"))
+		
+		# Update the UI to show only end turn button
+		action_selection_menu.show_end_turn_only()
+	else:
+		print("ERROR: No selected cryptid found")
+		game_instructions.text = "Error: No selected cryptid!"
+		action_selection_menu.prompt_player_for_action()
 
 # Add the helper function to check if bench cryptids are available
 func has_bench_cryptids():
-	# Get the player team
-	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
-	if player_team_node:
-		# Count valid cryptids (not defeated)
-		var valid_cryptids = 0
-		var cryptids = []
-		
-		if player_team_node.has_method("get_cryptids"):
-			cryptids = player_team_node.get_cryptids()
-		elif player_team_node.get("_content") != null:
-			cryptids = player_team_node._content
-		elif player_team_node.get("cryptidTeam") != null:
-			var team = player_team_node.cryptidTeam
-			if team.has_method("get_cryptids"):
-				cryptids = team.get_cryptids()
-			elif team.get("_content") != null:
-				cryptids = team._content
-		
-		# Check for valid cryptids (not on battlefield and not defeated)
-		for cryptid in cryptids:
-			if cryptid == null:
-				continue
-			
-			# Skip if defeated
-			var is_defeated = false
-			if defeated_cryptids.has(cryptid.name):
-				is_defeated = true
-			elif GameController.globally_defeated_cryptids.has(cryptid.name):
-				is_defeated = true
-			elif Engine.has_singleton("DefeatedCryptidsTracker"):
-				var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
-				if tracker.is_defeated(cryptid.name):
-					is_defeated = true
-			
-			if !is_defeated:
-				# Check if this cryptid is already on the battlefield
-				var on_battlefield = false
-				for cryptid_node in tile_map_layer.player_cryptids_in_play:
-					if cryptid_node.cryptid.name == cryptid.name:
-						on_battlefield = true
-						break
-				
-				if !on_battlefield:
-					valid_cryptids += 1
-		
-		print("Found", valid_cryptids, "valid bench cryptids")
-		
-		# Must have at least one bench cryptid
-		return valid_cryptids > 0
+	print("Checking for bench cryptids...")
 	
-	# Default to false if we couldn't determine
-	return false
+	# Get the tile_map_layer reference
+	var tile_map_layer = get_node_or_null("/root/VitaChrome/TileMapLayer")
+	if !tile_map_layer:
+		print("TileMapLayer not found!")
+		return false
+	
+	# Get total cryptids from GameState
+	var all_cryptids = []
+	if GameState.player_team:
+		if GameState.player_team.has_method("get_cryptids"):
+			all_cryptids = GameState.player_team.get_cryptids()
+		elif "_content" in GameState.player_team:
+			all_cryptids = GameState.player_team._content
+		
+		print("Total cryptids in GameState:", all_cryptids.size())
+		for cryptid in all_cryptids:
+			print("- Team cryptid:", cryptid.name)
+	else:
+		print("No player team in GameState")
+		return false
+	
+	# Get cryptids currently in play
+	var in_play_cryptids = []
+	for cryptid_node in tile_map_layer.player_cryptids_in_play:
+		if cryptid_node and cryptid_node.cryptid:
+			in_play_cryptids.append(cryptid_node.cryptid)
+			print("- In play:", cryptid_node.cryptid.name)
+	
+	# Find bench cryptids by name comparison (safer than object comparison)
+	var bench_cryptids = []
+	for team_cryptid in all_cryptids:
+		var is_in_play = false
+		for play_cryptid in in_play_cryptids:
+			if team_cryptid.name == play_cryptid.name:
+				is_in_play = true
+				break
+		
+		if !is_in_play:
+			bench_cryptids.append(team_cryptid)
+			print("- Found bench cryptid:", team_cryptid.name)
+	
+	print("Total bench cryptids:", bench_cryptids.size())
+	return bench_cryptids.size() > 0
 		
 func restore_cards_from_discard(cryptid: Cryptid):
 	print("Restoring cards from discard for:", cryptid.name)
@@ -1473,42 +1415,42 @@ func attempt_catch(target_cryptid, catch_probability):
 
 # Handle a successful catch
 func handle_successful_catch(target_cryptid):
-	print("Successfully caught ", target_cryptid.cryptid.name)
+	print("Successfully caught " + target_cryptid.cryptid.name + "!")
 	game_instructions.text = "You caught " + target_cryptid.cryptid.name + "!"
 	
-	# Get a reference to the caught cryptid's data
-	var caught_cryptid = target_cryptid.cryptid
-	
-	# Check if player team has space
-	var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
-	var has_space = true
-	
-	if player_team_node:
-		if player_team_node.has_method("has_space"):
-			has_space = player_team_node.has_space()
-		else:
-			# Count cryptids manually
-			var cryptid_count = 0
-			if player_team_node.has_method("get_cryptids"):
-				cryptid_count = player_team_node.get_cryptids().size()
-			elif player_team_node.get("_content") != null:
-				cryptid_count = player_team_node._content.size()
-			elif player_team_node.get("cryptidTeam") != null:
-				var team = player_team_node.cryptidTeam
-				if team.has_method("get_cryptids"):
-					cryptid_count = team.get_cryptids().size()
-				elif team.get("_content") != null:
-					cryptid_count = team._content.size()
-			
-			has_space = cryptid_count < Team.MAX_TEAM_SIZE
+	# Create a duplicate of the cryptid to add to player's team
+	var caught_cryptid = target_cryptid.cryptid.duplicate()
+	print("Created duplicate of caught cryptid:", caught_cryptid.name)
 	
 	# Store current health and other state in the cryptid
 	preserve_cryptid_state(target_cryptid)
 	
-	# If there's space, add directly to team
+	# Add directly to GameState player team
+	if GameState.player_team:
+		if GameState.player_team.has_method("add_cryptid"):
+			GameState.player_team.add_cryptid(caught_cryptid)
+			print("DIRECT ADD: Added " + caught_cryptid.name + " to player team")
+		elif "_content" in GameState.player_team:
+			# Direct array access as fallback
+			GameState.player_team._content.append(caught_cryptid)
+			print("DIRECT ADD via _content: Added " + caught_cryptid.name + " to player team")
+	else:
+		print("ERROR: GameState.player_team is null")
+		GameState.player_team = Team.new()
+		GameState.player_team.add_cryptid(caught_cryptid)
+		print("Created new team and added " + caught_cryptid.name)
+	
+	# Debug team after adding
+	if GameState:
+		GameState.debug_player_team()
+	
+	# Check if there's space in the team
+	var has_space = true
+	if GameState.player_team && GameState.player_team.has_method("has_space"):
+		has_space = GameState.player_team.has_space()
+	
+	# If there's space, we're done
 	if has_space:
-		add_cryptid_to_team(caught_cryptid)
-		
 		# Remove the caught cryptid from the enemy team
 		remove_cryptid_from_enemy_team(target_cryptid)
 		
@@ -1551,36 +1493,41 @@ func add_cryptid_to_team(cryptid):
 func prompt_replace_cryptid(new_cryptid, original_cryptid_node):
 	print("Team is full - showing replacement dialog")
 	
+	# Debug the team state
+	if GameState:
+		GameState.debug_player_team()
+	
 	# Make sure catch dialog is initialized
 	initialize_catch_dialog()
 	
 	if catch_dialog:
-		# Build the player's team
-		var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
+		# Build the player's team from GameState (not local reference)
 		var player_team = Team.new()
 		
-		if player_team_node:
-			if player_team_node.has_method("get_cryptids"):
-				var cryptids = player_team_node.get_cryptids()
-				for cryptid in cryptids:
-					player_team.add_cryptid(cryptid)
-			elif player_team_node.get("_content") != null:
-				for cryptid in player_team_node._content:
-					player_team.add_cryptid(cryptid)
-			elif player_team_node.get("cryptidTeam") != null:
-				var team = player_team_node.cryptidTeam
-				if team.has_method("get_cryptids"):
-					var cryptids = team.get_cryptids()
-					for cryptid in cryptids:
-						player_team.add_cryptid(cryptid)
+		if GameState.player_team:
+			var team_cryptids = []
+			if GameState.player_team.has_method("get_cryptids"):
+				team_cryptids = GameState.player_team.get_cryptids()
+			elif "_content" in GameState.player_team:
+				team_cryptids = GameState.player_team._content
+				
+			print("Found", team_cryptids.size(), "cryptids in GameState team")
+			
+			# Add all cryptids to the dialog team
+			for cryptid in team_cryptids:
+				player_team.add_cryptid(cryptid)
+				print("Added", cryptid.name, "to replacement dialog team")
 		
 		# Store reference to original cryptid node for later
 		catch_dialog.set_meta("original_cryptid_node", original_cryptid_node)
 		
-		# Open the dialog
+		# Open the dialog with the team built from GameState
 		if catch_dialog.is_connected("cryptid_selected", Callable(self, "_on_replace_cryptid_selected")):
 			catch_dialog.disconnect("cryptid_selected", Callable(self, "_on_replace_cryptid_selected"))
 		catch_dialog.connect("cryptid_selected", Callable(self, "_on_replace_cryptid_selected"))
+		
+		# Pass the proper team to the dialog
+		var tile_map_layer = get_node_or_null("/root/VitaChrome/TileMapLayer")
 		catch_dialog.open(player_team, new_cryptid, tile_map_layer.player_cryptids_in_play)
 		catch_dialog.show()
 	else:
@@ -1595,37 +1542,65 @@ func prompt_replace_cryptid(new_cryptid, original_cryptid_node):
 func _on_replace_cryptid_selected(replaced_cryptid, new_cryptid):
 	print("Replacing ", replaced_cryptid.name, " with ", new_cryptid.name)
 	
-	# Get the original cryptid node that was caught
-	var original_cryptid_node = null
-	if catch_dialog and catch_dialog.has_meta("original_cryptid_node"):
-		original_cryptid_node = catch_dialog.get_meta("original_cryptid_node")
-	
-	# Remove the selected cryptid from the team
-	var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
-	if player_team_node:
-		if player_team_node.has_method("remove_cryptid"):
-			player_team_node.remove_cryptid(replaced_cryptid)
-		elif player_team_node.get("cryptidTeam") != null:
-			var team = player_team_node.cryptidTeam
-			if team.has_method("remove_cryptid"):
-				team.remove_cryptid(replaced_cryptid)
-	
-	# Add the new cryptid
-	add_cryptid_to_team(new_cryptid)
-	
-	# Remove the caught cryptid from the enemy team
-	if original_cryptid_node:
-		remove_cryptid_from_enemy_team(original_cryptid_node)
+	# Make sure we're modifying the actual team in GameState
+	if GameState.player_team:
+		# First, remove the selected cryptid from the team
+		print("Removing", replaced_cryptid.name, "from team")
+		if GameState.player_team.has_method("remove_cryptid"):
+			GameState.player_team.remove_cryptid(replaced_cryptid)
+		else:
+			print("ERROR: player_team doesn't have remove_cryptid method")
+			
+			# Fallback: try to remove directly from _content if available
+			if "_content" in GameState.player_team:
+				var index = -1
+				for i in range(GameState.player_team._content.size()):
+					if GameState.player_team._content[i] == replaced_cryptid:
+						index = i
+						break
+				
+				if index >= 0:
+					GameState.player_team._content.remove_at(index)
+					print("Manually removed cryptid from team._content")
+		
+		# Then add the new cryptid
+		print("Adding", new_cryptid.name, "to team")
+		if GameState.player_team.has_method("add_cryptid"):
+			GameState.player_team.add_cryptid(new_cryptid)
+		else:
+			print("ERROR: player_team doesn't have add_cryptid method")
+			
+			# Fallback: try to add directly to _content if available
+			if "_content" in GameState.player_team:
+				GameState.player_team._content.append(new_cryptid)
+				print("Manually added cryptid to team._content")
+		
+		# Debug: verify team contents
+		var team_cryptids = []
+		if GameState.player_team.has_method("get_cryptids"):
+			team_cryptids = GameState.player_team.get_cryptids()
+		elif "_content" in GameState.player_team:
+			team_cryptids = GameState.player_team._content
+			
+		print("Team now contains", team_cryptids.size(), "cryptids:")
+		for cryptid in team_cryptids:
+			print("- ", cryptid.name)
+	else:
+		print("ERROR: GameState.player_team is null - cannot update team")
+		
+		# Try to initialize the team if it doesn't exist
+		GameState.player_team = Team.new()
+		if GameState.player_team:
+			print("Created new team in GameState")
+			GameState.player_team.add_cryptid(new_cryptid)
+			print("Added", new_cryptid.name, "to newly created team")
 	
 	# Clean up the catch dialog signal connection
 	if catch_dialog and catch_dialog.is_connected("cryptid_selected", Callable(self, "_on_replace_cryptid_selected")):
 		catch_dialog.disconnect("cryptid_selected", Callable(self, "_on_replace_cryptid_selected"))
 	
-	# End battle with victory
-	end_battle_with_victory()
-	
-	# Add the new cryptid
-	add_cryptid_to_team(new_cryptid)
+	if GameState:
+		GameState.debug_player_team()
 	
 	# End battle with victory
 	end_battle_with_victory()

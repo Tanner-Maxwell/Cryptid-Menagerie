@@ -18,8 +18,20 @@ func _ready():
 func take_enemy_turn(enemy_cryptid):
 	print("AI: Taking turn for enemy cryptid: ", enemy_cryptid.cryptid.name)
 	
-	# Set the selected cryptid in the hand and tile map layer
-	var previous_selected = tile_map_layer.selected_cryptid
+	# Check if tile_map_layer exists first
+	if tile_map_layer == null:
+		print("ERROR: tile_map_layer is null in take_enemy_turn")
+		# Try to get it
+		tile_map_layer = get_tree().get_nodes_in_group("map")[0]
+		if tile_map_layer == null:
+			print("CRITICAL ERROR: Could not find tile_map_layer")
+			return
+	
+	# Now that we know tile_map_layer exists, check selected_cryptid
+	var previous_selected = null
+	if "selected_cryptid" in tile_map_layer and tile_map_layer.selected_cryptid != null:
+		previous_selected = tile_map_layer.selected_cryptid
+	
 	tile_map_layer.selected_cryptid = enemy_cryptid
 	
 	# IMPORTANT: Enable the hex occupied by this cryptid on the grid

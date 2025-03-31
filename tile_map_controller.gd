@@ -69,9 +69,8 @@ func _ready():
 		turn_order._add_picked_cards_to_turn_order(cryptid.cryptid.name)
 	
 	sort_cryptids_by_speed(player_cryptids_in_play)
-	print(player_cryptids_in_play[0].cryptid.speed)
-	selected_cryptid = player_cryptids_in_play[0].cryptid
-	player_cryptids_in_play[0].cryptid.currently_selected = true
+	#selected_cryptid = player_cryptids_in_play[0].cryptid
+	#player_cryptids_in_play[0].cryptid.currently_selected = true
 	for cryptid in player_cryptids_in_play:
 		print(cryptid, cryptid.cryptid.speed, cryptid.cryptid.currently_selected)
 	print(player_cryptids_in_play)
@@ -1089,7 +1088,6 @@ func currently_selected_cryptid():
 				return player_cryptid
 		
 		# If we didn't find a match, just return the first cryptid
-		print("WARNING: No matching cryptid found, using first cryptid")
 		if all_cryptids_in_play.size() > 0:
 			return all_cryptids_in_play[0]
 	
@@ -1242,54 +1240,13 @@ func apply_damage(target_cryptid, damage_amount):
 	else:
 		print("ERROR: Could not find health bar on target cryptid!")
 
-# Helper function to check if bench cryptids are available
 func has_bench_cryptids():
-	# Get the player team
-	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
-	if player_team_node:
-		# Count valid cryptids (not defeated)
-		var valid_cryptids = 0
-		var cryptids = []
-		
-		if player_team_node.has_method("get_cryptids"):
-			cryptids = player_team_node.get_cryptids()
-		elif player_team_node.get("_content") != null:
-			cryptids = player_team_node._content
-		elif player_team_node.get("cryptidTeam") != null:
-			var team = player_team_node.cryptidTeam
-			if team.has_method("get_cryptids"):
-				cryptids = team.get_cryptids()
-			elif team.get("_content") != null:
-				cryptids = team._content
-		
-		# Check for valid cryptids (not on battlefield and not defeated)
-		for cryptid in cryptids:
-			if cryptid == null:
-				continue
-			
-			# Skip if defeated
-			var is_defeated = false
-			var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
-			if game_controller and game_controller.get("defeated_cryptids") != null:
-				if game_controller.defeated_cryptids.has(cryptid.name):
-					is_defeated = true
-			
-			if !is_defeated:
-				# Check if this cryptid is already on the battlefield
-				var on_battlefield = false
-				for cryptid_node in player_cryptids_in_play:
-					if cryptid_node.cryptid.name == cryptid.name:
-						on_battlefield = true
-						break
-				
-				if !on_battlefield:
-					valid_cryptids += 1
-		
-		print("Found", valid_cryptids, "valid bench cryptids")
-		return valid_cryptids > 0
-	
-	# Default to false if we couldn't determine
-	return false
+	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
+	if game_controller and game_controller.has_method("has_bench_cryptids"):
+		return game_controller.has_bench_cryptids()
+	else:
+		print("WARNING: game_controller not found or missing has_bench_cryptids method")
+		return false
 
 func handle_cryptid_defeat(defeated_cryptid):
 	# CRITICAL: Make sure we get the GameController first, before anything else

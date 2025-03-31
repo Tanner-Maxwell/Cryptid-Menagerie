@@ -16,8 +16,22 @@ func add_cryptid(cryptid:Cryptid) -> bool:
 func has_space() -> bool:
 	return _content.size() < MAX_TEAM_SIZE
 
-func remove_cryptid(cryptid:Cryptid):
-	_content.erase(cryptid)
+func remove_cryptid(cryptid: Cryptid):
+	print("Team: Removing cryptid", cryptid.name)
+	var index = -1
+	
+	# Find the cryptid in the array
+	for i in range(_content.size()):
+		if _content[i] == cryptid:
+			index = i
+			break
+	
+	# Remove it if found
+	if index >= 0:
+		_content.remove_at(index)
+		print("Team: Successfully removed", cryptid.name)
+	else:
+		print("Team: Could not find cryptid to remove:", cryptid.name)
 
 func get_cryptids() -> Array[Cryptid]:
 	return _content

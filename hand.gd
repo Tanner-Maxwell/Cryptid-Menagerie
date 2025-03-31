@@ -36,8 +36,9 @@ func _input(event):
 			clear_card_selections()
 
 func _ready():
-	selected_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
-	switch_cryptid_deck(selected_cryptid)
+	#selected_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
+	#switch_cryptid_deck(selected_cryptid)
+	pass
 
 func add_card(card):
 	hand.push_back(card)
