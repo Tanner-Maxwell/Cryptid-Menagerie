@@ -348,33 +348,34 @@ func log_cryptid_order():
 
 # New function to check if bench cryptids are available
 func has_bench_cryptids():
-	# Get the player team
-	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
-	if player_team_node:
-		# Count total cryptids
-		var total_cryptids = 0
-		if player_team_node.has_method("get_cryptids"):
-			total_cryptids = player_team_node.get_cryptids().size()
-		elif player_team_node.get("_content") != null:
-			total_cryptids = player_team_node._content.size()
-		elif player_team_node.get("cryptidTeam") != null:
-			var team = player_team_node.cryptidTeam
-			if team.has_method("get_cryptids"):
-				total_cryptids = team.get_cryptids().size()
-			elif team.get("_content") != null:
-				total_cryptids = team._content.size()
-		
-		# Count cryptids currently in play
-		var cryptids_in_play = 0
-		var tile_map_layer = get_node_or_null("/root/VitaChrome/TileMapLayer")
-		if tile_map_layer and tile_map_layer.get("player_cryptids_in_play") != null:
-			cryptids_in_play = tile_map_layer.player_cryptids_in_play.size()
-		
-		# Check if we have any bench cryptids
-		var bench_cryptids = total_cryptids - cryptids_in_play
-		print("Total cryptids:", total_cryptids, ", In play:", cryptids_in_play, ", On bench:", bench_cryptids)
-		
-		return bench_cryptids > 0
+	print("Checking for bench cryptids...")
 	
-	# Default to false if we couldn't determine
-	return false
+	# Get the total cryptids in the player's team from GameState
+	var all_cryptids = []
+	if GameState.player_team:
+		if GameState.player_team.has_method("get_cryptids"):
+			all_cryptids = GameState.player_team.get_cryptids()
+		elif GameState.player_team.get("_content") != null:
+			all_cryptids = GameState.player_team._content
+		
+		print("Total cryptids in GameState team:", all_cryptids.size())
+	else:
+		print("No player team in GameState")
+		return false
+	
+	# Get the cryptids currently in play
+	var cryptids_in_play = []
+	for cryptid_node in tile_map_layer.player_cryptids_in_play:
+		if cryptid_node and cryptid_node.cryptid:
+			cryptids_in_play.append(cryptid_node.cryptid.name)
+			print("- In play:", cryptid_node.cryptid.name)
+	
+	# Count bench cryptids (those not in play)
+	var bench_cryptids = []
+	for team_cryptid in all_cryptids:
+		if not team_cryptid.name in cryptids_in_play:
+			bench_cryptids.append(team_cryptid)
+			print("- Found bench cryptid:", team_cryptid.name)
+	
+	print("Total bench cryptids:", bench_cryptids.size())
+	return bench_cryptids.size() > 0

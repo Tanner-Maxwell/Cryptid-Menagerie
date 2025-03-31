@@ -1219,8 +1219,8 @@ func prompt_swap_cryptid():
 		current_cryptid.top_card_played = true
 		current_cryptid.bottom_card_played = true
 	
-		# Create a team from GameState for the swap dialog
-		var temp_team = Team.new()
+		# Create a filtered team for the swap dialog containing only bench cryptids
+		var filtered_team = Team.new()
 		
 		# Get all cryptids from GameState
 		var all_cryptids = []
@@ -1235,17 +1235,18 @@ func prompt_swap_cryptid():
 		# Get names of cryptids in play
 		var in_play_names = []
 		for cryptid_node in tile_map_layer.player_cryptids_in_play:
-			if cryptid_node.cryptid:
+			if cryptid_node.cryptid and cryptid_node != tile_map_layer.selected_cryptid:
 				in_play_names.append(cryptid_node.cryptid.name)
+				print("- In play:", cryptid_node.cryptid.name)
 		
-		# Add only bench cryptids to temp team
+		# Add only bench cryptids to filtered team
 		for cryptid in all_cryptids:
-			if cryptid.name not in in_play_names or cryptid == current_cryptid:
-				temp_team.add_cryptid(cryptid)
+			if not cryptid.name in in_play_names or cryptid == current_cryptid:
+				filtered_team.add_cryptid(cryptid)
 				print("Added to swap options:", cryptid.name)
 		
-		# Open the swap dialog
-		swap_dialog_node.open(temp_team, current_cryptid, tile_map_layer.player_cryptids_in_play)
+		# Open the swap dialog with the filtered team
+		swap_dialog_node.open(filtered_team, current_cryptid, tile_map_layer.player_cryptids_in_play)
 		
 		# Connect to the dialog's signal if not already connected
 		if not swap_dialog_node.is_connected("cryptid_selected", Callable(self, "_on_swap_cryptid_selected")):
@@ -1493,41 +1494,36 @@ func add_cryptid_to_team(cryptid):
 func prompt_replace_cryptid(new_cryptid, original_cryptid_node):
 	print("Team is full - showing replacement dialog")
 	
-	# Debug the team state
-	if GameState:
-		GameState.debug_player_team()
-	
 	# Make sure catch dialog is initialized
 	initialize_catch_dialog()
 	
 	if catch_dialog:
-		# Build the player's team from GameState (not local reference)
+		# Build the player's team
+		var player_team_node = get_node("/root/VitaChrome/TileMapLayer/PlayerTeam")
 		var player_team = Team.new()
 		
-		if GameState.player_team:
-			var team_cryptids = []
-			if GameState.player_team.has_method("get_cryptids"):
-				team_cryptids = GameState.player_team.get_cryptids()
-			elif "_content" in GameState.player_team:
-				team_cryptids = GameState.player_team._content
-				
-			print("Found", team_cryptids.size(), "cryptids in GameState team")
-			
-			# Add all cryptids to the dialog team
-			for cryptid in team_cryptids:
-				player_team.add_cryptid(cryptid)
-				print("Added", cryptid.name, "to replacement dialog team")
+		if player_team_node:
+			if player_team_node.has_method("get_cryptids"):
+				var cryptids = player_team_node.get_cryptids()
+				for cryptid in cryptids:
+					player_team.add_cryptid(cryptid)
+			elif player_team_node.get("_content") != null:
+				for cryptid in player_team_node._content:
+					player_team.add_cryptid(cryptid)
+			elif player_team_node.get("cryptidTeam") != null:
+				var team = player_team_node.cryptidTeam
+				if team.has_method("get_cryptids"):
+					var cryptids = team.get_cryptids()
+					for cryptid in cryptids:
+						player_team.add_cryptid(cryptid)
 		
 		# Store reference to original cryptid node for later
 		catch_dialog.set_meta("original_cryptid_node", original_cryptid_node)
 		
-		# Open the dialog with the team built from GameState
+		# Open the dialog
 		if catch_dialog.is_connected("cryptid_selected", Callable(self, "_on_replace_cryptid_selected")):
 			catch_dialog.disconnect("cryptid_selected", Callable(self, "_on_replace_cryptid_selected"))
 		catch_dialog.connect("cryptid_selected", Callable(self, "_on_replace_cryptid_selected"))
-		
-		# Pass the proper team to the dialog
-		var tile_map_layer = get_node_or_null("/root/VitaChrome/TileMapLayer")
 		catch_dialog.open(player_team, new_cryptid, tile_map_layer.player_cryptids_in_play)
 		catch_dialog.show()
 	else:
