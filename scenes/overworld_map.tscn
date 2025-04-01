@@ -99,7 +99,6 @@ offset_top = 562.0
 offset_right = 303.0
 offset_bottom = 570.0
 script = ExtResource("1_fwvvd")
-encounter_type = ""
 node_id = "reward4"
 connected_nodes = Array[String](["forest_wild5"])
 

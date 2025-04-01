@@ -114,6 +114,11 @@ func end_battle(was_victorious = true):
 	# Store battle result in GameState
 	GameState.last_battle_result = was_victorious
 	
+	# If we were victorious, set the current node as our position
+	if was_victorious && GameState.current_encounter && GameState.current_encounter.has("node_id"):
+		GameState.set_current_node_id(GameState.current_encounter.node_id)
+		print("Updated current node to: " + GameState.current_encounter.node_id)
+	
 	# Get the overworld scene path
 	var overworld_scene_path = "res://Cryptid-Menagerie/scenes/overworld_map.tscn"
 	

@@ -1,0 +1,34 @@
+[gd_scene load_steps=2 format=3 uid="uid://d1t5koktvnt57"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/scenes/reward_scene.gd" id="1_ui7rv"]
+
+[node name="RewardScene" type="Node2D"]
+script = ExtResource("1_ui7rv")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+offset_right = 40.0
+offset_bottom = 40.0
+color = Color(0.145, 0.184, 0.275, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+text = "REWARD!"
+
+[node name="HSeparator" type="HSeparator" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 40
+
+[node name="RewardLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="HSeparator2" type="HSeparator" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="ContinueButton" type="Button" parent="VBoxContainer"]
+layout_mode = 2
+text = "Continue"
