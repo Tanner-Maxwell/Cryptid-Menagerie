@@ -47,6 +47,50 @@ func set_biome(biome_name):
 	else:
 		push_error("Invalid biome name: " + biome_name)
 
+# Get the maximum number of wild cryptids based on floor level
+func get_max_cryptids_for_floor():
+	# Floor 1: maximum 1 cryptid
+	if current_floor == 1:
+		return 1
+	# Floor 2: maximum 2 cryptids
+	elif current_floor == 2:
+		return 2
+	# Floor 3+: maximum 3 cryptids
+	else:
+		return MAX_WILD_CRYPTIDS
+
+# Get adjusted weights based on floor level
+func get_adjusted_weights():
+	var base_weights = get_biome_weights(current_biome)
+	var max_cryptids = get_max_cryptids_for_floor()
+	
+	# Create a new array with zeros
+	var adjusted_weights = [0, 0, 0]
+	
+	# Floor 1: Force exactly 1 cryptid (100% chance)
+	if max_cryptids == 1:
+		adjusted_weights[0] = 100  # 100% chance for 1 cryptid
+	
+	# Floor 2: Allow 1-2 cryptids with preference for 1
+	elif max_cryptids == 2:
+		adjusted_weights[0] = 70   # 70% chance for 1 cryptid
+		adjusted_weights[1] = 30   # 30% chance for 2 cryptids
+	
+	# Floor 3: More balanced distribution
+	elif current_floor == 3:
+		adjusted_weights[0] = 50   # 50% chance for 1 cryptid
+		adjusted_weights[1] = 40   # 40% chance for 2 cryptids
+		adjusted_weights[2] = 10   # 10% chance for 3 cryptids
+	
+	# Floor 4+: Use original weights but adjusted to favor more cryptids
+	else:
+		adjusted_weights[0] = 20   # 20% chance for 1 cryptid
+		adjusted_weights[1] = 40   # 40% chance for 2 cryptids
+		adjusted_weights[2] = 40   # 40% chance for 3 cryptids  
+	
+	print("Floor ", current_floor, " adjusted weights: ", adjusted_weights)
+	return adjusted_weights
+
 # Generate a new wild encounter based on current settings
 func generate_encounter():
 	var encounter_data = {
@@ -56,11 +100,24 @@ func generate_encounter():
 		"is_wild_encounter": true
 	}
 	
-	# Determine number of cryptids based on biome's encounter weights
-	var weights = get_biome_weights(current_biome)
-	var num_cryptids = _weighted_random_choice([1, 2, 3], weights)
+	# Determine number of cryptids based on floor level and adjusted weights
+	var weights = get_adjusted_weights()
+	var max_cryptids = get_max_cryptids_for_floor()
 	
-	print("Generating encounter with ", num_cryptids, " cryptids in ", current_biome)
+	# Restrict possible cryptid counts based on max_cryptids
+	var possible_counts = []
+	for i in range(1, max_cryptids + 1):
+		possible_counts.append(i)
+	
+	# Also restrict weights to match the possible counts
+	var usable_weights = []
+	for i in range(max_cryptids):
+		usable_weights.append(weights[i])
+	
+	# Get random number of cryptids based on adjusted weights
+	var num_cryptids = _weighted_random_choice(possible_counts, usable_weights)
+	
+	print("Generating encounter with ", num_cryptids, " cryptids in ", current_biome, " (Floor ", current_floor, ")")
 	
 	# Select random cryptids from the current biome
 	var available_cryptids = get_biome_cryptids(current_biome)
