@@ -21,10 +21,10 @@
 [ext_resource type="PackedScene" uid="uid://bejk4igyv1d0e" path="res://Cryptid-Menagerie/assets/grove_starter_sprite.tscn" id="15_3vyn4"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/turn_order.gd" id="15_a7fqm"]
 [ext_resource type="PackedScene" uid="uid://dqdftw8v1sq3c" path="res://Cryptid-Menagerie/assets/fire_turtle_sprite.tscn" id="16_rcj1w"]
-[ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://swap_cryptid_slot.tscn" id="18_q6lla"]
+[ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://Cryptid-Menagerie/swap_cryptid_slot.tscn" id="18_q6lla"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/selected_cards.gd" id="20_c4vra"]
 [ext_resource type="PackedScene" uid="uid://d154xbku5vvla" path="res://Cryptid-Menagerie/swap_cryptid_dialog.tscn" id="24_kvvei"]
-[ext_resource type="PackedScene" uid="uid://dwehis51bbln4" path="res://catch_dialog.tscn" id="25_ipf80"]
+[ext_resource type="PackedScene" uid="uid://dwehis51bbln4" path="res://Cryptid-Menagerie/catch_dialog.tscn" id="25_ipf80"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_twunu"]
 texture = ExtResource("1_ot6rc")

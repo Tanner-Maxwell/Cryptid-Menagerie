@@ -14,6 +14,7 @@ action_types = Array[int]([1])
 range = 0
 amount = 5
 area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
 
 [sub_resource type="Resource" id="Resource_3hv6w"]
 script = ExtResource("4_6ou1u")
@@ -42,6 +43,11 @@ name = "Grove Starter"
 scene = ExtResource("2_6wmvt")
 icon = ExtResource("1_e7mi7")
 deck = Array[ExtResource("1_75gsa")]([ExtResource("2_5kk0b"), SubResource("Resource_4u70t"), ExtResource("2_5kk0b"), ExtResource("2_5kk0b"), ExtResource("2_5kk0b")])
+discard = Array[ExtResource("1_75gsa")]([])
+completed_turn = false
+currently_selected = false
+top_card_played = false
+bottom_card_played = false
 strength = 10
 knowledge = 10
 willpower = 10

@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3 uid="uid://clrmrcm0igcl5"]
 
-[ext_resource type="Script" path="res://encounter_node.gd" id="1_fwvvd"]
-[ext_resource type="Script" path="res://overworld_map.gd" id="1_o0jxx"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/encounter_node.gd" id="1_fwvvd"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/overworld_map.gd" id="1_o0jxx"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/scenes/path_drawer.gd" id="2_fmvw5"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/scenes/reward_button_test.gd" id="4_sggr0"]
 

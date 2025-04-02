@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3 uid="uid://drs6xtqr2wm0a"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/cryptids_cards.gd" id="1_vj6oi"]
+[ext_resource type="PackedScene" uid="uid://hvay6ocgdqij" path="res://Cryptid-Menagerie/team/cryptid_slot.tscn" id="2_ubmlj"]
+
+[node name="Cryptids Cards" type="HBoxContainer"]
+script = ExtResource("1_vj6oi")
+
+[node name="CryptidSlot" parent="." instance=ExtResource("2_ubmlj")]
+layout_mode = 2

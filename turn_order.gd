@@ -1,7 +1,7 @@
 extends VBoxContainer
 
 @onready var tile_map_layer = %TileMapLayer
-@onready var turn_order_card_ui = preload("res://cryptids_cards_turn_order.tscn")
+@onready var turn_order_card_ui = preload("res://Cryptid-Menagerie/cryptids_cards_turn_order.tscn")
 @onready var card_dialog = preload("res://Cryptid-Menagerie/data/cryptids/Cards/card_dialog.tscn")
 @onready var cryptid_name_labels = {}  # Dictionary to track labels by cryptid name
 @onready var picked_card_ui

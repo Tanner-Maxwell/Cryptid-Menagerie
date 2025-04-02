@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=4 uid="uid://bpufc4uaek6r0"]
+[gd_scene load_steps=23 format=4 uid="uid://dg5svavj3xisj"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/scenes/battle_scene.gd" id="1_q6ftd"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Cards/enemy_ai_controller.gd" id="2_ijliv"]
@@ -8,7 +8,7 @@
 [ext_resource type="Script" path="res://Cryptid-Menagerie/tile_map_controller.gd" id="6_vgiw7"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/team/team.gd" id="7_k6cyo"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="16_h4cen"]
-[ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://swap_cryptid_slot.tscn" id="17_1k65k"]
+[ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://Cryptid-Menagerie/swap_cryptid_slot.tscn" id="17_1k65k"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/ui_root.gd" id="18_nln6q"]
 [ext_resource type="PackedScene" uid="uid://dnuhdqmxrstsw" path="res://Cryptid-Menagerie/team/team_dialog.tscn" id="19_1asxv"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/hand.gd" id="20_peyc7"]
@@ -16,7 +16,7 @@
 [ext_resource type="Script" path="res://Cryptid-Menagerie/turn_order.gd" id="22_3opj6"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/action_select_menu.gd" id="23_4ii0y"]
 [ext_resource type="PackedScene" uid="uid://d154xbku5vvla" path="res://Cryptid-Menagerie/swap_cryptid_dialog.tscn" id="24_5vuui"]
-[ext_resource type="PackedScene" uid="uid://dwehis51bbln4" path="res://catch_dialog.tscn" id="25_4bsn0"]
+[ext_resource type="PackedScene" uid="uid://dwehis51bbln4" path="res://Cryptid-Menagerie/catch_dialog.tscn" id="25_4bsn0"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_twunu"]
 texture = ExtResource("5_46mns")
