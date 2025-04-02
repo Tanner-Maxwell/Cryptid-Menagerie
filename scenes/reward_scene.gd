@@ -3,32 +3,60 @@ extends Node2D
 var next_node_id = ""
 
 func _ready():
-	# Get the next node ID from GameState
-	if GameState.current_encounter and GameState.current_encounter.has("next_node_id"):
-		next_node_id = GameState.current_encounter.next_node_id
-		print("Next node after reward: " + next_node_id)
+	print("Reward scene loaded!")
 	
-	# Display reward info
-	var reward_label = $RewardLabel
-	if reward_label:
-		reward_label.text = "You received a reward!"
-	
-	# Set up continue button
-	var continue_button = $ContinueButton
+	# Get the continue button by its path
+	var continue_button = $VBoxContainer/ContinueButton
 	if continue_button:
+		# Connect the pressed signal
 		continue_button.connect("pressed", Callable(self, "_on_continue_button_pressed"))
+		print("Continue button connected")
+	else:
+		print("WARNING: Could not find continue button at path $VBoxContainer/ContinueButton")
+		# Try to find it by class instead
+		for child in get_children():
+			if child is Button:
+				child.connect("pressed", Callable(self, "_on_continue_button_pressed"))
+				print("Found and connected a Button node instead")
+				break
 
 func _on_continue_button_pressed():
-	print("Continue button pressed - proceeding to next node")
+	print("Continue button pressed - returning to overworld")
 	
-	# Store the next node ID in GameState
-	if next_node_id != "":
+	# Get the next node ID to go to
+	var next_node_id = ""
+	if GameState.current_encounter and GameState.current_encounter.has("next_node_id"):
+		next_node_id = GameState.current_encounter.next_node_id
+		print("Will position at next node: " + next_node_id)
+		
+		# Store it in GameState
 		GameState.set_current_node_id(next_node_id)
-		print("Setting next node to: " + next_node_id)
 	
-	# Return to overworld map
-	var overworld_scene_path = "res://Cryptid-Menagerie/scenes/overworld_map.tscn"
-	get_tree().change_scene_to_file(overworld_scene_path)
+	# Create instance of the overworld scene
+	var overworld_scene_path = "res://Cryptid-Menagerie/scenes/overworld_map.tscn" 
+	print("Loading overworld scene from: " + overworld_scene_path)
+	
+	var overworld_scene_resource = load(overworld_scene_path)
+	if overworld_scene_resource == null:
+		print("ERROR: Failed to load overworld scene resource")
+		return
+		
+	var overworld_scene = overworld_scene_resource.instantiate()
+	if overworld_scene == null:
+		print("ERROR: Failed to instantiate overworld scene")
+		return
+	
+	print("Overworld scene instantiated successfully")
+	
+	# Replace the current scene with the overworld scene
+	get_tree().root.add_child(overworld_scene)
+	get_tree().current_scene = overworld_scene
+	
+	# Remove this scene
+	get_tree().root.remove_child(self)
+	queue_free()  # Free this scene since we're done with it
+	
+	print("Returned to overworld map")
 
 
 # 2. Update your encounter node selection logic in overworld_map.gd
@@ -220,3 +248,9 @@ func find_encounter_node_by_id(node_id: String):
 	# If not found, return null
 	print("Node ID not found in current scene: " + node_id)
 	return null
+
+func _on_continue_pressed():
+	print("Continue pressed, returning to overworld")
+	
+	# Return to overworld
+	get_tree().change_scene_to_file("res://Cryptid-Menagerie/scenes/overworld_map.tscn")
