@@ -24,9 +24,9 @@ func _ready():
 	if layer1:
 		layer1.motion_scale = Vector2(0.02, 0.02)  # Slowest (farthest layer)
 	if layer2:
-		layer2.motion_scale = Vector2(0.04, 0.04)  # Medium speed (middle layer)
+		layer2.motion_scale = Vector2(0.05, 0.05)  # Medium speed (middle layer)
 	if layer3:
-		layer3.motion_scale = Vector2(0.07, 0.07)  # Fastest (closest layer)
+		layer3.motion_scale = Vector2(0.08, 0.08)  # Fastest (closest layer)
 	
 	# Store the center of the screen for parallax calculations
 	screen_center = get_viewport_rect().size / 2
@@ -56,7 +56,16 @@ func _input(event):
 func _on_play_button_pressed():
 	print("Play button pressed - starting game")
 	
-	# First try to load the overworld scene
+	# First try to load the starter selection scene
+	var starter_scene_path = "res://starter_selection_scene.tscn"
+	if FileAccess.file_exists(starter_scene_path):
+		# Initialize GameState if needed
+		if "initialize_player_team" in GameState:
+			GameState.initialize_player_team()
+		get_tree().change_scene_to_file(starter_scene_path)
+		return
+	
+	# If starter selection scene is not available, try the overworld scene
 	var overworld_scene_path = "res://Cryptid-Menagerie/scenes/overworld_map.tscn"
 	if FileAccess.file_exists(overworld_scene_path):
 		get_tree().change_scene_to_file(overworld_scene_path)

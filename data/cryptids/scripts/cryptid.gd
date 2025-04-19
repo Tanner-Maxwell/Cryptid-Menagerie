@@ -2,6 +2,31 @@
 class_name Cryptid
 extends Resource
 
+# Enum for elemental types
+enum ELEMENTAL_TYPE {
+	NEUTRAL,
+	FIRE,
+	WATER,
+	GROVE,
+	ELECTRIC,
+	AETHER,
+	ICE,
+	GLOOM,
+	GLIMMER,
+	OOZE,
+	ROCK,
+	SPECTRE,
+	METAL,
+	AIR
+}
+
+# Enum for play styles
+enum PLAY_STYLE {
+	DAMAGE,
+	TANK,
+	SUPPORT
+}
+
 # Declare exported variables for the cryptid's name and associated scene
 @export var name: String
 @export var scene: PackedScene
@@ -12,6 +37,10 @@ extends Resource
 @export var currently_selected: bool
 @export var top_card_played: bool
 @export var bottom_card_played: bool
+
+# Add elemental types and play style properties
+@export var elemental_types: Array[ELEMENTAL_TYPE] = [ELEMENTAL_TYPE.NEUTRAL]
+@export var play_style: PLAY_STYLE = PLAY_STYLE.DAMAGE
 
 # Declare main stat variables
 @export var strength: int = 10
