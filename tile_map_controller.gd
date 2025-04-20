@@ -82,6 +82,8 @@ func _ready():
 	# Call this at the end of _ready() to set up initial debug display
 	call_deferred("setup_debug_display")
 	
+	verify_grid_state()
+	
 
 func _process(delta):
 	# Only handle mouse motion during player turns, not during AI turns
@@ -278,7 +280,18 @@ func handle_left_click(event):
 	
 	if selected_cryptid == null:
 		print("WARNING: No selected cryptid found, using first cryptid")
-		selected_cryptid = player_cryptids_in_play[0]
+		if player_cryptids_in_play.size() > 0:
+			selected_cryptid = player_cryptids_in_play[0]
+		else:
+			print("ERROR: No cryptids available!")
+			return
+	
+	# Add debugging for the clicked position
+	print("Clicked position:", pos_clicked)
+	
+	# Debug what cryptid might be at this position
+	var target_cryptid = get_cryptid_at_position(pos_clicked)
+	print("Pre-check - Cryptid at clicked position:", target_cryptid)
 	
 	# Handle action based on what is active
 	if move_action_bool:
@@ -286,6 +299,8 @@ func handle_left_click(event):
 		handle_move_action(pos_clicked)
 	elif attack_action_bool:
 		print("Handling attack action")
+		# Mark this event as handled to prevent other nodes from processing it
+		get_viewport().set_input_as_handled()
 		handle_attack_action(pos_clicked) 
 	else:
 		print("No action type active")
@@ -307,6 +322,19 @@ func handle_move_action(pos_clicked):
 		
 		# Store the original position for freeing up after movement
 		var original_position = local_to_map(selected_cryptid.position)
+		
+		# Check if the clicked hex is already occupied by another cryptid
+		var occupied_by_other = false
+		for cryptid in all_cryptids_in_play:
+			if cryptid != selected_cryptid and local_to_map(cryptid.position) == pos_clicked:
+				occupied_by_other = true
+				print("ERROR: Position already occupied by another cryptid")
+				break
+		
+		if occupied_by_other:
+			# Cannot move to an occupied position
+			print("Cannot move to position occupied by another cryptid")
+			return false
 		
 		# Only subtract the actual distance moved, not the full allowed movement
 		var remaining_movement = move_leftover - movement_distance
@@ -632,6 +660,10 @@ func attack_action_selected(current_card):
 	else:
 		print("Successfully activated attack action with range:", attack_range)
 		
+		# IMPORTANT: Ensure we're using the attack grid for showing attack range
+		var current_pos = local_to_map(selected_cryptid.position)
+		show_attackable_area(selected_cryptid.position, attack_range)
+		
 		# Store references for handle_attack_action
 		if active_movement_card_part == "top":
 			card_dialog.top_half_container = top_half_container
@@ -654,7 +686,17 @@ func _is_color_close(color1, color2, tolerance = 0.1):
 func handle_attack_action(pos_clicked):
 	print("\n---------- HANDLE ATTACK ACTION DEBUG ----------")
 	
-	var target_cryptid = get_cryptid_at_position(pos_clicked)
+	# Debug team assignments
+	debug_team_assignments()
+	
+	# Get the attacking cryptid
+	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found for attack")
+		return false
+	
+	# IMPORTANT: Use the attack grid for determining attack targets
+	var target_cryptid = get_cryptid_at_position(pos_clicked, true)
 	print("Target position:", pos_clicked)
 	print("Target cryptid:", target_cryptid)
 	
@@ -676,27 +718,30 @@ func handle_attack_action(pos_clicked):
 		force_update_discard_display()
 		return false
 	
-	# Get the attacking cryptid
-	selected_cryptid = currently_selected_cryptid()
+	# Get the parent nodes - they should be different for a valid attack
+	var attacker_parent = selected_cryptid.get_parent()
+	var target_parent = target_cryptid.get_parent()
 	
-	# Determine if this is a valid target based on attacker type
-	if selected_cryptid in player_cryptids_in_play and target_cryptid in enemy_cryptids_in_play:
-		valid_target = true
-		print("Valid target: Player attacking enemy")
-	elif selected_cryptid in enemy_cryptids_in_play and target_cryptid in player_cryptids_in_play:
-		valid_target = true
-		print("Valid target: Enemy attacking player")
+	print("Attacker parent:", attacker_parent.name)
+	print("Target parent:", target_parent.name)
+	
+	# Check if they're on different teams based on parent nodes
+	valid_target = (attacker_parent != target_parent)
+	
+	if valid_target:
+		print("Valid target: Attacking cryptid on different team")
 	else:
-		valid_target = false
 		print("Invalid target: Cannot attack your own team")
 	
 	# Only proceed if targeting a valid cryptid
 	if valid_target:
 		print("Valid target found")
 		
-		# Calculate attack distance
+		# Calculate attack distance using attack grid
 		var current_pos = local_to_map(selected_cryptid.position)
 		var target_pos = local_to_map(target_cryptid.position)
+		
+		# IMPORTANT: Use attack grid for pathfinding
 		var attack_path = a_star_hex_attack_grid.get_id_path(
 			a_star_hex_attack_grid.get_closest_point(current_pos),
 			a_star_hex_attack_grid.get_closest_point(target_pos)
@@ -759,16 +804,17 @@ func handle_attack_action(pos_clicked):
 					print("Marked bottom half as played for action economy")
 				
 				# But visually disable the entire card
-				disable_entire_card(card_dialog)
-				
-				# Discard the card
-				discard_card(card_dialog, selected_cryptid.cryptid)
-				
-				# Disable other cards with the selected half
-				if using_top_half:
-					disable_other_cards_exact("top")
-				elif using_bottom_half:
-					disable_other_cards_exact("bottom")
+				if is_instance_valid(card_dialog):
+					disable_entire_card(card_dialog)
+					
+					# Discard the card
+					discard_card(card_dialog, selected_cryptid.cryptid)
+					
+					# Disable other cards with the selected half
+					if using_top_half:
+						disable_other_cards_exact("top")
+					elif using_bottom_half:
+						disable_other_cards_exact("bottom")
 				
 				# Update hand to reflect changes
 				var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
@@ -798,7 +844,7 @@ func handle_attack_action(pos_clicked):
 		else:
 			print("Target out of range")
 	else:
-		print("Invalid attack: No valid target at the selected position")
+		print("Invalid attack: Cannot attack your own team")
 	
 	# Reset action state if no attack was performed
 	if not attack_performed:
@@ -820,7 +866,6 @@ func handle_attack_action(pos_clicked):
 	force_update_discard_display()
 	print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
 	return attack_performed
-
 
 # Add this more verbose version of disable_other_card_halves for debugging
 func disable_other_card_halves_debug(active_card_half):
@@ -901,8 +946,12 @@ func _input(event):
 			if event is InputEventMouseMotion:
 				handle_mouse_motion()
 		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool):
-			if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed():
-				handle_left_click(event)
+			# IMPORTANT: When we're in attack mode, handle clicks directly here,
+			# not in the individual cryptid nodes
+			if attack_action_bool:
+				# This ensures cryptids don't handle the click separately
+				get_viewport().set_input_as_handled()
+			handle_left_click(event)
 
 # Update the move_action_selected function to prevent activating during discard
 func move_action_selected(current_card):
@@ -1139,7 +1188,7 @@ func show_attackable_area(center_pos, max_range):
 	var center_hex = local_to_map(center_pos)
 	var center_cube = axial_to_cube(center_hex)
 	
-	# Get all hexes within range
+	# Get all hexes within range - including occupied ones for attacking
 	for x in range(-max_range, max_range + 1):
 		for y in range(max(-max_range, -x - max_range), min(max_range, -x + max_range) + 1):
 			var z = -x - y
@@ -1155,13 +1204,32 @@ func show_attackable_area(center_pos, max_range):
 				indicator.position = map_to_local(hex) - Vector2(5, 5)
 				indicator.name = "attack_indicator"
 				add_child(indicator)
-# Find a cryptid at a given hex position
-func get_cryptid_at_position(hex_pos):
-	for cryptid in all_cryptids_in_play:
-		if local_to_map(cryptid.position) == hex_pos:
-			return cryptid
-	return null
 
+# Find a cryptid at a given hex position
+func get_cryptid_at_position(hex_pos, for_attack = false):
+	print("Searching for cryptid at position:", hex_pos, "for_attack:", for_attack)
+	
+	# Check all cryptids in play
+	for cryptid in all_cryptids_in_play:
+		if is_instance_valid(cryptid):
+			var cryptid_pos = local_to_map(cryptid.position)
+			print("Checking cryptid:", cryptid.cryptid.name, "at position:", cryptid_pos)
+			
+			# Check if positions match
+			if cryptid_pos.x == hex_pos.x and cryptid_pos.y == hex_pos.y:
+				print("Found cryptid at position:", hex_pos)
+				return cryptid
+			
+			# If for attack, also check adjacent hexes (optional - helps with targeting)
+			if for_attack:
+				# Get surrounding cells
+				var surrounding_cells = get_surrounding_cells(cryptid_pos)
+				if hex_pos in surrounding_cells:
+					print("Found cryptid in adjacent hex for attack")
+					return cryptid
+	
+	print("No cryptid found at position:", hex_pos)
+	return null
 # Apply damage to a target cryptid
 # Apply damage to a target cryptid - updated to directly trigger emergency swap
 func apply_damage(target_cryptid, damage_amount):
@@ -1532,25 +1600,8 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 	# Create visual trail for the movement
 	var trail = create_movement_trail(cryptid_node, needed_path)
 	
-	# Save reference to the cryptid node to access in the tween completion
-	var safe_cryptid_reference = cryptid_node
-	
 	# Create a tween for smooth movement
 	var tween = create_movement_tween()
-	
-	# Add starting position effect
-	var start_circle = ColorRect.new()
-	start_circle.color = Color(0.2, 0.8, 0.2, 0.5)
-	start_circle.size = Vector2(30, 30)
-	start_circle.position = map_to_local(start_pos) - Vector2(15, 15)
-	start_circle.name = "movement_marker"
-	add_child(start_circle)
-	
-	# Pulse effect for start position
-	var pulse_tween = create_tween()
-	pulse_tween.tween_property(start_circle, "scale", Vector2(1.5, 1.5), 0.5)
-	pulse_tween.tween_property(start_circle, "scale", Vector2(1.0, 1.0), 0.5)
-	pulse_tween.tween_property(start_circle, "modulate", Color(0.2, 0.8, 0.2, 0), 0.3)
 	
 	# Disable input during movement to prevent multiple actions
 	set_process_input(false)
@@ -2525,3 +2576,23 @@ func ensure_cryptid_position_disabled(cryptid_node):
 		# Also remove from walkable hexes if present
 		if map_pos in walkable_hexes:
 			walkable_hexes.erase(map_pos)
+
+func debug_team_assignments():
+	print("\n===== DEBUGGING TEAM ASSIGNMENTS =====")
+	
+	print("Player team cryptids:")
+	for i in range(player_cryptids_in_play.size()):
+		var cryptid = player_cryptids_in_play[i]
+		print(str(i) + ": " + cryptid.cryptid.name + " at position " + str(local_to_map(cryptid.position)))
+	
+	print("\nEnemy team cryptids:")
+	for i in range(enemy_cryptids_in_play.size()):
+		var cryptid = enemy_cryptids_in_play[i]
+		print(str(i) + ": " + cryptid.cryptid.name + " at position " + str(local_to_map(cryptid.position)))
+	
+	print("\nAll cryptids in play:")
+	for i in range(all_cryptids_in_play.size()):
+		var cryptid = all_cryptids_in_play[i]
+		print(str(i) + ": " + cryptid.cryptid.name + " at position " + str(local_to_map(cryptid.position)))
+		
+	print("===== END TEAM ASSIGNMENTS DEBUG =====\n")

@@ -75,7 +75,7 @@ func setup_encounter():
 	
 	## Initialize the first cryptid's turn
 	#initialize_first_cryptid_turn()
-# Spawn enemy cryptids based on encounter data
+
 func spawn_enemy_cryptids(cryptids):
 	# Get references to necessary nodes
 	var enemy_team = $TileMapLayer/EnemyTeam
@@ -94,6 +94,9 @@ func spawn_enemy_cryptids(cryptids):
 			enemy_team.remove_child(child)
 			child.queue_free()
 	
+	# Reset tracking array
+	tile_map_layer.enemy_cryptids_in_play.clear()
+	
 	# Use the modified initialize_starting_positions function with our wild cryptids
 	var spawned_cryptids = tile_map_layer.initialize_starting_positions(
 		tile_map_layer.enemy_starting_positions, 
@@ -101,11 +104,17 @@ func spawn_enemy_cryptids(cryptids):
 		cryptids
 	)
 	
-	# Update tracking arrays
-	tile_map_layer.enemy_cryptids_in_play = spawned_cryptids
+	# IMPORTANT: Make sure we're adding to enemy_cryptids_in_play, not player_cryptids_in_play
+	tile_map_layer.enemy_cryptids_in_play = []  # Clear array to be safe
+	tile_map_layer.enemy_cryptids_in_play.append_array(spawned_cryptids)
+	
+	# Update all_cryptids_in_play
 	for cryptid in spawned_cryptids:
 		if !tile_map_layer.all_cryptids_in_play.has(cryptid):
 			tile_map_layer.all_cryptids_in_play.append(cryptid)
+	
+	# Debug team assignments after setup
+	tile_map_layer.debug_team_assignments()
 
 # End battle and return to overworld
 func end_battle(was_victorious = true):
@@ -271,9 +280,7 @@ func setup_player_cryptids(num_enemies):
 		elif "_content" in GameState.player_team:
 			player_cryptids = GameState.player_team._content
 			
-		print("Got", player_cryptids.size(), "cryptids from GameState:")
-		for cryptid in player_cryptids:
-			print("- ", cryptid.name)
+		print("Got", player_cryptids.size(), "cryptids from GameState")
 	else:
 		print("WARNING: No player team found in GameState")
 		return
@@ -304,16 +311,12 @@ func setup_player_cryptids(num_enemies):
 		# Add to scene
 		player_team_node.add_child(blank_cryptid)
 		
-		# Add to tracking arrays
+		# IMPORTANT: Make sure we're adding to player_cryptids_in_play, not enemy_cryptids_in_play
 		tile_map_layer.player_cryptids_in_play.append(blank_cryptid)
 		tile_map_layer.all_cryptids_in_play.append(blank_cryptid)
 	
-	# First cryptid should be selected initially
-	if tile_map_layer.player_cryptids_in_play.size() > 0:
-		tile_map_layer.player_cryptids_in_play[0].cryptid.currently_selected = true
-
-	if GameState:
-		GameState.debug_player_team()
+	# Debug team assignments after setup
+	tile_map_layer.debug_team_assignments()
 
 func initialize_first_player_cryptid():
 	var tile_map_layer = $TileMapLayer
