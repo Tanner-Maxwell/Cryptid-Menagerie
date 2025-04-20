@@ -1209,26 +1209,77 @@ func show_attackable_area(center_pos, max_range):
 func get_cryptid_at_position(hex_pos, for_attack = false):
 	print("Searching for cryptid at position:", hex_pos, "for_attack:", for_attack)
 	
-	# Check all cryptids in play
+	# Get the currently selected cryptid for team comparison
+	var attacker = currently_selected_cryptid()
+	var attacker_team = null
+	if attacker:
+		attacker_team = attacker.get_parent()
+		print("Attacker team:", attacker_team.name)
+	
+	# First check for EXACT position match at the clicked position
+	var exact_match = null
 	for cryptid in all_cryptids_in_play:
 		if is_instance_valid(cryptid):
 			var cryptid_pos = local_to_map(cryptid.position)
 			print("Checking cryptid:", cryptid.cryptid.name, "at position:", cryptid_pos)
 			
-			# Check if positions match
-			if cryptid_pos.x == hex_pos.x and cryptid_pos.y == hex_pos.y:
-				print("Found cryptid at position:", hex_pos)
-				return cryptid
-			
-			# If for attack, also check adjacent hexes (optional - helps with targeting)
-			if for_attack:
-				# Get surrounding cells
-				var surrounding_cells = get_surrounding_cells(cryptid_pos)
-				if hex_pos in surrounding_cells:
-					print("Found cryptid in adjacent hex for attack")
-					return cryptid
+			if cryptid_pos == hex_pos:
+				print("Found cryptid at exact position:", hex_pos)
+				exact_match = cryptid
+				break
 	
-	print("No cryptid found at position:", hex_pos)
+	# Return the exact match if it's on the opposite team
+	if exact_match != null and attacker != exact_match:
+		var target_team = exact_match.get_parent()
+		if target_team != attacker_team:
+			print("Found exact match on opposite team:", exact_match.cryptid.name)
+			return exact_match
+	
+	# If we're doing an attack and didn't find a valid exact match, look at nearby positions
+	if for_attack:
+		print("Checking nearby positions for attack targets")
+		
+		# Find the closest cryptid to the clicked position
+		var closest_distance = 999
+		var closest_cryptid = null
+		
+		for cryptid in all_cryptids_in_play:
+			# Skip the attacker itself
+			if cryptid == attacker:
+				continue
+				
+			# Skip cryptids on the same team
+			var cryptid_team = cryptid.get_parent()
+			if cryptid_team == attacker_team:
+				print("Skipping same-team cryptid:", cryptid.cryptid.name)
+				continue
+				
+			if is_instance_valid(cryptid):
+				var cryptid_pos = local_to_map(cryptid.position)
+				
+				# Calculate actual distance using A* pathfinding
+				var path = a_star_hex_attack_grid.get_id_path(
+					a_star_hex_attack_grid.get_closest_point(hex_pos), 
+					a_star_hex_attack_grid.get_closest_point(cryptid_pos)
+				)
+				
+				# If path exists and is shorter than current closest
+				if path.size() > 0 and path.size() < closest_distance:
+					closest_distance = path.size()
+					closest_cryptid = cryptid
+					print("Found potential target:", cryptid.cryptid.name, "at distance:", closest_distance)
+		
+		# If we found a close enough cryptid, return it
+		if closest_cryptid != null and closest_distance <= 2:  # Within 1 hex distance
+			print("Returning closest enemy cryptid:", closest_cryptid.cryptid.name)
+			return closest_cryptid
+	
+	# If all checks failed
+	if exact_match != null:
+		print("Found exact match but on same team - invalid target")
+	else:
+		print("No valid target found at position:", hex_pos)
+	
 	return null
 # Apply damage to a target cryptid
 # Apply damage to a target cryptid - updated to directly trigger emergency swap
