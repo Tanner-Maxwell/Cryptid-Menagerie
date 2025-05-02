@@ -134,6 +134,7 @@ max_card_spread_angle = 6.0
 metadata/_edit_use_anchors_ = true
 
 [node name="DiscardDialog" type="VBoxContainer" parent="UIRoot"]
+visible = false
 offset_left = 31.0
 offset_top = 400.0
 offset_right = 94.0
@@ -146,6 +147,7 @@ text = "Discard:"
 
 [node name="DiscardCards" type="HBoxContainer" parent="UIRoot/DiscardDialog" groups=["selected_card"]]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 8
 script = ExtResource("21_fdd4i")

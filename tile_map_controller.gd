@@ -463,10 +463,24 @@ func handle_card_usage(remaining_movement):
 	
 	move_leftover = remaining_movement
 	
-	# Check which half is active
-	var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
-	var card_half = "top" if using_top_half else "bottom"
+	# ISSUE: This check only looks at the current state, and doesn't respect the 
+	# original card half that started the movement
+	# var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
 	
+	# FIX: If this is a continuing movement (active_movement_card_part is already set), 
+	# use that value. Otherwise check which half is highlighted
+	var using_top_half
+	if active_movement_card_part != "":
+		# Continue using the same half as before
+		using_top_half = (active_movement_card_part == "top")
+		print("Continuing movement with previously active half:", active_movement_card_part)
+	else:
+		# New movement, determine which half is highlighted
+		using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
+		active_movement_card_part = "top" if using_top_half else "bottom"
+		print("Starting new movement with half:", active_movement_card_part)
+	
+	var card_half = "top" if using_top_half else "bottom"
 	print("Using", card_half, "half with", remaining_movement, "movement left")
 	
 	# If no movement left, mark the card as used and discard it
@@ -2795,3 +2809,4 @@ func rebuild_walkable_hexes():
 			walkable_hexes.append(pos)
 	
 	print("walkable_hexes rebuilt with", walkable_hexes.size(), "hexes")
+
