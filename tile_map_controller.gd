@@ -1,7 +1,9 @@
 extends TileMapLayer
 
 const MAIN_ATLAS_ID = 0
+const HexGridManager = preload("res://hex_grid_manager.gd")
 
+var grid_manager = null
 @onready var a_star_hex_grid = AStar2D.new()
 @onready var a_star_hex_attack_grid = AStar2D.new()
 @onready var line_container = $LineContainer
@@ -82,8 +84,31 @@ func _ready():
 	# Call this at the end of _ready() to set up initial debug display
 	call_deferred("setup_debug_display")
 	
-	verify_grid_state()
-	
+	# Initialize the grid manager
+	grid_manager = HexGridManager.new()
+	grid_manager.hex_map = self
+	grid_manager.movement_grid = a_star_hex_grid
+	grid_manager.attack_grid = a_star_hex_attack_grid
+
+	# Initialize the walkable_hexes array with all grid positions
+	walkable_hexes.clear()
+	for point_id in a_star_hex_grid.get_point_ids():
+		var position = a_star_hex_grid.get_point_position(point_id)
+		walkable_hexes.append(position)
+
+	# Mark occupied positions as non-walkable
+	for cryptid in player_cryptids_in_play:
+		var pos = local_to_map(cryptid.position)
+		var point = a_star_hex_grid.get_closest_point(pos, true)
+		a_star_hex_grid.set_point_disabled(point, true)
+
+	for cryptid in enemy_cryptids_in_play:
+		var pos = local_to_map(cryptid.position)
+		var point = a_star_hex_grid.get_closest_point(pos, true)
+		a_star_hex_grid.set_point_disabled(point, true)
+
+	print("Grid system initialized with", walkable_hexes.size(), "walkable hexes")
+		
 
 func _process(delta):
 	# Only handle mouse motion during player turns, not during AI turns
@@ -145,9 +170,12 @@ func initialize_starting_positions(starting_positions: Array, team, specific_cry
 		cryptid.hand = %Hand
 		cryptids_in_play.append(cryptid)
 		
-		# Mark position as occupied in A* grid
-		var point = a_star_hex_grid.get_closest_point(starting_positions[i], true)
-		a_star_hex_grid.set_point_disabled(point, true)
+		# Register with grid manager
+		var hex_pos = starting_positions[i] if i < starting_positions.size() else starting_positions[0]
+		if grid_manager.occupy_hex(hex_pos, cryptid):
+			print("Registered cryptid at position", hex_pos)
+		else:
+			print("WARNING: Position", hex_pos, "already occupied, couldn't register cryptid")
 	
 	return cryptids_in_play
 
@@ -263,10 +291,10 @@ func handle_mouse_motion():
 			
 # Update the handle_left_click function to prevent actions during discard mode
 func handle_left_click(event):
-	var global_clicked = event.position
+	var global_clicked = to_local(event.global_position)
 	selected_cryptid = currently_selected_cryptid()
-	var pos_clicked = local_to_map(to_local(global_clicked))
-	
+	var pos_clicked = local_to_map(get_local_mouse_position())
+	print(pos_clicked, "pos_clicked")
 	# Check if we're in discard mode
 	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
 	if hand_node and hand_node.in_discard_mode:
@@ -307,249 +335,312 @@ func handle_left_click(event):
 
 	
 func handle_move_action(pos_clicked):
-	# Update debug display at the start of the move action
-	update_all_debug_indicators()
+	# Print basic debug info
+	print("\n=== HANDLE MOVE ACTION ===")
+	print("Target position:", pos_clicked)
 	
-	# Calculate the movement distance required for this move
-	var movement_distance = point_path.size() - 1
+	# Get the currently selected cryptid
+	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found")
+		return false
 	
-	# Flag to track if move was successful
-	var move_success = false
+	# Get the current position directly from the cryptid
+	var current_pos = local_to_map(selected_cryptid.position)
+	print("Current position:", current_pos)
 	
-	# Only process the move if the clicked position is walkable and within movement range
-	if pos_clicked in walkable_hexes and movement_distance <= move_leftover:
-		var move_performed = false  # Track if a move was actually performed
-		
-		# Store the original position for freeing up after movement
-		var original_position = local_to_map(selected_cryptid.position)
-		
-		# Check if the clicked hex is already occupied by another cryptid
-		var occupied_by_other = false
-		for cryptid in all_cryptids_in_play:
-			if cryptid != selected_cryptid and local_to_map(cryptid.position) == pos_clicked:
-				occupied_by_other = true
-				print("ERROR: Position already occupied by another cryptid")
-				break
-		
-		if occupied_by_other:
-			# Cannot move to an occupied position
-			print("Cannot move to position occupied by another cryptid")
-			return false
-		
-		# Only subtract the actual distance moved, not the full allowed movement
-		var remaining_movement = move_leftover - movement_distance
-		
-		# Safely check if card_dialog is still valid
-		if is_instance_valid(card_dialog) and card_dialog.has_method("update_move_action_display"):
-			# Check top half
-			if card_dialog.top_half_container and card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-				for action in card_dialog.card_resource.top_move.actions:
-					if action.action_types == [0]:
-						# Verify the move is actually changing position
-						var new_position = Vector2i(pos_clicked)
-						move_performed = (original_position != new_position)
-						
-						if move_performed:
-							# Set active card part ONLY when a move is actually performed
-							move_leftover = remaining_movement
-							active_movement_card_part = "top"
-							active_movement_card = card_dialog
-							
-							# Animate movement along the path
-							animate_movement_along_path(selected_cryptid, original_position, new_position)
-							
-							# Handle based on whether we've used all movement
-							if move_leftover <= 0:
-								# Mark only the top half as used for action economy
-								selected_cryptid.cryptid.top_card_played = true
-								
-								# Set the movement amount to zero in this card instance
-								for move_action in card_dialog.card_resource.top_move.actions:
-									if move_action.action_types == [0]:  # Move action
-										# Update to zero to make it clear this action is used up
-										move_action.amount = 0
-										break
-								
-								# Update the display to show zero movement left
-								if card_dialog.has_method("update_move_action_display"):
-									card_dialog.update_move_action_display("top", 0)
-								
-								# But visually disable both halves
-								disable_entire_card(card_dialog)
-								
-								# Discard the card
-								discard_card(card_dialog, selected_cryptid.cryptid)
-								
-								# Make sure to update the hand's UI
-								if hand and hand.has_method("update_card_availability"):
-									hand.update_card_availability()
-							else:
-								# We have more movement left, disable other cards
-								# Disable bottom half of this card 
-								card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-								card_dialog.bottom_half_container.disabled = true
-								
-								# Disable top half of all other cards
-								disable_other_card_halves("top")
-								
-								# Store original move amount in the card instance's data
-								if not card_dialog.has_meta("original_move_amount"):
-									card_dialog.set_meta("original_move_amount", original_move_amount)
-								
-								# Update card display to show remaining movement
-								if card_dialog.has_method("update_move_action_display"):
-									card_dialog.update_move_action_display("top", move_leftover)
-									
-								# Important: Also update the actual action value in this card instance
-								for move_action in card_dialog.card_resource.top_move.actions:
-									if move_action.action_types == [0]:  # Move action
-										# Only update this specific card instance's action amount
-										move_action.amount = move_leftover
-										break
-								
-								# IMPORTANT: Do NOT mark the card as discarded or used yet
-								# since we still have movement left
-			
-			# Check bottom half
-			elif card_dialog.bottom_half_container and card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-				for action in card_dialog.card_resource.bottom_move.actions:
-					if action.action_types == [0]:
-						# Verify the move is actually changing position
-						var new_position = pos_clicked
-						move_performed = (original_position != new_position)
-						
-						if move_performed:
-							# Set active card part ONLY when a move is actually performed
-							move_leftover = remaining_movement
-							active_movement_card_part = "bottom"
-							active_movement_card = card_dialog
-							
-							# Animate movement along the path
-							animate_movement_along_path(selected_cryptid, original_position, new_position)
-							
-							# Handle based on whether we've used all movement
-							if move_leftover <= 0:
-								# Mark only the bottom half as used for action economy
-								selected_cryptid.cryptid.bottom_card_played = true
-								
-								# Set the movement amount to zero in this card instance
-								for move_action in card_dialog.card_resource.bottom_move.actions:
-									if move_action.action_types == [0]:  # Move action
-										# Update to zero to make it clear this action is used up
-										move_action.amount = 0
-										break
-								
-								# Update the display to show zero movement left
-								if card_dialog.has_method("update_move_action_display"):
-									card_dialog.update_move_action_display("bottom", 0)
-								
-								# But visually disable both halves
-								disable_entire_card(card_dialog)
-								
-								# Discard the card
-								discard_card(card_dialog, selected_cryptid.cryptid)
-								
-								# Make sure to update the hand's UI
-								if hand and hand.has_method("update_card_availability"):
-									hand.update_card_availability()
-							else:
-								# We have more movement left, disable other cards
-								# Disable top half of this card
-								card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-								card_dialog.top_half_container.disabled = true
-								
-								# Disable bottom half of all other cards
-								disable_other_card_halves("bottom")
-								
-								# Store original move amount in the card instance's data
-								if not card_dialog.has_meta("original_move_amount"):
-									card_dialog.set_meta("original_move_amount", original_move_amount)
-								
-								# Update card display to show remaining movement
-								if card_dialog.has_method("update_move_action_display"):
-									card_dialog.update_move_action_display("bottom", move_leftover)
-								
-								# Important: Also update the actual action value in this card instance
-								for move_action in card_dialog.card_resource.bottom_move.actions:
-									if move_action.action_types == [0]:  # Move action
-										# Only update this specific card instance's action amount
-										move_action.amount = move_leftover
-										break
-								
-								# IMPORTANT: Do NOT mark the card as discarded or used yet
-								# since we still have movement left
-		
-		# Handle the case where card_dialog is not valid - AI controlled cryptids
-		else:
-			print("Card dialog not valid - likely AI controlled move")
-			
-			# For AI moves, we still need to perform the movement
-			var new_position = pos_clicked
-			move_performed = (original_position != new_position)
-			
-			if move_performed:
-				# Update return flag
-				move_success = true
-				
-				# Animate movement along the path
-				animate_movement_along_path(selected_cryptid, original_position, new_position)
-				
-				# For AI, we'll rely on the AI to track card usage
-		
-		# Only update the game state if a move was actually performed
-		if move_performed:
-			# Now show the action menu again with updated button state
-			var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-			if action_menu and action_menu.has_method("update_menu_visibility"):
-				action_menu.update_menu_visibility(selected_cryptid.cryptid)
-				action_menu.show()
-			
-			# Check if turn is complete
-			if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
-				selected_cryptid.cryptid.completed_turn = true
-				
-				# Instead of directly going to next cryptid, update the UI to prompt
-				# for the End Turn button
-				if action_menu and action_menu.has_method("show_end_turn_only"):
-					action_menu.show_end_turn_only()
-					
-				var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
-				if game_instructions:
-					game_instructions.text = "Turn complete. Press End Turn to continue."
-			
-			# After a successful move, update the menu
-			if action_menu and action_menu.has_method("update_menu_visibility") and selected_cryptid:
-				# This will update menu to show only End Turn if a card action was used
-				action_menu.update_menu_visibility(selected_cryptid.cryptid)
-				action_menu.show()
-			update_all_debug_indicators()
-	else:
-		print("Invalid move: Clicked on a non-walkable hex or insufficient movement points")
-		print("Required movement: ", movement_distance, ", Available movement: ", move_leftover)
-		
-		# IMPORTANT: If the move failed, make sure the target hex is not disabled
-		# This is key to fixing the bug
-		var point = a_star_hex_grid.get_closest_point(pos_clicked, true)
-		if a_star_hex_grid.is_point_disabled(point):
-			print("CLEANUP: Re-enabling hex that was incorrectly disabled due to failed move")
-			set_point_disabled(point, false)
+	# Calculate movement path and distance
+	var path = a_star_hex_grid.get_id_path(
+		a_star_hex_grid.get_closest_point(current_pos, true),
+		a_star_hex_grid.get_closest_point(pos_clicked, true)
+	)
 	
-	# Reset action state only if no movement left
-	if move_leftover <= 0:
-		move_action_bool = false
-		active_movement_card_part = ""  # Reset active card part
-		active_movement_card = null     # Reset active card
-		remove_movement_indicator()
-		
-		# Re-enable all cards if card_dialog is valid
-		if is_instance_valid(card_dialog):
-			enable_all_card_halves()
-	else:
-		# Show remaining movement indicator
+	if path.size() == 0:
+		print("ERROR: No valid path found")
+		return false
+	
+	var movement_distance = path.size() - 1
+	print("Movement distance:", movement_distance)
+	print("Available movement:", move_leftover)
+	
+	# Check if we have enough movement
+	if movement_distance > move_leftover:
+		print("Not enough movement points")
+		return false
+	
+	# Check if destination is already occupied
+	if a_star_hex_grid.is_point_disabled(a_star_hex_grid.get_closest_point(pos_clicked, true)):
+		print("Destination already occupied")
+		return false
+	
+	# At this point, the move is valid - let's execute it
+	
+	# 1. First, enable the current position (we're leaving it)
+	var current_point = a_star_hex_grid.get_closest_point(current_pos, true)
+	a_star_hex_grid.set_point_disabled(current_point, false)
+	print("Enabled current position:", current_pos)
+	
+	# 2. Disable the destination (we're going there)
+	var dest_point = a_star_hex_grid.get_closest_point(pos_clicked, true)
+	a_star_hex_grid.set_point_disabled(dest_point, true)
+	print("Disabled destination position:", pos_clicked)
+	
+	# 3. Calculate remaining movement
+	var remaining_movement = move_leftover - movement_distance
+	print("Remaining movement:", remaining_movement)
+	
+	# 4. Perform the actual position update for the cryptid
+	var target_world_pos = map_to_local(pos_clicked)
+	
+	# 5. Animate the movement
+	animate_movement(selected_cryptid, path)
+	
+	# 6. Handle card usage
+	handle_card_usage(remaining_movement)
+	
+	# 7. Update UI
+	update_action_menu()
+	
+	print("=== END HANDLE MOVE ACTION ===\n")
+	return true
+
+func animate_movement(cryptid_node, path_ids):
+	print("Animating movement...")
+	
+	# If movement is already in progress, don't start another one
+	if movement_in_progress:
+		print("Movement already in progress, ignoring new movement command")
+		return
+	
+	# Set flag to indicate movement is in progress
+	movement_in_progress = true
+	
+	# Convert path IDs to world positions
+	var world_positions = []
+	for point_id in path_ids:
+		var hex_pos = a_star_hex_grid.get_point_position(point_id)
+		world_positions.append(map_to_local(hex_pos))
+	
+	# Create a tween for smooth movement
+	var tween = create_tween()
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	
+	# Add a callback when tween finishes
+	tween.finished.connect(Callable(self, "_on_movement_tween_finished"))
+	
+	# Disable input during movement to prevent multiple actions
+	set_process_input(false)
+	
+	# Set movement speed
+	var movement_speed = 0.2  # seconds per hex
+	
+	# Animate through each point in the path
+	for i in range(1, world_positions.size()):
+		tween.tween_property(cryptid_node, "position", world_positions[i], movement_speed)
+	
+	# Add a small bounce at the end for visual feedback
+	tween.tween_property(cryptid_node, "scale", Vector2(1.1, 1.1), 0.1)
+	tween.tween_property(cryptid_node, "scale", Vector2(1.0, 1.0), 0.1)
+
+func _on_movement_tween_finished():
+	print("Movement animation completed")
+	movement_in_progress = false
+	
+	# Re-enable input
+	set_process_input(true)
+	
+	# Show remaining movement indicator if we have movement left
+	if move_action_bool and move_leftover > 0 and is_instance_valid(selected_cryptid):
 		update_movement_indicator(selected_cryptid, move_leftover)
-	update_all_debug_indicators()
-	delete_all_lines()
-	return move_success
+	else:
+		remove_movement_indicator()
+
+# Handle card usage for movement
+func handle_card_usage(remaining_movement):
+	if !is_instance_valid(card_dialog):
+		return
+	
+	move_leftover = remaining_movement
+	
+	# Check which half is active
+	var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
+	var card_half = "top" if using_top_half else "bottom"
+	
+	print("Using", card_half, "half with", remaining_movement, "movement left")
+	
+	# If no movement left, mark the card as used and discard it
+	if remaining_movement <= 0:
+		if using_top_half:
+			selected_cryptid.cryptid.top_card_played = true
+		else:
+			selected_cryptid.cryptid.bottom_card_played = true
+		
+		# Visually disable the card
+		disable_entire_card(card_dialog)
+		
+		# Discard the card
+		discard_card(card_dialog, selected_cryptid.cryptid)
+		
+		# Reset action state
+		move_action_bool = false
+		active_movement_card_part = ""
+		active_movement_card = null
+	else:
+		# Still have movement, update the card
+		if using_top_half:
+			active_movement_card_part = "top"
+			card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+			card_dialog.bottom_half_container.disabled = true
+			disable_other_card_halves("top")
+		else:
+			active_movement_card_part = "bottom"
+			card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+			card_dialog.top_half_container.disabled = true
+			disable_other_card_halves("bottom")
+		
+		active_movement_card = card_dialog
+		
+		# Update the card display
+		if card_dialog.has_method("update_move_action_display"):
+			card_dialog.update_move_action_display(card_half, remaining_movement)
+		
+		# Update the action value in the card
+		for move_action in card_dialog.card_resource[card_half + "_move"].actions:
+			if move_action.action_types == [0]:  # Move action
+				move_action.amount = remaining_movement
+				break
+	
+	# Update the hand UI
+	if hand and hand.has_method("update_card_availability"):
+		hand.update_card_availability()
+
+func handle_movement_card_usage(remaining_movement):
+	# Check top half
+	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
+		move_leftover = remaining_movement
+		active_movement_card_part = "top"
+		active_movement_card = card_dialog
+		
+		# Handle based on whether we've used all movement
+		if move_leftover <= 0:
+			# Mark only the top half as used for action economy
+			selected_cryptid.cryptid.top_card_played = true
+			
+			# Set the movement amount to zero in this card instance
+			for move_action in card_dialog.card_resource.top_move.actions:
+				if move_action.action_types == [0]:  # Move action
+					move_action.amount = 0
+					break
+			
+			# Update the display to show zero movement left
+			if card_dialog.has_method("update_move_action_display"):
+				card_dialog.update_move_action_display("top", 0)
+			
+			# Visually disable both halves
+			disable_entire_card(card_dialog)
+			
+			# Discard the card
+			discard_card(card_dialog, selected_cryptid.cryptid)
+			
+			# Make sure to update the hand's UI
+			if hand and hand.has_method("update_card_availability"):
+				hand.update_card_availability()
+		else:
+			# We have more movement left, disable other cards
+			# Disable bottom half of this card 
+			card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+			card_dialog.bottom_half_container.disabled = true
+			
+			# Disable top half of all other cards
+			disable_other_card_halves("top")
+			
+			# Store original move amount in the card instance's data
+			if not card_dialog.has_meta("original_move_amount"):
+				card_dialog.set_meta("original_move_amount", original_move_amount)
+			
+			# Update card display to show remaining movement
+			if card_dialog.has_method("update_move_action_display"):
+				card_dialog.update_move_action_display("top", move_leftover)
+				
+			# Important: Also update the actual action value in this card instance
+			for move_action in card_dialog.card_resource.top_move.actions:
+				if move_action.action_types == [0]:  # Move action
+					move_action.amount = move_leftover
+					break
+	
+	# Check bottom half
+	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
+		move_leftover = remaining_movement
+		active_movement_card_part = "bottom"
+		active_movement_card = card_dialog
+		
+		# Handle based on whether we've used all movement
+		if move_leftover <= 0:
+			# Mark only the bottom half as used for action economy
+			selected_cryptid.cryptid.bottom_card_played = true
+			
+			# Set the movement amount to zero in this card instance
+			for move_action in card_dialog.card_resource.bottom_move.actions:
+				if move_action.action_types == [0]:  # Move action
+					move_action.amount = 0
+					break
+			
+			# Update the display to show zero movement left
+			if card_dialog.has_method("update_move_action_display"):
+				card_dialog.update_move_action_display("bottom", 0)
+			
+			# Visually disable both halves
+			disable_entire_card(card_dialog)
+			
+			# Discard the card
+			discard_card(card_dialog, selected_cryptid.cryptid)
+			
+			# Make sure to update the hand's UI
+			if hand and hand.has_method("update_card_availability"):
+				hand.update_card_availability()
+		else:
+			# We have more movement left, disable other cards
+			# Disable top half of this card
+			card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
+			card_dialog.top_half_container.disabled = true
+			
+			# Disable bottom half of all other cards
+			disable_other_card_halves("bottom")
+			
+			# Store original move amount in the card instance's data
+			if not card_dialog.has_meta("original_move_amount"):
+				card_dialog.set_meta("original_move_amount", original_move_amount)
+			
+			# Update card display to show remaining movement
+			if card_dialog.has_method("update_move_action_display"):
+				card_dialog.update_move_action_display("bottom", move_leftover)
+			
+			# Important: Also update the actual action value in this card instance
+			for move_action in card_dialog.card_resource.bottom_move.actions:
+				if move_action.action_types == [0]:  # Move action
+					move_action.amount = move_leftover
+					break
+
+func update_action_menu():
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu and action_menu.has_method("update_menu_visibility"):
+		action_menu.update_menu_visibility(selected_cryptid.cryptid)
+		action_menu.show()
+
+func check_if_turn_complete():
+	if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+		selected_cryptid.cryptid.completed_turn = true
+		
+		# Instead of directly going to next cryptid, update the UI to prompt
+		# for the End Turn button
+		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+		if action_menu and action_menu.has_method("show_end_turn_only"):
+			action_menu.show_end_turn_only()
+			
+		var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+		if game_instructions:
+			game_instructions.text = "Turn complete. Press End Turn to continue."
 
 func attack_action_selected(current_card):
 	# Check if we're in discard mode
@@ -968,34 +1059,18 @@ func move_action_selected(current_card):
 			print("Cannot use a different card during active movement")
 			return
 	
+	# Store the card dialog
 	card_dialog = current_card
-	move_action_bool = false
+	
 	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
-	
-	var current_pos = local_to_map(selected_cryptid.position)
-	var point = a_star_hex_grid.get_closest_point(current_pos, true)
-	a_star_hex_grid.set_point_disabled(point, false)
-	
 	if selected_cryptid == null:
 		print("ERROR: No selected cryptid found when selecting move action")
 		return
-		
-	delete_all_lines()
 	
-	# If already in a segmented movement, only allow continuing with the same card part
-	if move_leftover > 0 and active_movement_card_part != "":
-		print("Already in segmented movement with " + active_movement_card_part + " part")
-		
-		# Only allow continuing with the same part
-		if (active_movement_card_part == "top" and 
-			card_dialog.top_half_container.modulate != Color(1, 1, 0, 1)):
-			print("Cannot use bottom part during active top movement")
-			return
-		elif (active_movement_card_part == "bottom" and 
-			card_dialog.bottom_half_container.modulate != Color(1, 1, 0, 1)):
-			print("Cannot use top part during active bottom movement")
-			return
+	# Reset action states
+	move_action_bool = false
+	attack_action_bool = false
 	
 	# Check for move action in the top half
 	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
@@ -1006,14 +1081,14 @@ func move_action_selected(current_card):
 					original_move_amount = action.amount
 					move_leftover = action.amount
 				move_action_bool = true
+				active_movement_card_part = "top"
 				
 				# For debugging
-				print("Move action selected: Distance = ", move_leftover)
-				print("Selected cryptid position: ", current_pos)
+				print("Move action selected: Top half with distance =", move_leftover)
 				break
 	
 	# Check for move action in the bottom half
-	if card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
+	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
 		for action in card_dialog.card_resource.bottom_move.actions:
 			if action.action_types == [0] and action.amount > 0:
 				# Only set move_leftover if we're not already in a segmented move
@@ -1021,11 +1096,14 @@ func move_action_selected(current_card):
 					original_move_amount = action.amount
 					move_leftover = action.amount
 				move_action_bool = true
+				active_movement_card_part = "bottom"
 				
 				# For debugging
-				print("Move action selected: Distance = ", move_leftover)
-				print("Selected cryptid position: ", current_pos)
+				print("Move action selected: Bottom half with distance =", move_leftover)
 				break
+	
+	# Store the active card
+	active_movement_card = card_dialog
 
 func axial_to_cube(hex):
 	var q = hex.y
@@ -1128,12 +1206,10 @@ func currently_selected_cryptid():
 	# If no cryptid is marked as currently_selected, check hand reference
 	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
 	if hand_node and hand_node.selected_cryptid:
-		print("No cryptid marked as selected, using hand.selected_cryptid: ", hand_node.selected_cryptid.name)
 		
 		# Find the cryptid in player_cryptids_in_play that matches hand.selected_cryptid
 		for player_cryptid in all_cryptids_in_play:
 			if player_cryptid.cryptid == hand_node.selected_cryptid:
-				print("Found matching cryptid in player_cryptids_in_play")
 				return player_cryptid
 		
 		# If we didn't find a match, just return the first cryptid
@@ -1384,6 +1460,16 @@ func handle_cryptid_defeat(defeated_cryptid):
 			tracker.add_defeated(defeated_cryptid.cryptid.name)
 			print("Added to global tracker:", defeated_cryptid.cryptid.name)
 	
+	# Get the position before removing the cryptid
+	var map_pos = local_to_map(defeated_cryptid.position)
+	
+	# Use the grid manager to vacate the hex
+	if grid_manager:
+		if grid_manager.vacate_hex(map_pos, defeated_cryptid):
+			print("Successfully vacated hex at position", map_pos)
+		else:
+			print("ERROR: Failed to vacate hex at position", map_pos)
+	
 	# IMPORTANT: Always remove the cryptid from the appropriate lists
 	if defeated_cryptid in player_cryptids_in_play:
 		print("Removing defeated player cryptid from player_cryptids_in_play:", defeated_cryptid.cryptid.name)
@@ -1394,7 +1480,9 @@ func handle_cryptid_defeat(defeated_cryptid):
 		print("Enemy defeated! Remaining enemies: " + str(enemy_cryptids_in_play.size()))
 		if enemy_cryptids_in_play.size() == 0:
 			print("All enemies defeated! Triggering victory")
-			game_controller.end_battle_with_victory()
+			if game_controller and game_controller.has_method("end_battle_with_victory"):
+				game_controller.end_battle_with_victory()
+	
 	# Also remove from all_cryptids_in_play
 	if defeated_cryptid in all_cryptids_in_play:
 		print("Removing defeated cryptid from all_cryptids_in_play:", defeated_cryptid.cryptid.name)
@@ -1407,12 +1495,6 @@ func handle_cryptid_defeat(defeated_cryptid):
 				print("Found by name and removing from all_cryptids_in_play:", defeated_cryptid.cryptid.name)
 				all_cryptids_in_play.remove_at(i)
 				break
-	
-	# Make hex walkable again
-	var map_pos = local_to_map(defeated_cryptid.position)
-	walkable_hexes.append(map_pos)
-	var point = a_star_hex_grid.get_closest_point(map_pos, true)
-	a_star_hex_grid.set_point_disabled(point, false)
 	
 	# Update turn order to reflect the removal
 	var turn_order = get_node_or_null("/root/VitaChrome/UIRoot/Turn Order")
@@ -1427,12 +1509,6 @@ func handle_cryptid_defeat(defeated_cryptid):
 	var tween = get_tree().create_tween()
 	tween.tween_property(defeated_cryptid, "modulate", Color(1, 0, 0, 0), 1.0)
 	tween.tween_callback(Callable(defeated_cryptid, "queue_free"))
-	
-	# Also remove the defeated cryptid's parent from the tree if it exists
-	var parent = defeated_cryptid.get_parent()
-	if parent and parent.get_child_count() <= 1:
-		# If this was the only child, schedule the parent for removal too
-		tween.tween_callback(Callable(parent, "queue_free"))
 
 # Add a fallback emergency swap function - for redundancy
 # Add a fallback emergency swap function - for redundancy
@@ -1548,43 +1624,6 @@ func create_movement_tween():
 	
 	return current_tween
 
-# Callback for when tween completes
-func _on_movement_tween_finished():
-	movement_in_progress = false
-	current_tween = null
-	
-	# Re-enable input that might have been disabled during animation
-	set_process_input(true)
-	
-	# Reset any visual cues used during movement
-	delete_all_lines()
-	
-	# IMPORTANT: Check if selected_cryptid is still valid before accessing it
-	if !is_instance_valid(selected_cryptid):
-		print("WARNING: selected_cryptid is no longer valid in _on_movement_tween_finished")
-		# Clean up any movement indicators just to be safe
-		remove_movement_indicator()
-		# Update debug display after movement completes
-		update_all_debug_indicators()
-		return
-	
-	# Get the current position of the selected cryptid
-	var current_pos = local_to_map(selected_cryptid.position)
-	
-	# If we still have movement points left, make sure the current position is usable
-	if move_action_bool and move_leftover > 0:
-		# Make the current position usable as a starting point for the next segment
-		var point = a_star_hex_grid.get_closest_point(current_pos, true)
-		set_point_disabled(point, false)
-		
-		# Update the movement indicator to show remaining movement
-		update_movement_indicator(selected_cryptid, move_leftover)
-	else:
-		# Clean up indicators if movement is complete
-		remove_movement_indicator()
-	
-	# Update debug display after movement completes
-	update_all_debug_indicators()
 	
 func create_movement_trail(cryptid_node, path):
 	# Create a new line to show the path being followed
@@ -1620,33 +1659,32 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 		print("ERROR: cryptid_node is no longer valid in animate_movement_along_path")
 		return
 	
-	# First, make the original hex walkable again
-	walkable_hexes.append(start_pos)
-	var point = a_star_hex_grid.get_closest_point(start_pos, true)
-	
-	# Use our debug-aware function instead of direct call
-	a_star_hex_grid.set_point_disabled(point, false)
-	
-	# Remove walkability from the destination hex immediately
-	# so no other cryptid can move there during animation
-	walkable_hexes.erase(end_pos)
-	point = a_star_hex_grid.get_closest_point(end_pos, true)
-	
-	# Use our debug-aware function instead of direct call
-	a_star_hex_grid.set_point_disabled(point, true)
+	print("Animating movement from", start_pos, "to", end_pos)
 	
 	# Create a temp variable to store the full path
 	var movement_path = vector_path.duplicate()
 	
+	# Convert start_pos and end_pos to Vector2 for consistent comparison
+	var start_pos_v2 = Vector2(start_pos.x, start_pos.y)
+	var end_pos_v2 = Vector2(end_pos.x, end_pos.y)
+	
 	# Ensure we're only using the points we need
 	var needed_path = []
 	for i in range(movement_path.size()):
-		if i == 0 or local_to_map(movement_path[i]) != start_pos:
+		var map_pos = local_to_map(movement_path[i])
+		var path_pos_v2 = Vector2(map_pos.x, map_pos.y)
+		
+		if i == 0 or path_pos_v2 != start_pos_v2:
 			needed_path.append(movement_path[i])
 			
 		# Stop when we reach the destination
-		if local_to_map(movement_path[i]) == end_pos:
+		if path_pos_v2 == end_pos_v2:
 			break
+	
+	# If we don't have at least two points, we can't animate
+	if needed_path.size() < 2:
+		print("WARNING: Not enough path points for animation, using direct movement")
+		needed_path = [map_to_local(start_pos), map_to_local(end_pos)]
 	
 	# Create visual trail for the movement
 	var trail = create_movement_trail(cryptid_node, needed_path)
@@ -1671,6 +1709,7 @@ func animate_movement_along_path(cryptid_node, start_pos, end_pos):
 	
 	# Fade out the trail when finished
 	tween.tween_callback(Callable(self, "fade_out_movement_effects"))
+
 
 # Fade out movement effects
 func fade_out_movement_effects():
@@ -2526,94 +2565,124 @@ func cleanup_failed_move_target(target_pos):
 		print("Target point was not disabled, no cleanup needed")
 
 func verify_grid_state():
-	print("Verifying A* grid state...")
-	var fixed_count = 0
+	print("\n=== VERIFYING GRID STATE ===")
 	
-	# First, gather all positions occupied by cryptids
-	var occupied_positions = []
-	var active_cryptid_position = null
+	# Check if grid manager exists
+	if not grid_manager:
+		print("ERROR: Grid manager is null!")
+		print("=== END VERIFY GRID STATE ===\n")
+		return false
 	
-	# Get the currently selected cryptid's position
-	var selected = currently_selected_cryptid()
-	if selected and is_instance_valid(selected):
-		active_cryptid_position = local_to_map(selected.position)
-		print("Active cryptid position: ", active_cryptid_position)
+	var needs_rebuild = false
 	
-	# Get all other occupied positions
-	for cryptid in all_cryptids_in_play:
-		if is_instance_valid(cryptid):
-			var pos = local_to_map(cryptid.position)
-			# Don't include the active cryptid's position
-			if active_cryptid_position == null or pos.x != active_cryptid_position.x or pos.y != active_cryptid_position.y:
-				occupied_positions.append(pos)
-				print("Position occupied by non-active cryptid: ", pos)
+	# 1. First check: Verify each cryptid is registered in only one position
+	print("Checking for cryptids registered in multiple positions...")
+	var cryptid_positions = {}
 	
-	# Check all points in the A* grid
-	for point_id in a_star_hex_grid.get_point_ids():
-		var hex_pos = a_star_hex_grid.get_point_position(point_id)
-		var is_point_disabled = a_star_hex_grid.is_point_disabled(point_id)
+	for pos in grid_manager.occupied_positions.keys():
+		var entity = grid_manager.occupied_positions[pos]
 		
-		# Check if this is the active cryptid's position
-		var is_active_position = false
-		if active_cryptid_position and hex_pos.x == active_cryptid_position.x and hex_pos.y == active_cryptid_position.y:
-			is_active_position = true
+		if entity in cryptid_positions:
+			print("ERROR: Entity registered at multiple positions!")
+			print("  Already at:", cryptid_positions[entity])
+			print("  Also at:", pos)
+			needs_rebuild = true
+		else:
+			cryptid_positions[entity] = pos
+	
+	# 2. Second check: Verify positions in grid match actual cryptid positions
+	print("Checking if grid positions match actual cryptid positions...")
+	
+	for cryptid in player_cryptids_in_play:
+		var actual_pos = local_to_map(cryptid.position)
+		var found = false
+		var registered_pos = null
 		
-		# Check if this position is occupied by a non-active cryptid
-		var is_occupied = false
-		for occupied_pos in occupied_positions:
-			if hex_pos.x == occupied_pos.x and hex_pos.y == occupied_pos.y:
-				is_occupied = true
+		for pos in grid_manager.occupied_positions.keys():
+			if grid_manager.occupied_positions[pos] == cryptid:
+				found = true
+				registered_pos = pos
 				break
 		
-		# Handle active cryptid position - should always be enabled
-		if is_active_position and is_point_disabled:
-			print("Found active cryptid at disabled point ", hex_pos, " - enabling")
-			set_point_disabled(point_id, false)
-			
-			# Ensure it's in walkable_hexes
-			if not hex_pos in walkable_hexes:
-				walkable_hexes.append(hex_pos)
-				print("Added active cryptid position to walkable_hexes: ", hex_pos)
-			
-			fixed_count += 1
-		# Handle other occupied positions - should be disabled
-		elif is_occupied and not is_point_disabled:
-			print("Found occupied but enabled point at ", hex_pos, " - disabling")
-			set_point_disabled(point_id, true)
-			
-			# Remove from walkable_hexes if present
-			if hex_pos in walkable_hexes:
-				walkable_hexes.erase(hex_pos)
-				print("Removed occupied position from walkable_hexes: ", hex_pos)
-			
-			fixed_count += 1
-		# Handle unoccupied positions - should be enabled
-		elif not is_occupied and not is_active_position and is_point_disabled:
-			print("Found incorrectly disabled point at ", hex_pos, " - fixing")
-			set_point_disabled(point_id, false)
-			
-			# Ensure it's in walkable_hexes
-			if not hex_pos in walkable_hexes:
-				walkable_hexes.append(hex_pos)
-				print("Added unoccupied position to walkable_hexes: ", hex_pos)
-			
-			fixed_count += 1
+		if !found:
+			print("ERROR: Player cryptid", cryptid.cryptid.name, "not registered in grid")
+			print("  Actual position:", actual_pos)
+			needs_rebuild = true
+		elif registered_pos != actual_pos:
+			print("ERROR: Player cryptid", cryptid.cryptid.name, "at wrong position in grid")
+			print("  Registered at:", registered_pos)
+			print("  Actually at:", actual_pos)
+			needs_rebuild = true
 	
-	# Report results
-	if fixed_count > 0:
-		print("Fixed ", fixed_count, " grid points")
+	for cryptid in enemy_cryptids_in_play:
+		var actual_pos = local_to_map(cryptid.position)
+		var found = false
+		var registered_pos = null
+		
+		for pos in grid_manager.occupied_positions.keys():
+			if grid_manager.occupied_positions[pos] == cryptid:
+				found = true
+				registered_pos = pos
+				break
+		
+		if !found:
+			print("ERROR: Enemy cryptid", cryptid.cryptid.name, "not registered in grid")
+			print("  Actual position:", actual_pos)
+			needs_rebuild = true
+		elif Vector2(registered_pos.x, registered_pos.y) != Vector2(actual_pos.x, actual_pos.y):
+			print("ERROR: Enemy cryptid", cryptid.cryptid.name, "at wrong position in grid")
+			print("  Registered at:", registered_pos)
+			print("  Actually at:", actual_pos)
+			needs_rebuild = true
+	
+	# 3. Third check: Use the grid manager's validate function to check grid consistency
+	if !grid_manager.validate_grid_state():
+		print("ERROR: Grid manager internal state inconsistent")
+		needs_rebuild = true
+	
+	# If any issues were found, rebuild the grid state
+	if needs_rebuild:
+		print("Grid state issues found - rebuilding grid state")
+		verify_and_fix_grid_state()
+		return false
 	else:
 		print("Grid state verified - no issues found")
+		print("=== END VERIFY GRID STATE ===\n")
+		return true
+
+func rebuild_grid_state():
+	print("Rebuilding grid state...")
+	
+	# Clear the grid manager's occupied positions
+	grid_manager.occupied_positions.clear()
+	
+	# Re-enable all points in the movement grid
+	for point_id in a_star_hex_grid.get_point_ids():
+		a_star_hex_grid.set_point_disabled(point_id, false)
+	
+	# Re-register all cryptids with their current positions
+	for cryptid in player_cryptids_in_play:
+		var hex_pos = local_to_map(cryptid.position)
+		print("Re-registering player cryptid at position:", hex_pos)
+		grid_manager.occupy_hex(hex_pos, cryptid)
+	
+	for cryptid in enemy_cryptids_in_play:
+		var hex_pos = local_to_map(cryptid.position)
+		print("Re-registering enemy cryptid at position:", hex_pos)
+		grid_manager.occupy_hex(hex_pos, cryptid)
+	
+	print("Grid state rebuilt")
 	
 	# Update debug display
-	update_all_debug_indicators()
+	if debug_enabled:
+		update_all_debug_indicators()
 
 # Ensure a cryptid's position is properly disabled
 func ensure_cryptid_position_disabled(cryptid_node):
 	if not cryptid_node:
 		return
 		
-	# Get the current map position
+	# Get the current map posirebuild_grid_statetion
 	var map_pos = local_to_map(selected_cryptid.position)
 	
 	# Get the point ID for this position
@@ -2647,3 +2716,82 @@ func debug_team_assignments():
 		print(str(i) + ": " + cryptid.cryptid.name + " at position " + str(local_to_map(cryptid.position)))
 		
 	print("===== END TEAM ASSIGNMENTS DEBUG =====\n")
+
+
+func verify_and_fix_grid_state():
+	print("\n=== VERIFYING AND FIXING GRID STATE ===")
+	
+	if not grid_manager:
+		print("ERROR: Grid manager is null!")
+		print("=== END VERIFY AND FIX GRID STATE ===\n")
+		return
+	
+	# Print current grid state
+	grid_manager.debug_print_occupied_positions()
+	
+	# Create a new dictionary mapping positions to cryptids
+	var actual_positions = {}
+	
+	# Gather all cryptid positions from player_cryptids_in_play
+	for cryptid in player_cryptids_in_play:
+		if is_instance_valid(cryptid):
+			var pos = local_to_map(cryptid.position)
+			actual_positions[pos] = cryptid
+			print("Player cryptid", cryptid.cryptid.name, "at position", pos)
+	
+	# Gather all cryptid positions from enemy_cryptids_in_play
+	for cryptid in enemy_cryptids_in_play:
+		if is_instance_valid(cryptid):
+			var pos = local_to_map(cryptid.position)
+			actual_positions[pos] = cryptid
+			print("Enemy cryptid", cryptid.cryptid.name, "at position", pos)
+	
+	# Clear grid manager state
+	print("Clearing grid manager state...")
+	
+	# First, reset all positions in the movement grid
+	for point_id in a_star_hex_grid.get_point_ids():
+		a_star_hex_grid.set_point_disabled(point_id, false)
+	
+	# Clear the occupied positions dictionary
+	grid_manager.occupied_positions.clear()
+	
+	# Re-register all cryptids with their current positions
+	print("Re-registering all cryptids with grid manager...")
+	
+	for pos in actual_positions:
+		var cryptid = actual_positions[pos]
+		
+		if grid_manager.occupy_hex(pos, cryptid):
+			print("Successfully registered", 
+				  cryptid.cryptid.name if cryptid.get("cryptid") else "Unknown", 
+				  "at position", pos)
+		else:
+			print("ERROR: Failed to register", 
+				  cryptid.cryptid.name if cryptid.get("cryptid") else "Unknown", 
+				  "at position", pos)
+	
+	print("Grid state fixed")
+	
+	# Verify fix
+	print("Verifying fix...")
+	grid_manager.debug_print_occupied_positions()
+	
+	# Update walkable hexes based on grid state
+	rebuild_walkable_hexes()
+	
+	print("=== END VERIFY AND FIX GRID STATE ===\n")
+
+func rebuild_walkable_hexes():
+	print("Rebuilding walkable_hexes array...")
+	
+	# Clear the existing walkable_hexes array
+	walkable_hexes.clear()
+	
+	# For each point in the A* grid, check if it's disabled
+	for point_id in a_star_hex_grid.get_point_ids():
+		if not a_star_hex_grid.is_point_disabled(point_id):
+			var pos = a_star_hex_grid.get_point_position(point_id)
+			walkable_hexes.append(pos)
+	
+	print("walkable_hexes rebuilt with", walkable_hexes.size(), "hexes")
