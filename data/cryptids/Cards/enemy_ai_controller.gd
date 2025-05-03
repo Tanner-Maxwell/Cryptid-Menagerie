@@ -238,6 +238,7 @@ func take_enemy_turn(enemy_cryptid):
 	show_end_turn_button_for_enemy()
 	# Restore the previously selected cryptid
 	tile_map_layer.selected_cryptid = previous_selected
+	clear_all_movement_highlights()
 
 
 # Show the end turn button and wait for player to press it
@@ -1106,8 +1107,6 @@ func perform_move(enemy_cryptid, move_info):
 	print("AI: Calling move_action_selected")
 	tile_map_layer.move_action_selected(card_dialog_instance)
 	
-	# Wait a moment to make sure action is set up
-	await get_tree().create_timer(0.3).timeout
 	
 	# Debug action state before move
 	print("AI: Pre-move state: move_action_bool =", tile_map_layer.move_action_bool, 
@@ -1124,11 +1123,13 @@ func perform_move(enemy_cryptid, move_info):
 	tile_map_layer.calculate_path(tile_map_layer.local_to_map(enemy_cryptid.position), target_pos)
 	
 	print("AI: Initiating move action to position:", target_pos)
-	var move_success = tile_map_layer.handle_move_action(target_pos)
+	var move_success = await tile_map_layer.handle_move_action(target_pos)
 	
 	# Wait for movement animation to complete
 	await get_tree().create_timer(1.0).timeout
 	
+	
+	clear_all_movement_highlights()
 	# Check if the move was successful by comparing positions
 	var new_position = enemy_cryptid.position
 	var move_performed = original_position != new_position
@@ -1180,3 +1181,21 @@ func end_turn(enemy_cryptid):
 	
 	# Move to next cryptid
 	hand.next_cryptid_turn()
+
+func clear_all_movement_highlights():
+	# Get reference to tile map layer
+	if tile_map_layer:
+		# Call the tile map's clear function if it exists
+		if tile_map_layer.has_method("clear_movement_highlights"):
+			tile_map_layer.clear_movement_highlights()
+		
+		# Also ensure all visual indicators are removed
+		if tile_map_layer.has_method("delete_all_lines"):
+			tile_map_layer.delete_all_lines()
+		
+		if tile_map_layer.has_method("delete_all_indicators"):
+			tile_map_layer.delete_all_indicators()
+		
+		# Reset action flags
+		tile_map_layer.move_action_bool = false
+		tile_map_layer.attack_action_bool = false

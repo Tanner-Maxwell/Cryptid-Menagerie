@@ -20,7 +20,7 @@ var debug_enabled = true   # Toggle for the debug display
 
 @onready var player_team = %PlayerTeam
 @onready var enemy_team = %EnemyTeam
-@onready var player_starting_positions = [Vector2i(-4, -1), Vector2i(-2, 1), Vector2i(0, 1)]
+@onready var player_starting_positions = [Vector2i(1, -1), Vector2i(-2, 1), Vector2i(0, 1)]
 @onready var enemy_starting_positions = [Vector2i(-4, -3), Vector2i(-2, -3), Vector2i(0, -3)]
 
 var active_movement_card = null
@@ -49,6 +49,14 @@ var attack_path
 var vector_path = []
 var point_path = []
 var damage
+
+var possible_move_hexes = []  # Stores hexes that can be moved to
+var highlighted_path_hexes = [] # Stores the current movement path
+var original_tile_states = {}  # Stores original tile states for restoration
+var move_range_tile_id = Vector2i(2, 0)  # ID for possible movement tiles - adjust based on your tileset
+var path_tile_id = Vector2i(2, 0)  # ID for path tiles - adjust based on your tileset
+var is_showing_movement_range = false
+
 
 func _ready():
 	cur_position_cube = axial_to_cube(local_to_map(player_pos))
@@ -192,6 +200,9 @@ func refresh_debug_display():
 func handle_right_click():
 	print("Right-click detected - cancelling current action")
 	
+	# Clear movement highlights
+	clear_movement_highlights()
+	
 	# If there's movement in progress, finish it
 	if move_action_bool and move_leftover > 0:
 		finish_movement()
@@ -277,16 +288,23 @@ func calculate_path(current_pos: Vector2i, target_pos: Vector2i):
 
 # Update the original function to use the new one
 func handle_mouse_motion():
+	if not move_action_bool:
+		return
+		
 	# Get the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
 	
 	if selected_cryptid == null:
-		selected_cryptid = player_cryptids_in_play[0]
+		return
 	
-	# Calculate paths using our new function
+	# Get current position and mouse position
 	var current_pos = local_to_map(selected_cryptid.position)
 	var target_pos = local_to_map(get_local_mouse_position())
 	
+	# Show the movement path
+	show_movement_path(current_pos, target_pos)
+	
+	# Also calculate path for visualization
 	calculate_path(current_pos, target_pos)
 			
 # Update the handle_left_click function to prevent actions during discard mode
@@ -389,17 +407,29 @@ func handle_move_action(pos_clicked):
 	var remaining_movement = move_leftover - movement_distance
 	print("Remaining movement:", remaining_movement)
 	
-	# 4. Perform the actual position update for the cryptid
+	# 4. IMPORTANT: Clear all existing movement highlights BEFORE moving
+	clear_movement_highlights()
+	
+	# 5. Perform the actual position update for the cryptid
 	var target_world_pos = map_to_local(pos_clicked)
 	
-	# 5. Animate the movement
+	# 6. Animate the movement
 	animate_movement(selected_cryptid, path)
 	
-	# 6. Handle card usage
+	# 7. Handle card usage
 	handle_card_usage(remaining_movement)
 	
-	# 7. Update UI
+	# 8. Update UI
 	update_action_menu()
+	
+	# 9. If we still have movement left, calculate new movement range from the NEW position
+	if remaining_movement > 0:
+		# Do this after a slight delay to ensure movement animation completes
+		await get_tree().create_timer(0.2).timeout
+		# Get updated position
+		var new_pos = local_to_map(selected_cryptid.position)
+		# Recalculate movement range from the new position
+		highlight_possible_movement_hexes(selected_cryptid.position, remaining_movement)
 	
 	print("=== END HANDLE MOVE ACTION ===\n")
 	return true
@@ -1058,7 +1088,6 @@ func _input(event):
 				get_viewport().set_input_as_handled()
 			handle_left_click(event)
 
-# Update the move_action_selected function to prevent activating during discard
 func move_action_selected(current_card):
 	# Check if we're in discard mode
 	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
@@ -1118,6 +1147,10 @@ func move_action_selected(current_card):
 	
 	# Store the active card
 	active_movement_card = card_dialog
+	
+	# After setting move_leftover and other variables
+	if move_action_bool and selected_cryptid:
+		highlight_possible_movement_hexes(selected_cryptid.position, move_leftover)
 
 func axial_to_cube(hex):
 	var q = hex.y
@@ -2022,11 +2055,13 @@ func reset_for_new_cryptid():
 	hand.update_card_availability()
 
 
-# Update finish_movement to not auto-advance turns
 func finish_movement():
 	# Only do something if there's movement in progress
 	if move_action_bool and move_leftover > 0:
 		print("Finishing movement early with " + str(move_leftover) + " movement left")
+		
+		# Clear all movement highlights
+		clear_movement_highlights()
 		
 		# Now we should mark the card as used and discard it
 		if active_movement_card_part == "top":
@@ -2809,4 +2844,107 @@ func rebuild_walkable_hexes():
 			walkable_hexes.append(pos)
 	
 	print("walkable_hexes rebuilt with", walkable_hexes.size(), "hexes")
+
+func highlight_possible_movement_hexes(cryptid_position, movement_range):
+	# Clear any existing highlights
+	clear_movement_highlights()
+	
+	is_showing_movement_range = true
+	var current_pos = local_to_map(cryptid_position)
+	
+	# Get all hexes within movement range
+	possible_move_hexes = get_hexes_within_range(current_pos, movement_range)
+	
+	# Highlight each possible movement hex
+	for hex_pos in possible_move_hexes:
+		# Skip hexes that are occupied
+		if a_star_hex_grid.is_point_disabled(a_star_hex_grid.get_closest_point(hex_pos, true)):
+			continue
+			
+		# Store original tile
+		original_tile_states[hex_pos] = get_cell_atlas_coords(hex_pos)
+		
+		# Set the alternate tile - corrected parameters
+		set_cell(hex_pos, 0, move_range_tile_id, 2)
+
+func get_hexes_within_range(center_pos, move_range):
+	var result = []
+	
+	# For each walkable hex, check if it's within movement range
+	for hex_pos in walkable_hexes:
+		# Skip if the hex is occupied
+		if a_star_hex_grid.is_point_disabled(a_star_hex_grid.get_closest_point(hex_pos, true)):
+			continue
+		
+		# Calculate actual path distance
+		var path = a_star_hex_grid.get_id_path(
+			a_star_hex_grid.get_closest_point(center_pos, true),
+			a_star_hex_grid.get_closest_point(hex_pos, true)
+		)
+		
+		# If there's a valid path and it's within range
+		if path.size() > 0 and path.size() - 1 <= move_range:
+			result.append(hex_pos)
+	
+	return result
+
+func show_movement_path(start_pos, target_pos):
+	# First we need to properly reset ALL previously highlighted path hexes
+	for hex_pos in highlighted_path_hexes:
+		# Reset to movement range tile or original tile
+		if hex_pos in possible_move_hexes:
+			set_cell(hex_pos, 0, move_range_tile_id, 2)
+		else:
+			# In case this hex is no longer in possible movement range
+			if hex_pos in original_tile_states:
+				set_cell(hex_pos, 0, original_tile_states[hex_pos], 0)
+	
+	# Clear the tracking array
+	highlighted_path_hexes.clear()
+	
+	# Calculate path using A* pathfinding
+	var path = a_star_hex_grid.get_id_path(
+		a_star_hex_grid.get_closest_point(start_pos, true),
+		a_star_hex_grid.get_closest_point(target_pos, true)
+	)
+	
+	# If no path or path beyond movement range, return
+	if path.size() == 0 or path.size() - 1 > move_leftover:
+		return
+	
+	# Highlight each hex in the path
+	for i in range(1, path.size()):  # Skip the start position
+		var path_pos = a_star_hex_grid.get_point_position(path[i])
+		
+		# Add to our tracking list
+		highlighted_path_hexes.append(path_pos)
+		
+		# Set the path tile
+		set_cell(path_pos, 0, path_tile_id, 1)
+
+func clear_movement_highlights():
+	# Restore original tiles
+	for hex_pos in original_tile_states:
+		set_cell(hex_pos, 0, original_tile_states[hex_pos], 0)
+	
+	# Clear tracking arrays
+	possible_move_hexes.clear()
+	original_tile_states.clear()
+	is_showing_movement_range = false
+	
+	# Also clear path highlights
+	for hex_pos in highlighted_path_hexes:
+		if hex_pos in original_tile_states:
+			set_cell(hex_pos, 0, original_tile_states[hex_pos], 0)
+	
+	highlighted_path_hexes.clear()
+
+func clear_path_highlights():
+	# Restore path hexes to movement range tiles
+	for hex_pos in highlighted_path_hexes:
+		if hex_pos in possible_move_hexes:
+			set_cell(hex_pos, 0, move_range_tile_id, 0)
+	
+	highlighted_path_hexes.clear()
+
 
