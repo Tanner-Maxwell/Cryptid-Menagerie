@@ -18,6 +18,19 @@ func _process(_delta):
 	# Check if we have valid game controller and tile map layer
 	if game_controller and tile_map_layer:
 		check_battle_end_conditions()
+		
+	if game_controller and tile_map_layer:
+		# Check if all player cryptids are defeated
+		var living_player_cryptids = 0
+		for cryptid_node in tile_map_layer.player_cryptids_in_play:
+			var health_bar = cryptid_node.get_node_or_null("HealthBar")
+			if health_bar and health_bar.value > 0:
+				living_player_cryptids += 1
+		
+		if living_player_cryptids == 0 and tile_map_layer.player_cryptids_in_play.size() > 0:
+			# Call game over on the game controller
+			if game_controller.has_method("trigger_game_over"):
+				game_controller.trigger_game_over()
 
 # Check if battle has ended
 func check_battle_end_conditions():

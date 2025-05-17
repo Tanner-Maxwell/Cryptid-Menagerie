@@ -202,7 +202,7 @@ func handle_right_click():
 	
 	# Clear movement highlights
 	clear_movement_highlights()
-	
+	hand.clear_card_selections()
 	# If there's movement in progress, finish it
 	if move_action_bool and move_leftover > 0:
 		finish_movement()
@@ -425,7 +425,7 @@ func handle_move_action(pos_clicked):
 	# 9. If we still have movement left, calculate new movement range from the NEW position
 	if remaining_movement > 0:
 		# Do this after a slight delay to ensure movement animation completes
-		await get_tree().create_timer(0.2).timeout
+		await get_tree().create_timer(movement_distance * .2).timeout
 		# Get updated position
 		var new_pos = local_to_map(selected_cryptid.position)
 		# Recalculate movement range from the new position
@@ -1443,6 +1443,9 @@ func apply_damage(target_cryptid, damage_amount):
 					game_controller.mark_cryptid_defeated(target_cryptid.cryptid.name)
 					print("Marked as defeated:", target_cryptid.cryptid.name)
 				
+				if game_controller and game_controller.has_method("check_game_over_condition"):
+					game_controller.check_game_over_condition()
+				
 				# Check if there are any bench cryptids available for swap
 				if has_bench_cryptids():
 					print("Player cryptid defeated! Triggering emergency swap!")
@@ -1476,6 +1479,7 @@ func apply_damage(target_cryptid, damage_amount):
 					if game_instructions:
 						game_instructions.text = "No cryptids available for swap. Battle lost!"
 					handle_cryptid_defeat(target_cryptid)
+					
 			else:
 				# For enemy cryptids, handle defeat normally
 				handle_cryptid_defeat(target_cryptid)

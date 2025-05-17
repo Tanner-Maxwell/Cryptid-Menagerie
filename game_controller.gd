@@ -1797,3 +1797,85 @@ func _on_test_button_pressed():
 # Add this fallback function
 func _on_return_to_map_pressed():
 	get_tree().change_scene_to_file("res://Cryptid-Menagerie/scenes/overworld_map.tscn")
+
+func check_game_over_condition():
+	# Check if there are any living player cryptids
+	var living_player_cryptids = 0
+	
+	for cryptid_node in tile_map_layer.player_cryptids_in_play:
+		var health_bar = cryptid_node.get_node_or_null("HealthBar")
+		if health_bar and health_bar.value > 0:
+			living_player_cryptids += 1
+	
+	# Check if all player cryptids are dead
+	if living_player_cryptids == 0:
+		trigger_game_over()
+
+func trigger_game_over():
+	print("GAME OVER: All player cryptids have been defeated!")
+	
+	# Update game state to reflect defeat
+	GameState.last_battle_result = false
+	
+	# Create a game over button to let player proceed when ready
+	show_game_over_message()
+
+func show_game_over_message():
+	# Create a game over panel
+	var game_over_panel = PanelContainer.new()
+	game_over_panel.custom_minimum_size = Vector2(600, 200)
+	
+	var vbox = VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	game_over_panel.add_child(vbox)
+	
+	# Add game over text
+	var game_over_label = Label.new()
+	game_over_label.text = "DEFEAT"
+	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	game_over_label.add_theme_font_size_override("font_size", 48)
+	game_over_label.add_theme_color_override("font_color", Color(1, 0, 0, 1))
+	vbox.add_child(game_over_label)
+	
+	var separator = HSeparator.new()
+	separator.custom_minimum_size = Vector2(0, 20)
+	vbox.add_child(separator)
+	
+	var details_label = Label.new()
+	details_label.text = "All your cryptids have been defeated!"
+	details_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	details_label.add_theme_font_size_override("font_size", 24)
+	vbox.add_child(details_label)
+	
+	var separator2 = HSeparator.new()
+	separator2.custom_minimum_size = Vector2(0, 20)
+	vbox.add_child(separator2)
+	
+	# Add continue button
+	var continue_button = Button.new()
+	continue_button.text = "Continue"
+	continue_button.custom_minimum_size = Vector2(200, 50)
+	continue_button.connect("pressed", Callable(self, "_on_game_over_continue_pressed"))
+	vbox.add_child(continue_button)
+	
+	# Center the panel
+	game_over_panel.anchor_left = 0.5
+	game_over_panel.anchor_top = 0.5
+	game_over_panel.anchor_right = 0.5
+	game_over_panel.anchor_bottom = 0.5
+	game_over_panel.offset_left = -300
+	game_over_panel.offset_top = -100
+	game_over_panel.offset_right = 300
+	game_over_panel.offset_bottom = 100
+	
+	# Add to UI
+	get_node("/root/VitaChrome/UIRoot").add_child(game_over_panel)
+	
+	# Hide other UI elements
+	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+	if action_menu:
+		action_menu.hide()
+
+func _on_game_over_continue_pressed():
+	# Load the game over scene
+	get_tree().change_scene_to_file("res://Cryptid-Menagerie/scenes/game_over_scene.tscn")

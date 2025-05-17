@@ -579,7 +579,7 @@ func clear_card_selections():
 	print("Clearing all card selections")
 	
 	# Reset the selected cards
-	
+	tile_map_layer.clear_movement_highlights()
 	# Reset all card highlighting
 	for child in self.get_children():
 		if child is CardDialog:
