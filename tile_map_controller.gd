@@ -1439,17 +1439,8 @@ func apply_damage(target_cryptid, damage_amount):
 			if is_player_cryptid:
 				# Get game controller for defeat tracking
 				var game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
-				if game_controller and game_controller.has_method("mark_cryptid_defeated"):
-					game_controller.mark_cryptid_defeated(target_cryptid.cryptid.name)
-					print("Marked as defeated:", target_cryptid.cryptid.name)
-				
-				if game_controller and game_controller.has_method("check_game_over_condition"):
-					game_controller.check_game_over_condition()
-				
-				# Check if there are any bench cryptids available for swap
-				if has_bench_cryptids():
-					print("Player cryptid defeated! Triggering emergency swap!")
-					
+				if game_controller and game_controller.has_method("prompt_emergency_swap"):
+					# THIS IS THE CRITICAL PART
 					# Store position data for the swap
 					var defeated_position = target_cryptid.position
 					var map_pos = local_to_map(defeated_position)
@@ -1466,20 +1457,11 @@ func apply_damage(target_cryptid, damage_amount):
 					target_cryptid.set_meta("defeated_position", defeated_position)
 					target_cryptid.set_meta("defeated_map_pos", map_pos)
 					
-					# Trigger emergency swap
-					if game_controller and game_controller.has_method("prompt_emergency_swap"):
-						game_controller.prompt_emergency_swap(target_cryptid)
-					else:
-						print("ERROR: Could not find prompt_emergency_swap method!")
-						handle_cryptid_defeat(target_cryptid)
+					# IMPORTANT: Trigger emergency swap
+					game_controller.prompt_emergency_swap(target_cryptid)
 				else:
-					print("No bench cryptids available for emergency swap!")
-					# FIXED: Properly get the game_instructions reference
-					var game_instructions = get_node_or_null("/root/VitaChrome/UIRoot/GameInstructions")
-					if game_instructions:
-						game_instructions.text = "No cryptids available for swap. Battle lost!"
+					print("ERROR: Could not find prompt_emergency_swap method!")
 					handle_cryptid_defeat(target_cryptid)
-					
 			else:
 				# For enemy cryptids, handle defeat normally
 				handle_cryptid_defeat(target_cryptid)
