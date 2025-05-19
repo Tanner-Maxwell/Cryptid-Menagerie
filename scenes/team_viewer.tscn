@@ -1,0 +1,54 @@
+[gd_scene load_steps=3 format=3 uid="uid://c3eseo4ukyyp"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/team_viewer.gd" id="1_g1e60"]
+[ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://Cryptid-Menagerie/swap_cryptid_slot.tscn" id="2_ovxgp"]
+
+[node name="Control" type="PanelContainer"]
+custom_minimum_size = Vector2(600, 400)
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -200.0
+offset_right = 300.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_g1e60")
+cryptid_slot_scene = ExtResource("2_ovxgp")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "Your Cryptid Team"
+
+[node name="CloseButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+size_flags_horizontal = 10
+text = "X"
+
+[node name="GridContainer" type="GridContainer" parent="MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(700, 500)
+layout_mode = 2
+size_flags_vertical = 3
+columns = 3
+
+[node name="CloseButton2" type="Button" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 10
+text = "Close"

@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=4 uid="uid://dg5svavj3xisj"]
+[gd_scene load_steps=24 format=4 uid="uid://dg5svavj3xisj"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/scenes/battle_scene.gd" id="1_q6ftd"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Cards/enemy_ai_controller.gd" id="2_ijliv"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://Cryptid-Menagerie/team/team.gd" id="7_k6cyo"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/game_controller.gd" id="16_h4cen"]
 [ext_resource type="PackedScene" uid="uid://bhq3ixudba1gp" path="res://Cryptid-Menagerie/swap_cryptid_slot.tscn" id="17_1k65k"]
+[ext_resource type="PackedScene" uid="uid://c3eseo4ukyyp" path="res://Cryptid-Menagerie/scenes/team_viewer.tscn" id="18_bberk"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/ui_root.gd" id="18_nln6q"]
 [ext_resource type="PackedScene" uid="uid://dnuhdqmxrstsw" path="res://Cryptid-Menagerie/team/team_dialog.tscn" id="19_1asxv"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/hand.gd" id="20_peyc7"]
@@ -182,12 +183,21 @@ offset_right = 76.0
 offset_bottom = 636.0
 text = "Back"
 
+[node name="ShowTeam" type="Button" parent="UIRoot"]
+offset_left = 31.0
+offset_top = 559.0
+offset_right = 128.0
+offset_bottom = 590.0
+text = "Show Team"
+
 [node name="ActionSelectMenu" type="Control" parent="UIRoot"]
 unique_name_in_owner = true
 layout_mode = 3
 anchors_preset = 0
-offset_right = 156.0
-offset_bottom = 204.0
+offset_left = 4.0
+offset_top = -9.0
+offset_right = 160.0
+offset_bottom = 195.0
 scale = Vector2(0.946103, 1.00573)
 script = ExtResource("23_4ii0y")
 
@@ -258,12 +268,16 @@ offset_top = 56.0
 offset_right = 225.0
 offset_bottom = 189.0
 
+[node name="TeamViewer" parent="UIRoot" instance=ExtResource("18_bberk")]
+unique_name_in_owner = true
+
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(577, 330)
 scale = Vector2(-5.62239, 38.9907)
 
 [connection signal="pressed" from="UIRoot/AddCardButton" to="UIRoot/Hand" method="_on_button_pressed"]
 [connection signal="pressed" from="UIRoot/BackButton" to="UIRoot/Hand" method="clear_card_selections"]
+[connection signal="pressed" from="UIRoot/ShowTeam" to="." method="toggle_team_viewer"]
 [connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/DoneMoving" to="TileMapLayer" method="finish_movement"]
 [connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/RestButton" to="UIRoot/Hand" method="rest_action"]
 [connection signal="pressed" from="UIRoot/ActionSelectMenu/VBoxContainer/DiscardButton" to="UIRoot/Hand" method="_on_confirm_discard_pressed"]

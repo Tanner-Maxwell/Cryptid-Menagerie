@@ -8,6 +8,8 @@ var encounter_data = null
 @onready var game_controller = $TileMapLayer/GameController
 @onready var tile_map_layer = $TileMapLayer
 @onready var game_instructions = $UIRoot/GameInstructions
+@onready var team_viewer = %TeamViewer  # Make sure this reference is correct
+
 
 # Called when the node enters the scene tree
 func _ready():
@@ -32,6 +34,51 @@ func _ready():
 		setup_encounter()
 	else:
 		print("No encounter data found in GameState")
+		
+		
+	var team_viewer_scene = load("res://Cryptid-Menagerie/scenes/team_viewer.tscn")
+	if team_viewer_scene:
+		team_viewer = team_viewer_scene.instantiate()
+		
+		# Add to UI layer
+		var ui_root = get_node_or_null("/root/VitaChrome/UIRoot")
+		if ui_root:
+			ui_root.add_child(team_viewer)
+			print("Team viewer added to UI")
+		else:
+			add_child(team_viewer)
+			print("Team viewer added to main scene")
+			
+		team_viewer.hide()  # Start hidden
+	
+	var show_team_button = $ShowTeam  # Adjust the path if needed
+	if show_team_button:
+		show_team_button.connect("pressed", Callable(self, "toggle_team_viewer"))
+		print("Team button connected successfully")
+	else:
+		print("ERROR: Could not find ShowTeam button")
+
+func _input(event):
+	# ... existing input code ...
+	
+	# Check for "C" key press
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_C:
+			print("C key pressed - toggle team viewer")
+			toggle_team_viewer()
+			# Mark event as handled
+			get_viewport().set_input_as_handled()
+
+
+func toggle_team_viewer():
+	print("Toggling team viewer")
+	if team_viewer:
+		if team_viewer.visible:
+			team_viewer.hide()
+		else:
+			team_viewer.open()
+	else:
+		print("ERROR: team_viewer reference is null")
 
 # Set up the battle based on encounter data
 func setup_encounter():
