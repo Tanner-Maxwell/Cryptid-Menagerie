@@ -13,6 +13,8 @@ var current_node_id: String = ""
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	# Initialize the encounter manager
+	current_node_id = ""
+	
 	encounter_manager = WildEncounterManager.new()
 	add_child(encounter_manager)
 	
@@ -48,6 +50,8 @@ func _ready():
 	else:
 		print("No current node ID - placing at start position")
 		# Place at default starting position
+
+
 
 # Handler for when an encounter node is selected
 func _on_encounter_selected(node_data):

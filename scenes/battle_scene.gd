@@ -10,7 +10,6 @@ var encounter_data = null
 @onready var game_instructions = $UIRoot/GameInstructions
 @onready var team_viewer = %TeamViewer  # Make sure this reference is correct
 
-
 # Called when the node enters the scene tree
 func _ready():
 	# Make sure critical references are set first
@@ -163,20 +162,17 @@ func spawn_enemy_cryptids(cryptids):
 	# Debug team assignments after setup
 	tile_map_layer.debug_team_assignments()
 
-# End battle and return to overworld
 func end_battle(was_victorious = true):
 	print("Battle ended with " + ("victory" if was_victorious else "defeat"))
 	
 	# Store battle result in GameState
 	GameState.last_battle_result = was_victorious
 	
-	# If we were victorious, set the current node as our position
-	if was_victorious && GameState.current_encounter && GameState.current_encounter.has("node_id"):
-		GameState.set_current_node_id(GameState.current_encounter.node_id)
-		print("Updated current node to: " + GameState.current_encounter.node_id)
+	# IMPORTANT: Update player team with any changes
+	update_team_after_battle()
 	
-	# Get the overworld scene path
-	var overworld_scene_path = "res://Cryptid-Menagerie/scenes/overworld_map.tscn"
+	# Determine what scene to go to next
+	var next_scene = "res://Cryptid-Menagerie/scenes/overworld_map.tscn"
 	
 	# Use a safer method to get the scene tree
 	var scene_tree = Engine.get_main_loop()
@@ -184,14 +180,72 @@ func end_battle(was_victorious = true):
 		print("Found scene tree, changing scene")
 		# Add a small delay to make sure everything is cleaned up
 		await scene_tree.create_timer(0.5).timeout
-		scene_tree.change_scene_to_file(overworld_scene_path)
+		scene_tree.change_scene_to_file(next_scene)
 	else:
 		print("ERROR: Could not get scene tree")
 		# Try the regular method as fallback
 		if get_tree():
-			get_tree().change_scene_to_file(overworld_scene_path)
+			get_tree().change_scene_to_file(next_scene)
 		else:
 			print("Critical error: Both scene_tree and get_tree() are null")
+
+
+# Add this new function to ensure teams are updated
+func update_team_after_battle():
+	print("Updating player team after battle...")
+	
+	# Get references to player team tracking
+	var player_team_model = GameState.player_team if GameState.has_node("player_team") else null
+	
+	# If we don't have GameState team reference, try to find it elsewhere
+	if not player_team_model:
+		var player_team_node = get_node_or_null("/root/VitaChrome/PlayerTeam")
+		if player_team_node and player_team_node.get("cryptidTeam"):
+			player_team_model = player_team_node.cryptidTeam
+			print("Using PlayerTeam.cryptidTeam as model")
+	
+	if not player_team_model:
+		print("ERROR: Could not find player team model")
+		return
+	
+	# Get the remaining player cryptids 
+	var remaining_cryptids = []
+	for cryptid_node in tile_map_layer.player_cryptids_in_play:
+		if is_instance_valid(cryptid_node) and cryptid_node.cryptid:
+			remaining_cryptids.append(cryptid_node.cryptid)
+			print("Active cryptid: " + cryptid_node.cryptid.name)
+	
+	# Remove any cryptids not in remaining_cryptids list from the team model
+	if player_team_model.has_method("get_cryptids") and player_team_model.has_method("remove_cryptid"):
+		var team_cryptids = player_team_model.get_cryptids()
+		
+		# Track all cryptids that should be removed
+		var to_remove = []
+		for team_cryptid in team_cryptids:
+			var still_active = false
+			
+			# Check if this cryptid is in our remaining list
+			for active in remaining_cryptids:
+				if team_cryptid.name == active.name:
+					still_active = true
+					break
+			
+			# If this cryptid is not in our active list
+			if not still_active:
+				to_remove.append(team_cryptid)
+		
+		# Now remove all defeated cryptids
+		for defeated in to_remove:
+			print("Removing defeated cryptid from team model: " + defeated.name)
+			player_team_model.remove_cryptid(defeated)
+	
+	print("Team update complete. Final team:")
+	# Print final team for verification
+	if player_team_model.has_method("get_cryptids"):
+		var final_team = player_team_model.get_cryptids()
+		for i in range(final_team.size()):
+			print(str(i+1) + ". " + final_team[i].name)
+
 
 # Functions from your main.gd that you want to keep
 func set_wild_battle():

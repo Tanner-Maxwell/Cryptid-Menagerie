@@ -32,22 +32,8 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 	# Just set the current cryptid without adding to defeated list
 	current_cryptid = cryptid_to_swap
 	
-	# For debugging, print the current defeated list
-	print("Current defeated cryptids list:", all_defeated_cryptids)
-	
 	# Update title
 	title_label.text = "Select Cryptid to Swap with " + cryptid_to_swap.name
-	
-	# Check grid_container
-	if not grid_container:
-		print("ERROR: grid_container is null! Trying to find it manually.")
-		grid_container = get_node_or_null("MarginContainer/VBoxContainer/ScrollContainer/GridContainer")
-		
-		if not grid_container:
-			print("CRITICAL ERROR: Could not find GridContainer! Dialog will not show cryptids.")
-			return
-		else:
-			print("Found grid_container manually:", grid_container)
 	
 	# Clear existing slots
 	print("DIALOG: Clearing existing slots")
@@ -59,40 +45,30 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 	print("DIALOG: Getting cryptids from team")
 	var all_cryptids = []
 	
-	# Try different methods to get cryptids
 	if team.has_method("get_cryptids"):
 		print("DIALOG: Using get_cryptids()")
 		all_cryptids = team.get_cryptids()
 	elif team.has_property("_content"):
 		print("DIALOG: Accessing _content property")
 		all_cryptids = team._content
-	elif team is Node and team.has_node("cryptidTeam"):
-		print("DIALOG: Accessing cryptidTeam node")
-		all_cryptids = team.get_node("cryptidTeam").get_cryptids()
-	else:
-		print("ERROR: Could not get cryptids from team object:", team)
 	
-	# Filter out cryptids that have been permanently defeated
+	# Filter out defeated cryptids using ALL available sources
 	var valid_cryptids = []
 	for cryptid in all_cryptids:
 		if cryptid == null:
 			continue
 			
-		# Check against all sources of defeated cryptids
 		var is_defeated = false
 		
-		# Check the local static list
-		if all_defeated_cryptids.has(cryptid.name):
-			print("DIALOG: EXCLUDING defeated cryptid (static list):", cryptid.name)
-			is_defeated = true
-		
-		# Check GameController's global list
-		if !is_defeated and get_tree().get_root().has_node("VitaChrome/TileMapLayer/GameController"):
-			var game_controller = get_tree().get_root().get_node("VitaChrome/TileMapLayer/GameController")
-			if "globally_defeated_cryptids" in game_controller:
-				if game_controller.globally_defeated_cryptids.has(cryptid.name):
-					print("DIALOG: EXCLUDING defeated cryptid (global list):", cryptid.name)
-					is_defeated = true
+		# Check GameController's defeated lists
+		var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
+		if game_controller:
+			if game_controller.defeated_cryptids.has(cryptid.name):
+				print("DIALOG: EXCLUDING defeated cryptid (local list):", cryptid.name)
+				is_defeated = true
+			elif game_controller.globally_defeated_cryptids.has(cryptid.name):
+				print("DIALOG: EXCLUDING defeated cryptid (global list):", cryptid.name)
+				is_defeated = true
 		
 		# Check the DefeatedCryptidsTracker singleton
 		if !is_defeated and Engine.has_singleton("DefeatedCryptidsTracker"):
@@ -101,8 +77,20 @@ func open(team: Team, cryptid_to_swap: Cryptid, cryptids_in_play: Array):
 				print("DIALOG: EXCLUDING defeated cryptid (singleton):", cryptid.name)
 				is_defeated = true
 		
-		# Only add if not defeated in any list or if it's the current cryptid
-		if !is_defeated || cryptid == cryptid_to_swap:
+		# Check if cryptid has 0 health (additional safety check)
+		if !is_defeated:
+			var current_health = cryptid.health
+			if cryptid.has_meta("current_health"):
+				current_health = cryptid.get_meta("current_health")
+			elif cryptid.get("current_health") != null:
+				current_health = cryptid.current_health
+			
+			if current_health <= 0:
+				print("DIALOG: EXCLUDING zero-health cryptid:", cryptid.name)
+				is_defeated = true
+		
+		# Only add if not defeated
+		if !is_defeated:
 			valid_cryptids.append(cryptid)
 			print("DIALOG: KEEPING valid cryptid:", cryptid.name)
 	

@@ -84,3 +84,52 @@ func debug_player_team():
 	for i in range(team_cryptids.size()):
 		print(i, ":", team_cryptids[i].name)
 	print("========================")
+
+func reset_to_defaults():
+	print("=== RESETTING GAMESTATE TO DEFAULT VALUES ===")
+	
+	# Reset progression
+	current_floor = 1
+	current_biome = "Forest"
+	current_encounter = null
+	last_battle_result = null
+	_current_node_id = ""  # Reset to empty/starting node
+	
+	print("Reset progression values")
+	
+	# Reset player team completely
+	if player_team:
+		print("Clearing existing player team...")
+		# Clear the existing team
+		if player_team.has_method("get_cryptids"):
+			var existing_cryptids = player_team.get_cryptids()
+			print("Removing", existing_cryptids.size(), "existing cryptids")
+			for cryptid in existing_cryptids:
+				if player_team.has_method("remove_cryptid"):
+					player_team.remove_cryptid(cryptid)
+		elif "_content" in player_team:
+			print("Clearing _content array with", player_team._content.size(), "cryptids")
+			player_team._content.clear()
+	else:
+		# Create a new team if it doesn't exist
+		player_team = Team.new()
+		print("Created new player team")
+	
+	print("Player team cleared")
+	print("=== GAMESTATE RESET COMPLETE ===")
+
+func start_new_game():
+	print("Starting new game...")
+	reset_to_defaults()
+	
+	# Don't auto-initialize cryptids here - let the starter selection handle it
+	print("New game initialized - ready for starter selection")
+
+func restart_game():
+	print("Restarting game with test cryptids...")
+	reset_to_defaults()
+	
+	# Reinitialize with test cryptids for quick restart
+	initialize_player_team_with_test_cryptids()
+	
+	print("Game restarted with test cryptids")

@@ -26,6 +26,7 @@ func _on_restart_pressed():
 func _on_main_menu_pressed():
 	print("Returning to main menu...")
 	# Load the main menu scene (adjust path as needed)
+	reset_game_state()
 	get_tree().change_scene_to_file("res://main_menu.tscn")
 
 func reset_game_state():
@@ -37,8 +38,6 @@ func reset_game_state():
 		GameState.last_battle_result = null
 		GameState._current_node_id = ""
 		
-		# Reinitialize player team with starter cryptids
-		GameState.initialize_player_team_with_test_cryptids()
 	
 	# Reset any defeated cryptids trackers
 	var tracker = Engine.get_singleton("DefeatedCryptidsTracker")

@@ -746,6 +746,24 @@ func reset_all_cryptid_turns():
 
 func prompt_emergency_swap(defeated_cryptid):
 	print("Prompting emergency swap for defeated cryptid:", defeated_cryptid.cryptid.name)
+	
+	# CRITICAL: First check if there are ANY non-defeated cryptids available
+	var available_cryptids = get_available_cryptids_for_swap(defeated_cryptid.cryptid)
+	
+	if available_cryptids.size() == 0:
+		print("No cryptids available for emergency swap - GAME OVER!")
+		
+		# Mark this cryptid as defeated first
+		mark_cryptid_defeated(defeated_cryptid.cryptid.name)
+		
+		# Remove the defeated cryptid from play
+		tile_map_layer.remove_defeated_cryptid(defeated_cryptid)
+		
+		# Trigger game over
+		trigger_game_over()
+		return
+	
+	print("Found", available_cryptids.size(), "cryptids available for swap")
 	game_instructions.text = "Your cryptid was defeated! Select a replacement."
 	
 	# Store the defeated cryptid for reference
@@ -762,58 +780,18 @@ func prompt_emergency_swap(defeated_cryptid):
 		print("ERROR: Could not find SwapCryptidDialog!")
 		game_instructions.text = "Error: Swap dialog not found!"
 		
-		# If we can't find the dialog, just remove the cryptid
+		# If we can't find the dialog, just remove the cryptid and trigger game over
 		tile_map_layer.remove_defeated_cryptid(defeated_cryptid)
+		trigger_game_over()
 		return
 	
 	# Create a filtered team for the swap dialog
 	var filtered_team = Team.new()
 	
-	# Get all cryptids from GameState
-	var all_cryptids = []
-	if GameState.player_team:
-		if GameState.player_team.has_method("get_cryptids"):
-			all_cryptids = GameState.player_team.get_cryptids()
-		elif "_content" in GameState.player_team:
-			all_cryptids = GameState.player_team._content
-			
-		print("Found", all_cryptids.size(), "cryptids in GameState")
-	
-	# Get names of cryptids in play
-	var in_play_names = []
-	for cryptid_node in tile_map_layer.player_cryptids_in_play:
-		if cryptid_node.cryptid and cryptid_node.cryptid != defeated_cryptid.cryptid:
-			in_play_names.append(cryptid_node.cryptid.name)
-			print("- In play:", cryptid_node.cryptid.name)
-	
-	# Add only bench cryptids to filtered team
-	for cryptid in all_cryptids:
-		if cryptid == null:
-			continue
-			
-		# Skip the defeated cryptid
-		if cryptid == defeated_cryptid.cryptid:
-			print("EXCLUDING defeated cryptid from options:", cryptid.name)
-			continue
-			
-		# Skip if already in play
-		if cryptid.name in in_play_names:
-			print("EXCLUDING in-play cryptid from options:", cryptid.name)
-			continue
-			
-		# Add this cryptid to options
+	# Add available cryptids to the filtered team
+	for cryptid in available_cryptids:
 		filtered_team.add_cryptid(cryptid)
 		print("Added to swap options:", cryptid.name)
-	
-	# Check if we have any cryptids left
-	if filtered_team.get_cryptids().size() == 0:
-		print("No cryptids available for emergency swap!")
-		game_instructions.text = "No cryptids available for swap. Battle lost!"
-		
-		# Just remove the defeated cryptid
-		tile_map_layer.remove_defeated_cryptid(defeated_cryptid)
-		check_game_over_condition()
-		return
 	
 	# We need to adapt our list of "in play" cryptids to exclude the defeated one
 	var cryptids_in_play_except_defeated = []
@@ -831,6 +809,74 @@ func prompt_emergency_swap(defeated_cryptid):
 	if swap_dialog_node.is_connected("cryptid_selected", Callable(self, "_on_emergency_swap_selected")):
 		swap_dialog_node.disconnect("cryptid_selected", Callable(self, "_on_emergency_swap_selected"))
 	swap_dialog_node.connect("cryptid_selected", Callable(self, "_on_emergency_swap_selected"))
+
+
+func get_available_cryptids_for_swap(defeated_cryptid):
+	var available_cryptids = []
+	
+	# Get all cryptids from GameState
+	var all_cryptids = []
+	if GameState.player_team:
+		if GameState.player_team.has_method("get_cryptids"):
+			all_cryptids = GameState.player_team.get_cryptids()
+		elif "_content" in GameState.player_team:
+			all_cryptids = GameState.player_team._content
+			
+		print("Found", all_cryptids.size(), "total cryptids in GameState")
+	else:
+		print("No player team in GameState")
+		return available_cryptids
+	
+	# Get names of cryptids currently in play (excluding the defeated one)
+	var in_play_names = []
+	for cryptid_node in tile_map_layer.player_cryptids_in_play:
+		if cryptid_node.cryptid and cryptid_node.cryptid != defeated_cryptid:
+			in_play_names.append(cryptid_node.cryptid.name)
+			print("- In play:", cryptid_node.cryptid.name)
+	
+	# Filter cryptids: exclude defeated ones and those already in play
+	for cryptid in all_cryptids:
+		if cryptid == null:
+			continue
+			
+		# Skip the defeated cryptid
+		if cryptid == defeated_cryptid:
+			print("EXCLUDING defeated cryptid:", cryptid.name)
+			continue
+			
+		# Skip if already in play
+		if cryptid.name in in_play_names:
+			print("EXCLUDING in-play cryptid:", cryptid.name)
+			continue
+			
+		# Check against all sources of defeated cryptids
+		var is_defeated = false
+		
+		# Check the defeated_cryptids list
+		if defeated_cryptids.has(cryptid.name):
+			print("EXCLUDING defeated cryptid (local list):", cryptid.name)
+			is_defeated = true
+		
+		# Check globally_defeated_cryptids list
+		if globally_defeated_cryptids.has(cryptid.name):
+			print("EXCLUDING defeated cryptid (global list):", cryptid.name)
+			is_defeated = true
+		
+		# Check DefeatedCryptidsTracker singleton
+		if Engine.has_singleton("DefeatedCryptidsTracker"):
+			var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
+			if tracker.is_defeated(cryptid.name):
+				print("EXCLUDING defeated cryptid (singleton):", cryptid.name)
+				is_defeated = true
+		
+		# Only add if not defeated
+		if not is_defeated:
+			available_cryptids.append(cryptid)
+			print("AVAILABLE for swap:", cryptid.name)
+	
+	print("Total available cryptids for swap:", available_cryptids.size())
+	return available_cryptids
+
 
 func _on_emergency_swap_selected(new_cryptid):
 	print("Emergency swap selected:", new_cryptid.name)
@@ -862,32 +908,18 @@ func _on_emergency_swap_selected(new_cryptid):
 	new_cryptid.top_card_played = true
 	new_cryptid.bottom_card_played = true
 	
-	# IMPORTANT: Use the cryptid's stored health if available
-	var swap_current_health = 0
+	# CRITICAL FIX: Use the NEW cryptid's health, not stored metadata
+	var swap_current_health = new_cryptid.health  # Use the cryptid's natural max health
 	var swap_max_health = new_cryptid.health
 	
-	# Check stored health using metadata FIRST
-	if new_cryptid.has_meta("current_health"):
-		swap_current_health = new_cryptid.get_meta("current_health")
-		print("Using stored health metadata for " + new_cryptid.name + ": " + str(swap_current_health))
-	# Fallback to property for backward compatibility
-	elif new_cryptid.get("current_health") != null:
-		swap_current_health = new_cryptid.current_health
-		print("Using stored health property for " + new_cryptid.name + ": " + str(swap_current_health))
-		# Also set metadata for consistency going forward
-		new_cryptid.set_meta("current_health", swap_current_health)
-	else:
-		# If no health data found, use maximum health
-		swap_current_health = swap_max_health
-		print("No stored health found for " + new_cryptid.name + ", using max health: " + str(swap_current_health))
-		new_cryptid.set_meta("current_health", swap_current_health)
-	
-	# Set health values to the stored value, not max health
-	print("Setting health values to:", swap_current_health, "/", swap_max_health)
+	print("Setting health values to FULL HEALTH:", swap_current_health, "/", swap_max_health)
 	emergency_cryptid_node.set_health_values(swap_current_health, swap_max_health)
 	emergency_cryptid_node.update_health_bar()
 	
-	# Actually remove the defeated cryptid now
+	# CRITICAL: Now mark the defeated cryptid as permanently defeated
+	mark_cryptid_defeated(emergency_swap_cryptid.cryptid.name)
+	
+	# Remove the defeated cryptid from all tracking
 	tile_map_layer.remove_defeated_cryptid(emergency_swap_cryptid)
 	emergency_swap_cryptid = null
 	
@@ -914,13 +946,7 @@ func _on_emergency_swap_selected(new_cryptid):
 	tile_map_layer.a_star_hex_grid.set_point_disabled(defeated_point, true)
 	print("Ensuring position", defeated_map_pos, "is disabled after emergency swap")
 	
-	# For debugging, check if it's actually disabled
-	if !tile_map_layer.a_star_hex_grid.is_point_disabled(defeated_point):
-		print("WARNING: Failed to disable position after emergency swap, trying again")
-		tile_map_layer.a_star_hex_grid.set_point_disabled(defeated_point, true)
-	
 	# Show some visual effect for the new cryptid
-	# Create a flash effect
 	var flash_color = Color(0, 1, 0, 0.5)  # Green flash
 	emergency_cryptid_node.modulate = flash_color
 	var tween = get_tree().create_tween()
@@ -1098,88 +1124,60 @@ func _on_emergency_swap_cryptid_selected(new_cryptid):
 	advance_to_next_cryptid()
 
 func mark_cryptid_defeated(cryptid_name):
+	print("=== MARKING CRYPTID AS PERMANENTLY DEFEATED ===")
+	print("Cryptid name:", cryptid_name)
+	
+	# Add to local defeated list
 	if !defeated_cryptids.has(cryptid_name):
 		defeated_cryptids.append(cryptid_name)
-		print("MARKED AS PERMANENTLY DEFEATED:", cryptid_name)
-		
-		# Update the persistent tracker if it exists
-		if Engine.has_singleton("DefeatedCryptidsTracker"):
-			var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
-			tracker.add_defeated(cryptid_name)
-		
-		# Add to the static globally_defeated_cryptids list
-		if !GameController.globally_defeated_cryptids.has(cryptid_name):
-			GameController.globally_defeated_cryptids.append(cryptid_name)
-			print("Added to global static list:", cryptid_name)
-		
-		# Also update SwapCryptidDialog's static list
-		var swap_dialog = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
-		if swap_dialog and "all_defeated_cryptids" in swap_dialog:
-			if !swap_dialog.all_defeated_cryptids.has(cryptid_name):
-				swap_dialog.all_defeated_cryptids.append(cryptid_name)
-				print("Added to swap dialog static list:", cryptid_name)
-		
-		# CRITICAL FIX: Remove the cryptid from the player team directly
-		var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
-		if player_team_node:
-			if player_team_node.has_method("get_cryptids") and player_team_node.has_method("remove_cryptid"):
-				# First find the cryptid object by name
-				var cryptids = player_team_node.get_cryptids()
-				for cryptid in cryptids:
-					if cryptid.name == cryptid_name:
-						print("REMOVING CRYPTID FROM PLAYER TEAM:", cryptid_name)
-						player_team_node.remove_cryptid(cryptid)
-						break
-			elif player_team_node.get("_content") != null:
-				# Direct access to _content array
-				var cryptids = player_team_node._content
-				for i in range(cryptids.size() - 1, -1, -1):
-					if cryptids[i].name == cryptid_name:
-						print("REMOVING CRYPTID FROM PLAYER TEAM _content:", cryptid_name)
-						cryptids.remove_at(i)
-						break
-			
-			# Also check if there's a cryptidTeam property
-			if player_team_node.get("cryptidTeam") != null:
-				var team = player_team_node.cryptidTeam
-				if team.has_method("get_cryptids") and team.has_method("remove_cryptid"):
-					var cryptids = team.get_cryptids()
-					for cryptid in cryptids:
-						if cryptid.name == cryptid_name:
-							print("REMOVING CRYPTID FROM cryptidTeam:", cryptid_name)
-							team.remove_cryptid(cryptid)
-							break
-				elif team.get("_content") != null:
-					var cryptids = team._content
-					for i in range(cryptids.size() - 1, -1, -1):
-						if cryptids[i].name == cryptid_name:
-							print("REMOVING CRYPTID FROM cryptidTeam _content:", cryptid_name)
-							cryptids.remove_at(i)
-							break
-		
-		# Also check for any standalone Player node
-		var player = get_node_or_null("/root/VitaChrome/Player")
-		if player and player.get("cryptidTeam") != null:
-			var team = player.cryptidTeam
-			if team.has_method("get_cryptids") and team.has_method("remove_cryptid"):
-				var cryptids = team.get_cryptids()
-				for cryptid in cryptids:
-					if cryptid.name == cryptid_name:
-						print("REMOVING CRYPTID FROM Player's cryptidTeam:", cryptid_name)
-						team.remove_cryptid(cryptid)
-						break
-			elif team.get("_content") != null:
-				var cryptids = team._content
-				for i in range(cryptids.size() - 1, -1, -1):
-					if cryptids[i].name == cryptid_name:
-						print("REMOVING CRYPTID FROM Player's cryptidTeam _content:", cryptid_name)
-						cryptids.remove_at(i)
-						break
-	else:
-		print("Cryptid already marked as defeated:", cryptid_name)
+		print("Added to local defeated_cryptids list")
 	
-	# Print the current list for debugging
-	print("Current defeated cryptids list:", defeated_cryptids)
+	# Add to global static list
+	if !GameController.globally_defeated_cryptids.has(cryptid_name):
+		GameController.globally_defeated_cryptids.append(cryptid_name)
+		print("Added to global static list")
+	
+	# Update the persistent tracker if it exists
+	if Engine.has_singleton("DefeatedCryptidsTracker"):
+		var tracker = Engine.get_singleton("DefeatedCryptidsTracker")
+		tracker.add_defeated(cryptid_name)
+		print("Added to DefeatedCryptidsTracker singleton")
+	
+	# CRITICAL: Remove from GameState.player_team
+	if GameState.player_team:
+		print("Removing from GameState.player_team...")
+		var team_cryptids = []
+		
+		if GameState.player_team.has_method("get_cryptids"):
+			team_cryptids = GameState.player_team.get_cryptids()
+		elif GameState.player_team.get("_content") != null:
+			team_cryptids = GameState.player_team._content
+		
+		print("GameState team has", team_cryptids.size(), "cryptids before removal")
+		
+		# Find and remove the defeated cryptid
+		for i in range(team_cryptids.size() - 1, -1, -1):
+			if team_cryptids[i].name == cryptid_name:
+				print("FOUND AND REMOVING:", cryptid_name, "from GameState team")
+				if GameState.player_team.has_method("remove_cryptid"):
+					GameState.player_team.remove_cryptid(team_cryptids[i])
+				else:
+					team_cryptids.remove_at(i)
+				break
+		
+		# Verify removal
+		var final_team_cryptids = []
+		if GameState.player_team.has_method("get_cryptids"):
+			final_team_cryptids = GameState.player_team.get_cryptids()
+		elif GameState.player_team.get("_content") != null:
+			final_team_cryptids = GameState.player_team._content
+			
+		print("GameState team has", final_team_cryptids.size(), "cryptids after removal")
+		print("Remaining cryptids:")
+		for cryptid in final_team_cryptids:
+			print("  -", cryptid.name)
+	
+	print("=== END MARK CRYPTID DEFEATED ===")
 
 func find_and_setup_next_cryptid():
 	var next_cryptid = find_next_cryptid()
@@ -1871,11 +1869,22 @@ func trigger_game_over():
 	# Update game instructions
 	game_instructions.text = "GAME OVER! All cryptids have been defeated!"
 	
-	# Wait a moment
+	# Hide action menu
+	if action_selection_menu:
+		action_selection_menu.hide()
+	
+	# Wait a moment for dramatic effect
 	await get_tree().create_timer(2.0).timeout
 	
-	# Change to game over scene
-	get_tree().change_scene_to_file("res://game_over.tscn")
+	# Try to change to game over scene
+	var game_over_scene_path = "res://Cryptid-Menagerie/scenes/game_over_scene.tscn"
+	
+	# Check if the game over scene exists
+	if FileAccess.file_exists(game_over_scene_path):
+		get_tree().change_scene_to_file(game_over_scene_path)
+	else:
+		print("Game over scene not found, showing in-game game over")
+		show_game_over_message()
 
 func show_game_over_message():
 	# Create a game over panel
