@@ -14,6 +14,11 @@ extends Node2D
 @onready var swap_dialog = %SwapCryptidDialog
 @export var swap_cryptid_slot_scene: PackedScene
 
+# Gold tracking variables
+var enemies_defeated_count = 0
+var battle_reward_screen = null
+
+
 # Add this static class variable to ensure defeated cryptids are tracked globally
 static var globally_defeated_cryptids = []
 
@@ -65,6 +70,15 @@ func _ready():
 	test_button.position = Vector2(100, 100)
 	test_button.connect("pressed", Callable(self, "_on_test_button_pressed"))
 	get_node("/root/VitaChrome/UIRoot").add_child(test_button)
+	
+	var reward_screen_scene = load("res://battle_reward_screen.tscn")
+	if reward_screen_scene:
+		battle_reward_screen = reward_screen_scene.instantiate()
+		get_node("/root/VitaChrome/UIRoot").add_child(battle_reward_screen)
+		battle_reward_screen.connect("continue_pressed", Callable(self, "_on_reward_screen_continue"))
+		battle_reward_screen.hide()
+	
+	
 	
 	
 # Add this to the bottom of the file, make it accessible via a keystroke
@@ -1612,6 +1626,23 @@ func end_battle_with_victory():
 	print("Victory! Battle has ended.")
 	game_instructions.text = "Victory! Battle has ended."
 	
+	# Prepare battle data for rewards
+	var battle_data = {
+		"is_trainer_battle": is_trainer_battle,
+		"enemies_defeated": enemies_defeated_count
+	}
+	
+	# Show reward screen
+	if battle_reward_screen:
+		battle_reward_screen.show_rewards(battle_data)
+	else:
+		# Fallback if reward screen not available
+		var gold_earned = GoldManager.calculate_battle_reward(battle_data)
+		if gold_earned > 0:
+			GoldManager.add_gold(gold_earned, "Battle Victory")
+		_on_reward_screen_continue()
+
+func _on_reward_screen_continue():
 	# Get the battle scene (parent of this script)
 	var battle_scene = get_tree().current_scene
 	
@@ -1621,15 +1652,9 @@ func end_battle_with_victory():
 		battle_scene.end_battle(true)  # true means victory
 	else:
 		print("WARNING: Could not find battle scene's end_battle method")
-		
-		# Fallback - create a button to return to map
-		var continue_button = Button.new()
-		continue_button.text = "Return to Map"
-		continue_button.custom_minimum_size = Vector2(150, 50)
-		continue_button.position = Vector2(get_viewport_rect().size.x / 2 - 75, get_viewport_rect().size.y * 0.8)
-		continue_button.connect("pressed", Callable(self, "_on_return_to_map_pressed"))
-		get_node("/root/VitaChrome/UIRoot").add_child(continue_button)
-	
+		# Fallback
+		get_tree().change_scene_to_file("res://Cryptid-Menagerie/scenes/overworld_map.tscn")
+
 # Return to map button handler
 func _on_return_to_map():
 	get_tree().change_scene_to_file("res://Cryptid-Menagerie/scenes/overworld_map.tscn")

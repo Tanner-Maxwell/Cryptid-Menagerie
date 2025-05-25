@@ -8,6 +8,9 @@ var player_team = null
 var last_battle_result = null
 var _current_node_id: String = ""
 
+# Currency system
+var gold: int = 0
+
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	#initialize_player_team()
@@ -16,6 +19,7 @@ func _ready():
 	if player_team == null:
 		print("Initializing player team in GameState")
 		player_team = Team.new()
+		
 
 # Initialize player team with starter cryptid
 func initialize_player_team():
@@ -37,6 +41,32 @@ func set_current_node_id(id: String):
 	
 func get_current_node_id() -> String:
 	return _current_node_id
+
+# Gold management functions
+func add_gold(amount: int):
+	gold += amount
+	print("Added " + str(amount) + " gold. Total: " + str(gold))
+	
+func remove_gold(amount: int) -> bool:
+	if gold >= amount:
+		gold -= amount
+		print("Removed " + str(amount) + " gold. Total: " + str(gold))
+		return true
+	else:
+		print("Not enough gold! Needed: " + str(amount) + ", Available: " + str(gold))
+		return false
+		
+func get_gold() -> int:
+	return gold
+	
+func set_gold(amount: int):
+	gold = amount
+	print("Set gold to: " + str(gold))
+
+# Initialize gold when starter is selected
+func initialize_starting_gold():
+	set_gold(100)
+	print("Initialized starting gold to 100")
 
 func initialize_player_team_with_test_cryptids():
 	print("Initializing player team with test cryptids")
@@ -65,6 +95,9 @@ func initialize_player_team_with_test_cryptids():
 				print("WARNING: player_team doesn't have add_cryptid method")
 		else:
 			print("ERROR: Could not load glowfly resource")
+			
+		# Initialize gold for test cryptids
+		initialize_starting_gold()
 	else:
 		print("Player team already has", team_size, "cryptids")
 
@@ -83,6 +116,7 @@ func debug_player_team():
 	print("Total cryptids in team:", team_cryptids.size())
 	for i in range(team_cryptids.size()):
 		print(i, ":", team_cryptids[i].name)
+	print("Current gold:", gold)
 	print("========================")
 
 func reset_to_defaults():
@@ -94,6 +128,7 @@ func reset_to_defaults():
 	current_encounter = null
 	last_battle_result = null
 	_current_node_id = ""  # Reset to empty/starting node
+	gold = 0  # Reset gold
 	
 	print("Reset progression values")
 	

@@ -49,8 +49,18 @@ func _ready():
 			print("ERROR: Could not find node with ID: " + current_node_id)
 	else:
 		print("No current node ID - placing at start position")
-		# Place at default starting position
-
+	
+	var gold_display_scene = load("res://Cryptid-Menagerie/scenes/gold_display.tscn")
+	if gold_display_scene:
+		var gold_display = gold_display_scene.instantiate()
+		add_child(gold_display)
+		# Move it to the top of the scene tree so it renders above everything
+		move_child(gold_display, get_child_count() - 1)
+		print("Gold display added to overworld")
+	
+	if GoldManager and GameState.get_current_node_id() == "":
+		GoldManager.reset()
+		GoldManager.add_gold(100, "Debug test gold")
 
 
 # Handler for when an encounter node is selected

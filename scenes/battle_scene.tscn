@@ -63,6 +63,7 @@ outline_size = 5
 outline_color = Color(0, 0, 0, 1)
 
 [node name="VitaChrome" type="Node2D"]
+position = Vector2(63, 30)
 script = ExtResource("1_q6ftd")
 
 [node name="EnemyAIController" type="Node" parent="."]

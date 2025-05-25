@@ -56,6 +56,14 @@ func _ready():
 		print("Team button connected successfully")
 	else:
 		print("ERROR: Could not find ShowTeam button")
+		
+	var gold_display_scene = load("res://Cryptid-Menagerie/scenes/gold_display.tscn")
+	if gold_display_scene:
+		var gold_display = gold_display_scene.instantiate()
+		add_child(gold_display)
+		# Move it to the top of the scene tree so it renders above everything
+		move_child(gold_display, get_child_count() - 1)
+		print("Gold display added to overworld")
 
 func _input(event):
 	# ... existing input code ...

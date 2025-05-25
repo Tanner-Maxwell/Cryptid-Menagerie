@@ -35,6 +35,10 @@ var current_tween = null
 @onready var blank_cryptid = preload("res://Cryptid-Menagerie/data/cryptids/blank_cryptid.tscn")
 @onready var current_card
 
+# Gold tracking variables
+var enemies_defeated_count = 0
+var battle_reward_screen = null
+
 var defeated_cryptids = []
 var original_move_amount = 0
 var active_movement_card_part = ""
@@ -1488,6 +1492,11 @@ func has_bench_cryptids():
 func handle_cryptid_defeat(defeated_cryptid):
 	print("\n=== HANDLING CRYPTID DEFEAT ===")
 	print("Defeated cryptid: " + defeated_cryptid.cryptid.name)
+	
+	# Track defeated enemies
+	if defeated_cryptid in enemy_cryptids_in_play:
+		enemies_defeated_count += 1
+		print("Enemy defeated! Total enemies defeated:", enemies_defeated_count)
 	
 	# CRITICAL: Make sure we get the GameController first, before anything else
 	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
