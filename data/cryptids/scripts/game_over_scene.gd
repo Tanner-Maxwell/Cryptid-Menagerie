@@ -21,13 +21,13 @@ func _on_restart_pressed():
 	# Reset game state for a new run
 	reset_game_state()
 	# Load the game scene (adjust path as needed)
-	get_tree().change_scene_to_file("res://starter_selection_scene.tscn")
+	get_tree().change_scene_to_file("res://Cryptid-Menagerie/starter_selection_scene.tscn")
 
 func _on_main_menu_pressed():
 	print("Returning to main menu...")
 	# Load the main menu scene (adjust path as needed)
 	reset_game_state()
-	get_tree().change_scene_to_file("res://main_menu.tscn")
+	get_tree().change_scene_to_file("res://Cryptid-Menagerie/main_menu.tscn")
 
 func reset_game_state():
 	# Reset GameState variables

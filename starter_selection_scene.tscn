@@ -1,0 +1,182 @@
+[gd_scene load_steps=4 format=3 uid="uid://cxsymryabckqr"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/starter_selection_scene.gd" id="1_hqxwl"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/biomes/biome_cryptids.gd" id="2_udn7n"]
+[ext_resource type="Resource" uid="uid://de8kc5kndqomo" path="res://Cryptid-Menagerie/data/biomes/forest_biome.tres" id="3_lucek"]
+
+[node name="StarterSelectionScene" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_hqxwl")
+biome_resources = Array[ExtResource("2_udn7n")]([ExtResource("3_lucek")])
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.125, 0.125, 0.125, 1)
+
+[node name="MainContainer" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 739.0
+
+[node name="TopBar" type="PanelContainer" parent="MainContainer"]
+layout_mode = 2
+
+[node name="FilterContainer" type="HBoxContainer" parent="MainContainer/TopBar"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+text = "Choose Your Starting Cryptid"
+
+[node name="VSeparator" type="VSeparator" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="SearchLabel" type="Label" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+text = "Search:"
+
+[node name="SearchBar" type="LineEdit" parent="MainContainer/TopBar/FilterContainer"]
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+
+[node name="VSeparator2" type="VSeparator" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="SortOptionButton" type="OptionButton" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="VSeparator3" type="VSeparator" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="BiomeLabel" type="Label" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+text = "Biome:"
+
+[node name="BiomeFilterButton" type="OptionButton" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="TypeLabel" type="Label" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+text = "Type:"
+
+[node name="TypeFilterButton" type="OptionButton" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="PlayStyleLabel" type="Label" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+text = "Style:"
+
+[node name="PlayStyleFilterButton" type="OptionButton" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="VSeparator4" type="VSeparator" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="ResultsLabel" type="Label" parent="MainContainer/TopBar/FilterContainer"]
+layout_mode = 2
+
+[node name="GridAndDetailsContainer" type="HBoxContainer" parent="MainContainer"]
+layout_mode = 2
+
+[node name="GridContainer" type="VBoxContainer" parent="MainContainer/GridAndDetailsContainer"]
+custom_minimum_size = Vector2(1000, 600)
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="GridScrollContainer" type="ScrollContainer" parent="MainContainer/GridAndDetailsContainer/GridContainer"]
+custom_minimum_size = Vector2(0, 650)
+layout_mode = 2
+
+[node name="CryptidGrid" type="GridContainer" parent="MainContainer/GridAndDetailsContainer/GridContainer/GridScrollContainer"]
+layout_mode = 2
+columns = 8
+
+[node name="DetailsPanel" type="PanelContainer" parent="MainContainer/GridAndDetailsContainer"]
+layout_mode = 2
+size_flags_horizontal = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainContainer/GridAndDetailsContainer/DetailsPanel"]
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="CryptidIconRect" type="TextureRect" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer"]
+layout_mode = 2
+stretch_mode = 5
+
+[node name="TypeLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="StatsContainer" type="VBoxContainer" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="HealthLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/StatsContainer"]
+layout_mode = 2
+
+[node name="SpeedLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/StatsContainer"]
+layout_mode = 2
+
+[node name="DeckSizeLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/StatsContainer"]
+layout_mode = 2
+
+[node name="FullStatsContainer" type="VBoxContainer" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="HSeparator" type="HSeparator" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="FullStatsLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="StrengthLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="DexterityLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="VigorLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="KnowledgeLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="WillpowerLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="HSeparator2" type="HSeparator" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="PlayStyleLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="DeckInfolabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="CardPreviewContainer" type="VBoxContainer" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer"]
+layout_mode = 2
+
+[node name="CardsPreviewLabel" type="Label" parent="MainContainer/GridAndDetailsContainer/DetailsPanel/VBoxContainer/FullStatsContainer/CardPreviewContainer"]
+layout_mode = 2
+
+[node name="BottomBar" type="PanelContainer" parent="MainContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MainContainer/BottomBar"]
+layout_mode = 2
+
+[node name="ConfirmButton" type="Button" parent="MainContainer/BottomBar"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+size_flags_vertical = 8

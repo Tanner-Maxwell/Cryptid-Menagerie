@@ -1,0 +1,35 @@
+[gd_scene load_steps=2 format=3 uid="uid://1hp4jmqfc6fj"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/starter_cryptid_slot.gd" id="1_i4r6g"]
+
+[node name="StarterCryptidSlot" type="PanelContainer"]
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_i4r6g")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="IconContainer" type="CenterContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="CryptidIcon" type="TextureRect" parent="VBoxContainer/IconContainer"]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="TypeLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="StatsContainer" type="VBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="HealthLabel" type="Label" parent="VBoxContainer/StatsContainer"]
+layout_mode = 2
+
+[node name="SpeedLabel" type="Label" parent="VBoxContainer/StatsContainer"]
+layout_mode = 2
+
+[node name="DeckLabel" type="Label" parent="VBoxContainer/StatsContainer"]
+layout_mode = 2

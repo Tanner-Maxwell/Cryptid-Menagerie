@@ -1,7 +1,7 @@
 extends TileMapLayer
 
 const MAIN_ATLAS_ID = 0
-const HexGridManager = preload("res://hex_grid_manager.gd")
+const HexGridManager = preload("res://Cryptid-Menagerie/hex_grid_manager.gd")
 
 var grid_manager = null
 @onready var a_star_hex_grid = AStar2D.new()

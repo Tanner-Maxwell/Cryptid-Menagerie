@@ -181,6 +181,8 @@ func perform_action(actions: Array[Action.ActionType]):
 	# Reset any previous action states before starting a new one
 	tile_map_layer.move_action_bool = false
 	tile_map_layer.attack_action_bool = false
+	tile_map_layer.push_action_bool = false
+	tile_map_layer.pull_action_bool = false
 	tile_map_layer.delete_all_lines()
 	tile_map_layer.delete_all_indicators()
 	
@@ -245,10 +247,16 @@ func attack_action():
 	tile_map_layer.current_card = self
 
 func push_action():
-	pass
+	tile_map_layer.push_action_bool = true
+	tile_map_layer.push_action_selected(self)
+	# Store the current card for reference in the tile map controller
+	tile_map_layer.current_card = self
 
 func pull_action():
-	pass
+	tile_map_layer.pull_action_bool = true
+	tile_map_layer.pull_action_selected(self)
+	# Store the current card for reference in the tile map controller
+	tile_map_layer.current_card = self
 
 func ranged_attack_action():
 	pass
