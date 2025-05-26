@@ -9,13 +9,11 @@ extends Resource
 @export var disabled = false
 
 
-
 enum ActionType {
 	MOVE,
 	ATTACK,
 	PUSH,
 	PULL,
-	RANGED_ATTACK,
 	HEAL,
 	STUN,
 	APPLY_VULNERABLE,

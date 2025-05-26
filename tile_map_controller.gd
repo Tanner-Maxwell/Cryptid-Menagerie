@@ -70,6 +70,10 @@ var pull_amount = 2
 var push_pull_preview_hexes = []  # Add this with other variables at the top
 var preview_tile_id = Vector2i(2, 0)  # Update this from (3, 0) to (2, 0)
 
+var heal_action_bool = false
+var heal_range = 2
+var heal_amount = 0
+
 func _ready():
 	cur_position_cube = axial_to_cube(local_to_map(player_pos))
 	var cur_position = Vector2i(-6, -1)
@@ -132,7 +136,7 @@ func _ready():
 
 func _process(delta):
 	# Only handle mouse motion during player turns, not during AI turns
-	if move_action_bool:
+	if move_action_bool or heal_action_bool:
 		# Check if the current cryptid is an enemy (AI controlled)
 		var current_cryptid = currently_selected_cryptid()
 		var is_enemy_turn = false
@@ -226,6 +230,7 @@ func handle_right_click():
 	attack_action_bool = false
 	push_action_bool = false
 	pull_action_bool = false
+	heal_action_bool = false
 	active_movement_card_part = ""
 	active_movement_card = null
 	
@@ -304,7 +309,7 @@ func calculate_path(current_pos: Vector2i, target_pos: Vector2i):
 
 # Update the original function to use the new one
 func handle_mouse_motion():
-	if not (move_action_bool or push_action_bool or pull_action_bool):
+	if not (move_action_bool or push_action_bool or pull_action_bool or heal_action_bool):
 		return
 	
 	# Clear previous preview
@@ -339,8 +344,15 @@ func handle_mouse_motion():
 		if target_cryptid and target_cryptid != selected_cryptid:
 			# Show the push/pull preview path
 			show_push_pull_preview(target_cryptid, target_pos)
+	elif heal_action_bool:
+		# Show healable targets preview
+		# Use simple function for finding heal targets
+		var target_cryptid = get_cryptid_at_position_simple(target_pos)
+		if target_cryptid and is_friendly_target(selected_cryptid, target_cryptid):
+			# Show heal preview effect
+			show_heal_preview(target_cryptid, target_pos)
 			
-# Update the handle_left_click function to prevent actions during discard mode
+
 func handle_left_click(event):
 	var global_clicked = to_local(event.global_position)
 	selected_cryptid = currently_selected_cryptid()
@@ -358,6 +370,7 @@ func handle_left_click(event):
 	print("attack_action_bool = ", attack_action_bool)
 	print("push_action_bool = ", push_action_bool)
 	print("pull_action_bool = ", pull_action_bool)
+	print("heal_action_bool = ", heal_action_bool)
 	
 	if selected_cryptid == null:
 		print("WARNING: No selected cryptid found, using first cryptid")
@@ -391,6 +404,10 @@ func handle_left_click(event):
 		print("Handling pull action")
 		get_viewport().set_input_as_handled()
 		handle_pull_action(pos_clicked)
+	elif heal_action_bool:
+		print("Handling heal action")
+		get_viewport().set_input_as_handled()
+		handle_heal_action(pos_clicked)
 	else:
 		print("No action type active")
 
@@ -1269,13 +1286,13 @@ func _input(event):
 	if event is InputEventMouse:
 		if event.button_mask == MOUSE_BUTTON_RIGHT and event.is_pressed():
 			handle_right_click()
-		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool):
+		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool):
 			if event is InputEventMouseMotion:
 				handle_mouse_motion()
-		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool):
-			# IMPORTANT: When we're in attack/push/pull mode, handle clicks directly here,
+		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool):
+			# IMPORTANT: When we're in attack/push/pull/heal mode, handle clicks directly here,
 			# not in the individual cryptid nodes
-			if attack_action_bool or push_action_bool or pull_action_bool:
+			if attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool:
 				# This ensures cryptids don't handle the click separately
 				get_viewport().set_input_as_handled()
 			handle_left_click(event)
@@ -1853,7 +1870,7 @@ func remove_defeated_cryptid(defeated_cryptid):
 # Clean up attack indicators
 func delete_all_indicators():
 	for child in get_children():
-		if child.name == "attack_indicator":
+		if child.name == "attack_indicator" or child.name == "heal_indicator":
 			child.queue_free()
 
 func reset_action_modes():
@@ -1861,6 +1878,7 @@ func reset_action_modes():
 	attack_action_bool = false
 	push_action_bool = false
 	pull_action_bool = false
+	heal_action_bool = false
 	active_movement_card_part = ""
 	active_movement_card = null
 	move_leftover = 0
@@ -3374,8 +3392,67 @@ func show_targetable_area(center_pos, max_range, action_type = "attack"):
 	delete_all_indicators()
 	clear_movement_highlights()
 	
+	# For heal, show friendly targets in range
+	if action_type == "heal":
+		is_showing_movement_range = true
+		
+		# Get the healer's team - now using arrays instead of parent
+		var healer_is_player = selected_cryptid in player_cryptids_in_play
+		
+		print("Showing heal targets for", selected_cryptid.cryptid.name, "is player team:", healer_is_player)
+		
+		# Show all positions within range first
+		for point_id in a_star_hex_attack_grid.get_point_ids():
+			var hex_pos = a_star_hex_attack_grid.get_point_position(point_id)
+			var hex_pos_i = Vector2i(int(hex_pos.x), int(hex_pos.y))
+			
+			# Calculate path using attack grid
+			var path = a_star_hex_attack_grid.get_id_path(
+				a_star_hex_attack_grid.get_closest_point(center_hex),
+				a_star_hex_attack_grid.get_closest_point(hex_pos_i)
+			)
+			
+			# Check if within range
+			if path.size() > 0 and path.size() - 1 <= max_range:
+				# Store original tile state
+				original_tile_states[hex_pos_i] = get_cell_atlas_coords(hex_pos_i)
+				
+				# Set base range indicator with a subtle green tint
+				set_cell(hex_pos_i, 0, move_range_tile_id, 2)
+		
+		# Now highlight friendly cryptids that are valid targets
+		for cryptid in all_cryptids_in_play:
+			if not is_instance_valid(cryptid):
+				continue
+				
+			var cryptid_pos = local_to_map(cryptid.position)
+			
+			# Check if this is a friendly cryptid using arrays
+			var is_friendly = is_friendly_target(selected_cryptid, cryptid)
+			
+			if is_friendly:
+				# Check if in range
+				var path = a_star_hex_attack_grid.get_id_path(
+					a_star_hex_attack_grid.get_closest_point(center_hex),
+					a_star_hex_attack_grid.get_closest_point(cryptid_pos)
+				)
+				
+				if path.size() > 0 and path.size() - 1 <= max_range:
+					# Use green highlight for valid heal targets
+					set_cell(cryptid_pos, 0, Vector2i(2, 0), 3)  # Alternative tile 3 for heal targets
+					print("Valid heal target:", cryptid.cryptid.name, "at:", cryptid_pos)
+					
+					# Add a green indicator above the cryptid
+					var indicator = ColorRect.new()
+					indicator.color = Color(0, 1, 0, 0.4)  # Semi-transparent green
+					indicator.size = Vector2(30, 30)
+					indicator.position = map_to_local(cryptid_pos) - Vector2(15, 15)
+					indicator.name = "heal_indicator"
+					indicator.z_index = 10
+					add_child(indicator)
 	# For push/pull, use movement-style tile highlighting
-	if action_type == "push" or action_type == "pull":
+	elif action_type == "push" or action_type == "pull":
+		# ... existing push/pull code ...
 		is_showing_movement_range = true
 		
 		# Store all hexes within range first
@@ -4216,3 +4293,396 @@ func calculate_pull_preview_path(start_pos: Vector2i, amount: int) -> Array[Vect
 	
 	print("Preview path:", preview_path)
 	return preview_path
+
+func heal_action_selected(current_card):
+	# Check if we're in discard mode
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.in_discard_mode:
+		print("In discard mode, ignoring heal action selection")
+		return
+	
+	print("\n---------- HEAL ACTION SELECTED DEBUG ----------")
+	card_dialog = current_card
+	
+	# Reset action states
+	move_action_bool = false
+	attack_action_bool = false
+	push_action_bool = false
+	pull_action_bool = false
+	heal_action_bool = false
+	
+	# Make sure we have the currently selected cryptid
+	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found")
+		return
+	
+	print("Selected cryptid:", selected_cryptid.cryptid.name)
+	
+	# Clear visual indicators
+	delete_all_lines()
+	clear_movement_highlights()
+	
+	# Get the VBoxContainer first
+	var vbox = card_dialog.get_node_or_null("VBoxContainer")
+	if not vbox:
+		print("ERROR: VBoxContainer not found")
+		return
+	
+	# Get the correct container nodes
+	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
+	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
+	
+	if not top_half_container or not bottom_half_container:
+		print("ERROR: Container nodes not found")
+		return
+	
+	# Check which half is currently highlighted
+	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
+	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
+	
+	print("Top half highlighted:", top_highlighted)
+	print("Bottom half highlighted:", bottom_highlighted)
+	
+	# Check for heal action and get the actual values from the card
+	var found_heal = false
+	
+	if card_dialog.get("card_resource") != null:
+		var card_resource = card_dialog.card_resource
+		
+		# Check top move actions
+		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
+			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
+				for action in card_resource.top_move.actions:
+					if 4 in action.action_types:  # Heal action type (4, since RANGED_ATTACK was removed)
+						print("Found heal action in top half")
+						heal_range = action.range
+						heal_amount = action.amount
+						heal_action_bool = true
+						active_movement_card_part = "top"
+						found_heal = true
+						print("Heal range:", heal_range)
+						print("Heal amount:", heal_amount)
+						break
+		
+		# Check bottom move actions
+		if not found_heal and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
+			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
+				for action in card_resource.bottom_move.actions:
+					if 4 in action.action_types:  # Heal action type (4)
+						print("Found heal action in bottom half")
+						heal_range = action.range
+						heal_amount = action.amount
+						heal_action_bool = true
+						active_movement_card_part = "bottom"
+						found_heal = true
+						print("Heal range:", heal_range)
+						print("Heal amount:", heal_amount)
+						break
+	
+	if heal_action_bool:
+		print("Successfully activated heal action")
+		print("Can heal targets up to", heal_range, "hexes away")
+		print("Will heal for", heal_amount, "health")
+		
+		# Debug: Print all cryptid positions
+		print("\n--- Current cryptid positions ---")
+		for cryptid in all_cryptids_in_play:
+			if is_instance_valid(cryptid):
+				var hex_pos = local_to_map(cryptid.position)
+				var team = cryptid.get_parent().name if cryptid.get_parent() else "Unknown"
+				print(cryptid.cryptid.name, "at", hex_pos, "on team", team)
+		print("--- End cryptid positions ---\n")
+		
+		# Show targetable area using tile highlighting
+		show_targetable_area(selected_cryptid.position, heal_range, "heal")
+		
+		# Store references for handle_heal_action
+		if active_movement_card_part == "top":
+			card_dialog.top_half_container = top_half_container
+			disable_other_cards_exact("top")
+		elif active_movement_card_part == "bottom":
+			card_dialog.bottom_half_container = bottom_half_container
+			disable_other_cards_exact("bottom")
+	else:
+		print("ERROR: Failed to activate heal action")
+	
+	print("---------- END HEAL ACTION SELECTED DEBUG ----------\n")
+
+func handle_heal_action(pos_clicked):
+	print("\n---------- HANDLE HEAL ACTION DEBUG ----------")
+	
+	# Get the healing cryptid
+	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found for heal")
+		return false
+	
+	print("Healer:", selected_cryptid.cryptid.name, "at position:", local_to_map(selected_cryptid.position))
+	
+	# Get the target cryptid at the clicked position - use simple function
+	var target_cryptid = get_cryptid_at_position_simple(pos_clicked)
+	print("Target position:", pos_clicked)
+	print("Target cryptid:", target_cryptid.cryptid.name if target_cryptid else "None")
+	
+	if target_cryptid == null:
+		print("No valid target at the selected position")
+		print("Looking for self-heal possibility...")
+		
+		# Check if the player clicked near their own cryptid (self-heal attempt)
+		var healer_pos = local_to_map(selected_cryptid.position)
+		var click_world_pos = map_to_local(pos_clicked)
+		var healer_world_pos = map_to_local(healer_pos)
+		var distance_to_self = click_world_pos.distance_to(healer_world_pos)
+		
+		print("Healer at:", healer_pos, "Click at:", pos_clicked, "Distance:", distance_to_self)
+		
+		if distance_to_self < 60:  # Within 60 pixels, likely trying to self-heal
+			print("Close to self - attempting self-heal")
+			target_cryptid = selected_cryptid
+		else:
+			# Reset action state
+			heal_action_bool = false
+			active_movement_card_part = ""
+			active_movement_card = null
+			delete_all_lines()
+			delete_all_indicators()
+			clear_movement_highlights()
+			return false
+	
+	# Check if target is friendly (same team or self)
+	if not is_friendly_target(selected_cryptid, target_cryptid):
+		print("Invalid target: Can only heal friendly cryptids")
+		return false
+	
+	# Calculate distance to target
+	var current_pos = local_to_map(selected_cryptid.position)
+	var target_pos = local_to_map(target_cryptid.position)
+	
+	# Use attack grid for pathfinding (since healing ignores obstacles for range)
+	var path = a_star_hex_attack_grid.get_id_path(
+		a_star_hex_attack_grid.get_closest_point(current_pos),
+		a_star_hex_attack_grid.get_closest_point(target_pos)
+	)
+	
+	if path.size() == 0:
+		print("ERROR: No valid path to target")
+		return false
+	
+	var distance = path.size() - 1
+	print("Distance to target:", distance, "Heal range:", heal_range)
+	
+	if distance <= heal_range:
+		print("Target is within range")
+		
+		# Animate the heal
+		animate_heal(selected_cryptid, target_cryptid)
+		
+		# Apply the healing
+		apply_healing(target_cryptid, heal_amount)
+		
+		# Mark the action as used
+		mark_action_used()
+		
+		# Clean up action state
+		heal_action_bool = false
+		active_movement_card_part = ""
+		active_movement_card = null
+		delete_all_lines()
+		delete_all_indicators()
+		clear_movement_highlights()
+		
+		# Update UI
+		update_ui_after_action()
+		
+		return true
+	else:
+		print("Target out of range")
+		return false
+	
+	print("---------- END HANDLE HEAL ACTION DEBUG ----------\n")
+
+func is_friendly_target(caster, target) -> bool:
+	# Self-healing is allowed
+	if caster == target:
+		return true
+	
+	# Check if both are in player team
+	if caster in player_cryptids_in_play and target in player_cryptids_in_play:
+		return true
+	
+	# Check if both are in enemy team
+	if caster in enemy_cryptids_in_play and target in enemy_cryptids_in_play:
+		return true
+	
+	# Otherwise they're on different teams
+	return false
+
+# Add the apply_healing function:
+func apply_healing(target_cryptid, heal_amount):
+	print("Applying " + str(heal_amount) + " healing to " + target_cryptid.cryptid.name)
+	
+	# Access the health value from the cryptid
+	var health_bar = target_cryptid.get_node("HealthBar")
+	if health_bar:
+		# Calculate new health value (capped at max)
+		var current_health = health_bar.value
+		var max_health = health_bar.max_value
+		var new_health = min(current_health + heal_amount, max_health)
+		
+		# Update health bar
+		health_bar.value = new_health
+		
+		# Update cryptid's health values
+		target_cryptid.set_health_values(new_health, max_health)
+		target_cryptid.update_health_bar()
+		
+		var actual_healing = new_health - current_health
+		print("Health increased by:", actual_healing)
+		print("Health now: " + str(new_health) + "/" + str(max_health))
+		
+		# Store health metadata
+		target_cryptid.cryptid.set_meta("current_health", new_health)
+	else:
+		print("ERROR: Could not find health bar on target cryptid!")
+
+func animate_heal(caster, target):
+	print("Starting heal animation from", caster, "to", target)
+	
+	# Create healing visual effect
+	create_heal_effect(caster.position, target.position)
+	
+	# If movement is already in progress, don't start another one
+	if movement_in_progress:
+		print("Movement already in progress, skipping caster animation")
+		return
+	
+	# Set flag to indicate movement is in progress
+	movement_in_progress = true
+	
+	# Simple scale animation for the caster
+	var tween = create_tween()
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	
+	# Pulse the caster
+	tween.tween_property(caster, "scale", Vector2(1.2, 1.2), 0.2)
+	tween.tween_property(caster, "scale", Vector2(1.0, 1.0), 0.2)
+	
+	# Pulse the target with a glow effect
+	var original_modulate = target.modulate
+	tween.tween_property(target, "modulate", Color(0.5, 1, 0.5, 1), 0.3)
+	tween.tween_property(target, "modulate", original_modulate, 0.3)
+	
+	# Connect finished signal
+	tween.finished.connect(Callable(self, "_on_heal_tween_finished"))
+	
+	# Disable input during animation
+	set_process_input(false)
+
+# Add heal tween finished callback:
+func _on_heal_tween_finished():
+	print("Heal animation finished")
+	movement_in_progress = false
+	set_process_input(true)
+
+# Add heal visual effect:
+func create_heal_effect(start_pos, end_pos):
+	print("Creating heal visual effects")
+	
+	# Create a line for the heal - green color
+	var heal_line = Line2D.new()
+	heal_line.width = 6
+	heal_line.default_color = Color(0, 1, 0, 0.8)  # Green for healing
+	heal_line.add_point(start_pos)
+	heal_line.add_point(end_pos)
+	heal_line.name = "heal_effect"
+	heal_line.z_index = 10
+	add_child(heal_line)
+	
+	# Create healing sparkles at target
+	var heal_particles = ColorRect.new()
+	heal_particles.color = Color(0, 1, 0, 0.6)
+	heal_particles.size = Vector2(40, 40)
+	heal_particles.position = end_pos - Vector2(20, 20)
+	heal_particles.name = "heal_effect"
+	heal_particles.z_index = 10
+	add_child(heal_particles)
+	
+	# Animate the heal effects
+	var effect_tween = create_tween()
+	effect_tween.set_parallel(true)
+	
+	# Pulse the line
+	effect_tween.tween_property(heal_line, "width", 12, 0.2)
+	effect_tween.tween_property(heal_line, "width", 3, 0.3)
+	
+	# Expand and fade the particles
+	effect_tween.tween_property(heal_particles, "scale", Vector2(2.0, 2.0), 0.5)
+	effect_tween.tween_property(heal_particles, "modulate", Color(0, 1, 0, 0), 0.5)
+	
+	# Clean up after animation
+	effect_tween.tween_callback(Callable(self, "clean_up_heal_effects"))
+
+# Add cleanup function for heal effects:
+func clean_up_heal_effects():
+	for child in get_children():
+		if child.name == "heal_effect":
+			child.queue_free()
+
+# Add heal preview function:
+func show_heal_preview(target_cryptid, target_pos: Vector2i):
+	# Clear previous preview
+	for hex in push_pull_preview_hexes:
+		if hex in original_tile_states:
+			if is_showing_movement_range:
+				# Check if there's a cryptid at this position
+				var has_cryptid = false
+				for cryptid in all_cryptids_in_play:
+					if local_to_map(cryptid.position) == hex:
+						has_cryptid = true
+						break
+				set_cell(hex, 0, path_tile_id if has_cryptid else move_range_tile_id, 1 if has_cryptid else 2)
+			else:
+				set_cell(hex, 0, original_tile_states[hex], 0)
+	push_pull_preview_hexes.clear()
+	
+	# Show green preview tile at target position
+	push_pull_preview_hexes.append(target_pos)
+	set_cell(target_pos, 0, Vector2i(2, 0), 3)  # Use alternative tile 3 for heal preview
+
+func get_cryptid_at_position_simple(hex_pos) -> Node:
+	print("Searching for cryptid at position:", hex_pos)
+	
+	# First try exact position match
+	for cryptid in all_cryptids_in_play:
+		if is_instance_valid(cryptid):
+			var cryptid_pos = local_to_map(cryptid.position)
+			if cryptid_pos == hex_pos:
+				print("Found cryptid:", cryptid.cryptid.name, "at exact position:", cryptid_pos)
+				return cryptid
+	
+	# If no exact match, check nearby positions (in case of click precision issues)
+	var neighbors = get_hex_neighbors(hex_pos)
+	neighbors.append(hex_pos)  # Include the center position
+	
+	var closest_cryptid = null
+	var min_distance = 999999.0
+	
+	for cryptid in all_cryptids_in_play:
+		if is_instance_valid(cryptid):
+			var cryptid_pos = local_to_map(cryptid.position)
+			var world_pos = map_to_local(cryptid_pos)
+			var click_world_pos = map_to_local(hex_pos)
+			var distance = world_pos.distance_to(click_world_pos)
+			
+			if distance < min_distance and distance < 50:  # Within 50 pixels
+				min_distance = distance
+				closest_cryptid = cryptid
+				print("Found nearby cryptid:", cryptid.cryptid.name, "at position:", cryptid_pos, "distance:", distance)
+	
+	if closest_cryptid:
+		return closest_cryptid
+	
+	print("No cryptid found at or near position:", hex_pos)
+	return null

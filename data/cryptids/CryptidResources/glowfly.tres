@@ -1,9 +1,10 @@
-[gd_resource type="Resource" script_class="Cryptid" load_steps=31 format=3 uid="uid://br56bhx3ppp4w"]
+[gd_resource type="Resource" script_class="Cryptid" load_steps=32 format=3 uid="uid://br56bhx3ppp4w"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_g85ft"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_cpnsb"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="3_22xla"]
 [ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="4_m54fr"]
+[ext_resource type="Resource" uid="uid://42h0pe04i41q" path="res://Cryptid-Menagerie/data/cards/heal_card.tres" id="4_s0acb"]
 [ext_resource type="PackedScene" uid="uid://bejk4igyv1d0e" path="res://Cryptid-Menagerie/assets/grove_starter_sprite.tscn" id="5_a4chy"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/scripts/cryptid.gd" id="6_n31ss"]
 
@@ -186,7 +187,7 @@ script = ExtResource("6_n31ss")
 name = "Wendigo"
 scene = ExtResource("5_a4chy")
 icon = ExtResource("4_m54fr")
-deck = Array[ExtResource("1_g85ft")]([SubResource("Resource_j352g"), SubResource("Resource_4u70t"), SubResource("Resource_4am03"), SubResource("Resource_2xgjs"), SubResource("Resource_wkj7f"), SubResource("Resource_rg5bv")])
+deck = Array[ExtResource("1_g85ft")]([SubResource("Resource_j352g"), SubResource("Resource_4u70t"), SubResource("Resource_4am03"), SubResource("Resource_2xgjs"), SubResource("Resource_wkj7f"), SubResource("Resource_rg5bv"), ExtResource("4_s0acb")])
 discard = Array[ExtResource("1_g85ft")]([])
 completed_turn = false
 currently_selected = false
@@ -198,5 +199,5 @@ strength = 10
 knowledge = 10
 willpower = 10
 dexterity = 10
-vigor = 17
+vigor = 20
 level = 1

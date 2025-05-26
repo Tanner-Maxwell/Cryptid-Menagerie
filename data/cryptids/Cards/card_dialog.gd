@@ -30,7 +30,6 @@ enum ActionType {
 	ATTACK,
 	PUSH,
 	PULL,
-	RANGED_ATTACK,
 	HEAL,
 	STUN,
 	APPLY_VULNERABLE,
@@ -201,8 +200,6 @@ func perform_action(actions: Array[Action.ActionType]):
 				push_action()
 			ActionType.PULL:
 				pull_action()
-			ActionType.RANGED_ATTACK:
-				ranged_attack_action()
 			ActionType.HEAL:
 				heal_action()
 			ActionType.STUN:
@@ -258,11 +255,11 @@ func pull_action():
 	# Store the current card for reference in the tile map controller
 	tile_map_layer.current_card = self
 
-func ranged_attack_action():
-	pass
-
 func heal_action():
-	pass
+	tile_map_layer.heal_action_bool = true
+	tile_map_layer.heal_action_selected(self)
+	# Store the current card for reference in the tile map controller
+	tile_map_layer.current_card = self
 
 func stun_action():
 	pass
