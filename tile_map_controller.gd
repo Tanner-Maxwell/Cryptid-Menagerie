@@ -68,7 +68,7 @@ var pull_range = 6
 var push_amount = 1
 var pull_amount = 2
 var push_pull_preview_hexes = []  # Add this with other variables at the top
-var preview_tile_id = Vector2i(3, 0)  # Adjust this to your desired preview tile
+var preview_tile_id = Vector2i(2, 0)  # Update this from (3, 0) to (2, 0)
 
 func _ready():
 	cur_position_cube = axial_to_cube(local_to_map(player_pos))
@@ -3442,35 +3442,37 @@ func show_targetable_area(center_pos, max_range, action_type = "attack"):
 					add_child(indicator)
 
 func calculate_push_direction(pusher_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
-	# For a straight line in hex grids, we need to find the dominant direction
 	var diff = target_pos - pusher_pos
 	
 	# Debug output
 	print("Calculate push direction - pusher_pos:", pusher_pos, "target_pos:", target_pos, "diff:", diff)
 	
-	# In a vertical offset hex grid, the 6 neighbor directions are:
-	# (1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)
-	var hex_directions = [
-		Vector2i(1, 0),   # East
-		Vector2i(1, -1),  # Northeast
-		Vector2i(0, -1),  # Northwest
-		Vector2i(-1, 0),  # West
-		Vector2i(-1, 1),  # Southwest
-		Vector2i(0, 1)    # Southeast
-	]
+	# Get the correct directions based on target's row
+	var hex_directions = []
+	if target_pos.y % 2 == 0:  # Even row
+		hex_directions = [
+			Vector2i(-1, -1),  # Northwest
+			Vector2i(0, -1),   # Northeast
+			Vector2i(1, 0),    # East
+			Vector2i(0, 1),    # Southeast
+			Vector2i(-1, 1),   # Southwest
+			Vector2i(-1, 0)    # West
+		]
+	else:  # Odd row
+		hex_directions = [
+			Vector2i(0, -1),   # Northwest
+			Vector2i(1, -1),   # Northeast
+			Vector2i(1, 0),    # East
+			Vector2i(1, 1),    # Southeast
+			Vector2i(0, 1),    # Southwest
+			Vector2i(-1, 0)    # West
+		]
 	
-	# Find the direction that best matches our difference vector
 	var best_direction = Vector2i(0, 0)
 	var best_dot = -999999.0
 	
 	for dir in hex_directions:
-		# Ensure dir is valid
-		if dir == null:
-			print("ERROR: Null direction in hex_directions array!")
-			continue
-			
-		# Calculate dot product to find most aligned direction
-		var dot = float(diff.x * dir.x + diff.y * dir.y)  # Convert to float explicitly
+		var dot = float(diff.x * dir.x + diff.y * dir.y)
 		
 		print("Testing direction", dir, "dot product:", dot)
 		
@@ -3481,36 +3483,39 @@ func calculate_push_direction(pusher_pos: Vector2i, target_pos: Vector2i) -> Vec
 	print("Push direction from", pusher_pos, "to", target_pos, "is", best_direction)
 	return best_direction
 
+# Replace the calculate_pull_direction function in tile_map_controller.gd
 func calculate_pull_direction(puller_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
-	# Pull direction is from target towards puller
 	var diff = puller_pos - target_pos
 	
 	# Debug output
 	print("Calculate pull direction - puller_pos:", puller_pos, "target_pos:", target_pos, "diff:", diff)
 	
-	# In a vertical offset hex grid, the 6 neighbor directions are:
-	# (1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)
-	var hex_directions = [
-		Vector2i(1, 0),   # East
-		Vector2i(1, -1),  # Northeast
-		Vector2i(0, -1),  # Northwest
-		Vector2i(-1, 0),  # West
-		Vector2i(-1, 1),  # Southwest
-		Vector2i(0, 1)    # Southeast
-	]
+	# Get the correct directions based on target's row
+	var hex_directions = []
+	if target_pos.y % 2 == 0:  # Even row
+		hex_directions = [
+			Vector2i(-1, -1),  # Northwest
+			Vector2i(0, -1),   # Northeast
+			Vector2i(1, 0),    # East
+			Vector2i(0, 1),    # Southeast
+			Vector2i(-1, 1),   # Southwest
+			Vector2i(-1, 0)    # West
+		]
+	else:  # Odd row
+		hex_directions = [
+			Vector2i(0, -1),   # Northwest
+			Vector2i(1, -1),   # Northeast
+			Vector2i(1, 0),    # East
+			Vector2i(1, 1),    # Southeast
+			Vector2i(0, 1),    # Southwest
+			Vector2i(-1, 0)    # West
+		]
 	
-	# Find the direction that best matches our difference vector
 	var best_direction = Vector2i(0, 0)
 	var best_dot = -999999.0
 	
 	for dir in hex_directions:
-		# Ensure dir is valid
-		if dir == null:
-			print("ERROR: Null direction in hex_directions array!")
-			continue
-			
-		# Calculate dot product to find most aligned direction
-		var dot = float(diff.x * dir.x + diff.y * dir.y)  # Convert to float explicitly
+		var dot = float(diff.x * dir.x + diff.y * dir.y)
 		
 		print("Testing direction", dir, "dot product:", dot)
 		
@@ -3521,49 +3526,271 @@ func calculate_pull_direction(puller_pos: Vector2i, target_pos: Vector2i) -> Vec
 	print("Pull direction from", target_pos, "towards", puller_pos, "is", best_direction)
 	return best_direction
 
-func calculate_push_destination(start_pos: Vector2i, direction: Vector2i, amount: int) -> Vector2i:
-	var current_pos = start_pos
-	var steps_taken = 0
+func calculate_push_destination(start_pos: Vector2i, push_direction: Vector2i, amount: int) -> Vector2i:
+	var pusher_pos = local_to_map(selected_cryptid.position)
 	
-	print("Calculating push destination from", start_pos, "direction", direction, "amount", amount)
+	print("\n=== CALCULATE PUSH DESTINATION (Vector + A*) ===")
+	print("Starting at:", start_pos)
+	print("Pusher at:", pusher_pos)
+	print("Push amount:", amount)
 	
-	while steps_taken < amount:
-		# Calculate next position
-		var next_pos = current_pos + direction
+	# Calculate the push vector (from pusher through target)
+	var push_vector = start_pos - pusher_pos
+	print("Push vector:", push_vector)
+	
+	# Normalize and extend the vector to find destination
+	var push_distance = push_vector.length()
+	if push_distance == 0:
+		return start_pos
 		
-		# Check if the next position is valid
-		if not is_valid_push_position(next_pos):
-			print("Position", next_pos, "is invalid, stopping at", current_pos)
-			break
-		
-		# Move to next position
-		current_pos = next_pos
-		steps_taken += 1
-		print("Step", steps_taken, "moved to", current_pos)
+	# Calculate destination point along the push line
+	var normalized_vector = Vector2(push_vector) / push_distance
+	var destination_vector = Vector2(start_pos) + (normalized_vector * amount)
+	var destination = Vector2i(round(destination_vector.x), round(destination_vector.y))
 	
-	return current_pos
+	print("Ideal destination:", destination)
+	
+	# CRITICAL: Temporarily enable the target's current position in the grid
+	var target_point = a_star_hex_grid.get_closest_point(start_pos)
+	var was_disabled = a_star_hex_grid.is_point_disabled(target_point)
+	if was_disabled:
+		print("Temporarily enabling target's position for pathfinding")
+		a_star_hex_grid.set_point_disabled(target_point, false)
+	
+	# Use A* to find path from current position to destination
+	var path = a_star_hex_grid.get_id_path(
+		a_star_hex_grid.get_closest_point(start_pos),
+		a_star_hex_grid.get_closest_point(destination)
+	)
+	
+	# Restore the target position's disabled state
+	if was_disabled:
+		a_star_hex_grid.set_point_disabled(target_point, true)
+	
+	print("A* path found with", path.size(), "points")
+	
+	# If no path found, try to at least move in the right direction
+	if path.size() <= 1:
+		print("No direct path found, trying fallback")
+		# Find the furthest valid hex in the push direction
+		for i in range(amount, 0, -1):
+			var test_pos = start_pos + Vector2i(round(normalized_vector.x * i), round(normalized_vector.y * i))
+			if is_valid_push_position(test_pos):
+				return test_pos
+		return start_pos
+	
+	# Take steps along the path (up to 'amount' steps)
+	var step_index = min(amount, path.size() - 1)
+	var final_point_id = path[step_index]
+	var final_position = a_star_hex_grid.get_point_position(final_point_id)
+	var final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
+	
+	print("Moving", step_index, "steps along path to:", final_pos_i)
+	
+	return final_pos_i
 
-func calculate_pull_destination(start_pos: Vector2i, direction: Vector2i, amount: int) -> Vector2i:
-	var current_pos = start_pos
-	var steps_taken = 0
 	
-	print("Calculating pull destination from", start_pos, "direction", direction, "amount", amount)
+func calculate_pull_destination(start_pos: Vector2i, pull_direction: Vector2i, amount: int) -> Vector2i:
+	var puller_pos = local_to_map(selected_cryptid.position)
 	
-	while steps_taken < amount:
-		# Calculate next position
-		var next_pos = current_pos + direction
+	print("\n=== CALCULATE PULL DESTINATION (Using A*) ===")
+	print("Starting at:", start_pos)
+	print("Puller at:", puller_pos)
+	print("Pull amount:", amount)
+	
+	# CRITICAL: Temporarily enable the target's current position in the grid
+	var target_point = a_star_hex_grid.get_closest_point(start_pos, true)
+	var was_disabled = a_star_hex_grid.is_point_disabled(target_point)
+	if was_disabled:
+		print("Temporarily enabling target's position for pathfinding")
+		a_star_hex_grid.set_point_disabled(target_point, false)
+	
+	# Use A* to find the path from target to puller
+	var path = a_star_hex_grid.get_id_path(
+		a_star_hex_grid.get_closest_point(start_pos, true),
+		a_star_hex_grid.get_closest_point(puller_pos, true)
+	)
+	
+	# Restore the target position's disabled state
+	if was_disabled:
+		a_star_hex_grid.set_point_disabled(target_point, true)
+	
+	print("A* path found with", path.size(), "points")
+	
+	# If no path or already at destination
+	if path.size() <= 1:
+		print("No path found or already at destination")
+		return start_pos
+	
+	# Take steps along the path (up to 'amount' steps)
+	# path[0] is current position, so we want path[amount] or last element
+	var step_index = min(amount, path.size() - 1)
+	var final_point_id = path[step_index]
+	var final_position = a_star_hex_grid.get_point_position(final_point_id)
+	var final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
+	
+	print("Moving", step_index, "steps along path to:", final_pos_i)
+	
+	return final_pos_i
+	
+func calculate_single_step_pull(puller_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
+	print("\n=== CALCULATE SINGLE STEP PULL ===")
+	print("From position:", target_pos, "toward puller at:", puller_pos)
+	
+	# Get all valid ADJACENT neighbors only
+	var neighbors = get_hex_neighbors(target_pos)
+	print("Adjacent neighbors:", neighbors)
+	
+	# If we're already adjacent (hex distance 1), we can't pull closer
+	var current_hex_distance = cube_distance(axial_to_cube(target_pos), axial_to_cube(puller_pos))
+	if current_hex_distance <= 1:
+		print("  Already adjacent to puller, cannot pull closer")
+		return Vector2i(0, 0)
+	
+	var best_neighbor = target_pos
+	var min_deviation = 999999.0
+	
+	# Convert to world positions for accurate line calculation
+	var puller_world = map_to_local(puller_pos)
+	var target_world = map_to_local(target_pos)
+	
+	# Calculate the line direction in world space (from target to puller)
+	var line_direction = (puller_world - target_world).normalized()
+	
+	# ONLY check the adjacent neighbors
+	for neighbor in neighbors:
+		# Verify this is actually adjacent (should always be true, but let's be safe)
+		var step = neighbor - target_pos
+		if abs(step.x) > 1 or abs(step.y) > 1:
+			print("  ERROR: Non-adjacent neighbor in list!", neighbor, "step:", step)
+			continue
 		
-		# Check if the next position is valid
-		if not is_valid_push_position(next_pos):
-			print("Position", next_pos, "is invalid, stopping at", current_pos)
-			break
+		if not is_valid_push_position(neighbor):
+			print("    Neighbor", neighbor, "is occupied")
+			continue
 		
-		# Move to next position
-		current_pos = next_pos
-		steps_taken += 1
-		print("Step", steps_taken, "moved to", current_pos)
+		# Don't pull onto the puller's position
+		if neighbor == puller_pos:
+			print("    Neighbor is puller position, skipping")
+			continue
+		
+		# Get world position of this neighbor
+		var neighbor_world = map_to_local(neighbor)
+		
+		# Project this neighbor onto the line from target to puller
+		var to_neighbor = neighbor_world - target_world
+		var line_length = to_neighbor.dot(line_direction)
+		var projected_point = target_world + line_direction * line_length
+		
+		# Calculate how far this neighbor deviates from the ideal line
+		var deviation = (neighbor_world - projected_point).length()
+		
+		print("  Neighbor", neighbor, "deviation from line:", deviation)
+		
+		# Choose the neighbor with minimum deviation from the straight line
+		if deviation < min_deviation:
+			min_deviation = deviation
+			best_neighbor = neighbor
+			print("    New best neighbor with deviation:", deviation)
 	
-	return current_pos
+	if best_neighbor == target_pos:
+		print("  No valid neighbor found")
+		return Vector2i(0, 0)
+	
+	var final_direction = best_neighbor - target_pos
+	print("  Final direction vector:", final_direction, "magnitude:", final_direction.length())
+	
+	# Final safety check
+	if abs(final_direction.x) > 1 or abs(final_direction.y) > 1:
+		print("  ERROR: Direction vector is not to adjacent hex!", final_direction)
+		return Vector2i(0, 0)
+	
+	return final_direction
+# Get all six neighbors of a hex position
+func get_hex_neighbors(pos: Vector2i) -> Array[Vector2i]:
+	var neighbors: Array[Vector2i] = []
+	var directions = []
+	
+	# Looking at your grid: odd rows appear shifted RIGHT compared to even rows
+	if pos.y % 2 == 0:  # Even row
+		directions = [
+			Vector2i(-1, -1),  # Northwest
+			Vector2i(0, -1),   # Northeast
+			Vector2i(1, 0),    # East
+			Vector2i(0, 1),    # Southeast
+			Vector2i(-1, 1),   # Southwest
+			Vector2i(-1, 0)    # West
+		]
+	else:  # Odd row (shifted right)
+		directions = [
+			Vector2i(0, -1),   # Northwest
+			Vector2i(1, -1),   # Northeast
+			Vector2i(1, 0),    # East
+			Vector2i(1, 1),    # Southeast
+			Vector2i(0, 1),    # Southwest
+			Vector2i(-1, 0)    # West
+		]
+	
+	for dir in directions:
+		neighbors.append(pos + dir)
+	
+	return neighbors
+	
+	
+func calculate_single_step_push(pusher_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
+	print("Calculating push step from", target_pos, "away from", pusher_pos)
+	
+	# Get the hex neighbors for the current position
+	var neighbors = get_hex_neighbors(target_pos)
+	
+	var best_neighbor = target_pos
+	var min_deviation = 999999.0
+	
+	# Convert to world positions for accurate line calculation
+	var pusher_world = map_to_local(pusher_pos)
+	var target_world = map_to_local(target_pos)
+	
+	# Calculate the line direction in world space
+	var line_direction = (target_world - pusher_world).normalized()
+	print("  World space line direction:", line_direction)
+	
+	for neighbor in neighbors:
+		if not is_valid_push_position(neighbor):
+			continue
+		
+		# Get world position of this neighbor
+		var neighbor_world = map_to_local(neighbor)
+		
+		# Project this neighbor onto the line from pusher through target
+		var to_neighbor = neighbor_world - pusher_world
+		var line_length = to_neighbor.dot(line_direction)
+		var projected_point = pusher_world + line_direction * line_length
+		
+		# Calculate how far this neighbor deviates from the ideal line
+		var deviation = (neighbor_world - projected_point).length()
+		
+		# Only consider neighbors that are further from the pusher
+		var pusher_dist = (neighbor_world - pusher_world).length()
+		var current_dist = (target_world - pusher_world).length()
+		
+		if pusher_dist <= current_dist:
+			print("  Neighbor", neighbor, "not further away")
+			continue
+		
+		print("  Neighbor", neighbor, "deviation from line:", deviation)
+		
+		# Choose the neighbor with minimum deviation from the straight line
+		if deviation < min_deviation:
+			min_deviation = deviation
+			best_neighbor = neighbor
+			print("    New best neighbor with deviation:", deviation)
+	
+	if best_neighbor == target_pos:
+		print("  No valid push direction found")
+		return Vector2i(0, 0)
+	
+	print("  Best neighbor:", best_neighbor)
+	return best_neighbor - target_pos
 
 func is_valid_push_position(pos: Vector2i) -> bool:
 	# Check if position is on the map
@@ -3588,12 +3815,12 @@ func animate_push(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
 		return
 	
 	# Update grid state - enable old position
-	var old_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	a_star_hex_grid.set_point_disabled(old_point, false)
+	var old_point = a_star_hex_attack_grid.get_closest_point(start_pos, true)
+	a_star_hex_attack_grid.set_point_disabled(old_point, false)
 	
 	# Update grid state - disable new position
-	var new_point = a_star_hex_grid.get_closest_point(end_pos, true)
-	a_star_hex_grid.set_point_disabled(new_point, true)
+	var new_point = a_star_hex_attack_grid.get_closest_point(end_pos, true)
+	a_star_hex_attack_grid.set_point_disabled(new_point, true)
 	
 	# Update walkable hexes
 	if not start_pos in walkable_hexes:
@@ -3631,12 +3858,12 @@ func animate_pull(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
 		return
 	
 	# Update grid state - enable old position
-	var old_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	a_star_hex_grid.set_point_disabled(old_point, false)
+	var old_point = a_star_hex_attack_grid.get_closest_point(start_pos, true)
+	a_star_hex_attack_grid.set_point_disabled(old_point, false)
 	
 	# Update grid state - disable new position
-	var new_point = a_star_hex_grid.get_closest_point(end_pos, true)
-	a_star_hex_grid.set_point_disabled(new_point, true)
+	var new_point = a_star_hex_attack_grid.get_closest_point(end_pos, true)
+	a_star_hex_attack_grid.set_point_disabled(new_point, true)
 	
 	# Update walkable hexes
 	if not start_pos in walkable_hexes:
@@ -3793,6 +4020,10 @@ func update_ui_after_action():
 			action_menu.show()
 
 func show_push_pull_preview(target_cryptid, target_pos: Vector2i):
+	print("\n=== PUSH/PULL PREVIEW DEBUG ===")
+	print("Target position:", target_pos)
+	print("Selected cryptid position:", local_to_map(selected_cryptid.position))
+	
 	# Clear previous preview
 	for hex in push_pull_preview_hexes:
 		if hex in original_tile_states:
@@ -3810,35 +4041,126 @@ func show_push_pull_preview(target_cryptid, target_pos: Vector2i):
 	
 	var current_pos = local_to_map(selected_cryptid.position)
 	
-	# Calculate direction
-	var direction = Vector2i(0, 0)
-	var amount = 0
+	# Calculate the actual path that will be taken
+	var preview_positions = []
+	
 	if push_action_bool:
-		direction = calculate_push_direction(current_pos, target_pos)
-		amount = push_amount
+		print("Calculating PUSH preview for amount:", push_amount)
+		preview_positions = calculate_push_preview_path(target_pos, push_amount)
+		
+		# Also calculate what the actual push would do for comparison
+		var test_direction = calculate_push_direction(current_pos, target_pos)
+		var test_destination = calculate_push_destination(target_pos, test_direction, push_amount)
+		print("Preview shows path:", preview_positions)
+		print("Actual push would go to:", test_destination)
+		
 	elif pull_action_bool:
-		direction = calculate_pull_direction(current_pos, target_pos)
-		amount = pull_amount
-	
-	if direction == Vector2i(0, 0):
-		return
-	
-	# Show the actual path that will be taken
-	var preview_pos = target_pos
-	
-	for i in range(amount):
-		var next_pos = preview_pos + direction
+		print("Calculating PULL preview for amount:", pull_amount)
+		preview_positions = calculate_pull_preview_path(target_pos, pull_amount)
 		
-		# Check if position is valid
-		if not is_valid_push_position(next_pos):
-			break
-		
-		# Add to preview
-		push_pull_preview_hexes.append(next_pos)
-		
-		# Set preview tile
-		set_cell(next_pos, 0, preview_tile_id, 3)  # Using alternate 3 for preview
-		
-		preview_pos = next_pos
+		# Also calculate what the actual pull would do for comparison
+		var test_direction = calculate_pull_direction(current_pos, target_pos)
+		var test_destination = calculate_pull_destination(target_pos, test_direction, pull_amount)
+		print("Preview shows path:", preview_positions)
+		print("Actual pull would go to:", test_destination)
 	
-	print("Preview path:", push_pull_preview_hexes)
+	# Show the preview tiles
+	for i in range(preview_positions.size()):
+		var preview_pos = preview_positions[i]
+		push_pull_preview_hexes.append(preview_pos)
+		
+		# Use the pull path tile: Atlas (2, 0), Alternative 4
+		set_cell(preview_pos, 0, Vector2i(2, 0), 4)
+	
+	print("=== END PREVIEW DEBUG ===\n")
+	
+# Calculate the preview path for push
+func calculate_push_preview_path(start_pos: Vector2i, amount: int) -> Array[Vector2i]:
+	var pusher_pos = local_to_map(selected_cryptid.position)
+	
+	print("Preview push from", start_pos, "away from", pusher_pos, "for", amount, "steps")
+	
+	# Calculate the push vector (from pusher through target)
+	var push_vector = start_pos - pusher_pos
+	var push_distance = push_vector.length()
+	
+	if push_distance == 0:
+		return []
+		
+	# Calculate destination point along the push line
+	var normalized_vector = Vector2(push_vector) / push_distance
+	var destination_vector = Vector2(start_pos) + (normalized_vector * amount)
+	var destination = Vector2i(round(destination_vector.x), round(destination_vector.y))
+	
+	# Temporarily enable the target's current position
+	var target_point = a_star_hex_grid.get_closest_point(start_pos, true)
+	var was_disabled = a_star_hex_grid.is_point_disabled(target_point)
+	if was_disabled:
+		a_star_hex_grid.set_point_disabled(target_point, false)
+	
+	# Use A* to find path
+	var path = a_star_hex_grid.get_id_path(
+		a_star_hex_grid.get_closest_point(start_pos),
+		a_star_hex_grid.get_closest_point(destination)
+	)
+	
+	# Restore the disabled state
+	if was_disabled:
+		a_star_hex_grid.set_point_disabled(target_point, true)
+	
+	if path.size() <= 1:
+		return []
+	
+	# Build the preview path - include ALL hexes along the path up to the destination
+	var preview_path: Array[Vector2i] = []
+	
+	# Determine how far we actually move (limited by amount)
+	var actual_steps = min(amount, path.size() - 1)
+	
+	# Add ALL hexes from start to the actual destination
+	for i in range(1, actual_steps + 1):
+		var point_pos = a_star_hex_grid.get_point_position(path[i])
+		preview_path.append(Vector2i(int(point_pos.x), int(point_pos.y)))
+	
+	print("Preview path (all hexes):", preview_path)
+	return preview_path
+
+# Calculate the preview path for pull
+func calculate_pull_preview_path(start_pos: Vector2i, amount: int) -> Array[Vector2i]:
+	var puller_pos = local_to_map(selected_cryptid.position)
+	
+	print("Preview pull from", start_pos, "toward", puller_pos, "for", amount, "steps")
+	
+	# CRITICAL: Temporarily enable the target's current position in the grid
+	var target_point = a_star_hex_grid.get_closest_point(start_pos, true)
+	var was_disabled = a_star_hex_grid.is_point_disabled(target_point)
+	if was_disabled:
+		print("Temporarily enabling target's position for pathfinding")
+		a_star_hex_grid.set_point_disabled(target_point, false)
+	
+	# Use A* to find the path from target to puller
+	var path = a_star_hex_grid.get_id_path(
+		a_star_hex_grid.get_closest_point(start_pos, true),
+		a_star_hex_grid.get_closest_point(puller_pos, true)
+	)
+	
+	# Restore the target position's disabled state
+	if was_disabled:
+		a_star_hex_grid.set_point_disabled(target_point, true)
+	
+	if path.size() <= 1:
+		return []
+	
+	# Build the preview path - include ALL hexes along the path
+	var preview_path: Array[Vector2i] = []
+	
+	# Determine how far we actually move (limited by amount)
+	var actual_steps = min(amount, path.size() - 1)
+	
+	# Add ALL hexes from start to the actual destination
+	for i in range(1, actual_steps + 1):
+		var point_pos = a_star_hex_grid.get_point_position(path[i])
+		preview_path.append(Vector2i(int(point_pos.x), int(point_pos.y)))
+	
+	print("Preview path (all hexes):", preview_path)
+	return preview_path
