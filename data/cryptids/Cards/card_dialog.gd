@@ -262,7 +262,10 @@ func heal_action():
 	tile_map_layer.current_card = self
 
 func stun_action():
-	pass
+	tile_map_layer.stun_action_bool = true
+	tile_map_layer.stun_action_selected(self)
+	# Store the current card for reference in the tile map controller
+	tile_map_layer.current_card = self
 
 func apply_vulnerable_action():
 	pass

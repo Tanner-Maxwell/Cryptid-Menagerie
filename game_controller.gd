@@ -99,6 +99,21 @@ func transition(next_state: BattleState):
 func start_player_turn():
 	print("Starting player turn")
 	
+	# Wait a frame to ensure everything is initialized
+	await get_tree().process_frame
+	
+	# Make sure we have player cryptids
+	if not tile_map_layer or tile_map_layer.player_cryptids_in_play.size() == 0:
+		print("Waiting for cryptids to be initialized...")
+		await get_tree().create_timer(0.5).timeout
+	
+	# Get the first player cryptid if no selected cryptid
+	if hand and not hand.selected_cryptid and tile_map_layer.player_cryptids_in_play.size() > 0:
+		var first_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
+		print("Setting initial selected cryptid:", first_cryptid.name)
+		hand.selected_cryptid = first_cryptid
+		first_cryptid.currently_selected = true
+	
 	# Display the action selection menu
 	action_selection_menu.prompt_player_for_action()
 	
@@ -594,6 +609,9 @@ func complete_turn():
 	
 	# Mark current cryptid's turn as completed
 	if current_cryptid:
+		# Process turn end effects BEFORE marking turn as complete
+		process_cryptid_turn_end(current_cryptid)
+		
 		current_cryptid.completed_turn = true
 		current_cryptid.currently_selected = true  # Keep it selected
 	
@@ -1980,3 +1998,25 @@ func show_game_over_message():
 func _on_game_over_continue_pressed():
 	# Load the game over scene
 	get_tree().change_scene_to_file("res://Cryptid-Menagerie/scenes/game_over_scene.tscn")
+
+# Process status effects at the end of a cryptid's turn
+func process_cryptid_turn_end(cryptid):
+	print("Processing turn end for:", cryptid.name)
+	
+	# Find the cryptid node
+	var cryptid_node = null
+	for node in tile_map_layer.all_cryptids_in_play:
+		if node.cryptid == cryptid:
+			cryptid_node = node
+			break
+	
+	if cryptid_node and cryptid_node.has_node("StatusEffectManager"):
+		var status_manager = cryptid_node.get_node("StatusEffectManager")
+		
+		# Process turn end effects (like poison)
+		status_manager.process_turn_end()
+		
+		# Update the status effect display
+		if cryptid_node.has_node("StatusEffectDisplay"):
+			var display = cryptid_node.get_node("StatusEffectDisplay")
+			display.refresh_display()

@@ -186,6 +186,57 @@ func switch_cryptid_deck(cryptid: Cryptid):
 	# Clear existing hand first
 	clear_hand()
 	
+	# Process turn start status effects for this cryptid
+	var cryptid_node = null
+	print("Looking for cryptid node in all_cryptids_in_play...")
+	
+	# Check if tile_map_layer exists
+	if not tile_map_layer:
+		print("ERROR: tile_map_layer is null!")
+		return
+	
+	for node in tile_map_layer.all_cryptids_in_play:
+		if node.cryptid == cryptid:
+			cryptid_node = node
+			print("Found cryptid node for:", cryptid.name)
+			break
+	
+	if cryptid_node and cryptid_node.has_node("StatusEffectManager"):
+		print("Found StatusEffectManager, processing turn start...")
+		var status_manager = cryptid_node.get_node("StatusEffectManager")
+		
+		# Process turn start effects (including stun check)
+		status_manager.process_turn_start()
+		
+		# Check if cryptid is stunned
+		if !status_manager.can_take_actions():
+			print("CRYPTID IS STUNNED - Cannot take actions this turn!")
+			
+			# Show stun message
+			var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+			if game_instructions:
+				game_instructions.text = cryptid.name + " is STUNNED and cannot act!"
+			
+			# Mark both actions as used (but don't trigger discard)
+			cryptid.top_card_played = true
+			cryptid.bottom_card_played = true
+			cryptid.completed_turn = true
+			
+			# Show only End Turn button
+			var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+			if action_menu and action_menu.has_method("show_end_turn_only"):
+				action_menu.show_end_turn_only()
+			
+			# Still show the hand but all cards will be disabled
+			show()
+			queue_redraw()
+			return
+	else:
+		print("No StatusEffectManager found or cryptid_node is null")
+	
+	# Continue with the rest of the function
+	print("Continuing with normal deck switch...")
+	
 	# Debug: Print state of all cards before filtering
 	print("DEBUG: All cards state before building hand:")
 	for i in range(cryptid.deck.size()):

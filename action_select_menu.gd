@@ -133,7 +133,39 @@ func update_menu_visibility(cryptid: Cryptid):
 func prompt_player_for_action():
 	print("MENU: prompt_player_for_action called")
 	
-	# Ensure we're visible first
+	# Get the hand reference - try multiple paths
+	var hand_node = get_node_or_null("/root/VitaChrome/UIRoot/Hand")
+	if not hand_node:
+		hand_node = get_node_or_null("%Hand")
+	if not hand_node:
+		hand_node = get_tree().get_nodes_in_group("hand")[0] if get_tree().get_nodes_in_group("hand").size() > 0 else null
+	
+	if hand_node:
+		print("Found hand node:", hand_node)
+		# Get the selected cryptid from the hand
+		var selected_cryptid = hand_node.selected_cryptid
+		
+		if selected_cryptid:
+			print("Selected cryptid:", selected_cryptid.name)
+			# Switch to this cryptid's deck
+			if hand_node.has_method("switch_cryptid_deck"):
+				hand_node.switch_cryptid_deck(selected_cryptid)
+			else:
+				print("ERROR: hand node missing switch_cryptid_deck method!")
+		else:
+			print("ERROR: No selected_cryptid found in hand!")
+			
+			# Try to get the first player cryptid as fallback
+			var tile_map_layer = get_node_or_null("/root/VitaChrome/TileMapLayer")
+			if tile_map_layer and tile_map_layer.player_cryptids_in_play.size() > 0:
+				var first_cryptid = tile_map_layer.player_cryptids_in_play[0].cryptid
+				print("Using first player cryptid as fallback:", first_cryptid.name)
+				hand_node.selected_cryptid = first_cryptid
+				hand_node.switch_cryptid_deck(first_cryptid)
+	else:
+		print("ERROR: Could not find hand node!")
+	
+	# Show the action selection menu
 	show()
 	
 	# Hide all buttons first to get a clean slate

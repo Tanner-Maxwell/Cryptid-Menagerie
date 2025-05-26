@@ -8,7 +8,8 @@ extends Node2D
 @onready var selected = $Selected
 @onready var player_team = %PlayerTeam
 var discard_cards_visible = false
-
+var status_effect_manager: StatusEffectManager
+var status_effect_display: StatusEffectDisplay
 
 @export var cryptid:Cryptid
 var max_health : int
@@ -25,6 +26,8 @@ func _ready():
 	if discard_cards == null:
 		print("ERROR: Could not find DiscardCards node in scene tree")
 	selected.modulate = Color(0, 0 , 0, 0)
+	
+	initialize_status_effects()
 
 func _process(delta):
 	if cryptid.completed_turn == true:
@@ -105,3 +108,25 @@ func update_health_bar():
 			health_bar.modulate = Color(1, 0.5, 0, 1)  # Orange for low health
 		else:
 			health_bar.modulate = Color(0, 1, 0, 1)  # Green for good health
+
+# Initialize status effect system
+func initialize_status_effects():
+	# Create and add status effect manager
+	status_effect_manager = StatusEffectManager.new()
+	add_child(status_effect_manager)
+	status_effect_manager.initialize(self)
+	
+	# Create and add status effect display
+	status_effect_display = StatusEffectDisplay.new()
+	add_child(status_effect_display)
+	
+	# Position the display above the health bar
+	var health_bar = get_node("HealthBar")
+	if health_bar:
+		status_effect_display.position = Vector2(
+			health_bar.position.x,
+			health_bar.position.y - 40  # Adjust this value as needed
+		)
+	
+	# Initialize the display with the manager
+	status_effect_display.initialize(status_effect_manager)
