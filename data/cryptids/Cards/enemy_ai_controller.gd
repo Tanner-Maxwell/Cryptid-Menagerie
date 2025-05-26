@@ -27,11 +27,55 @@ func take_enemy_turn(enemy_cryptid):
 			print("CRITICAL ERROR: Could not find tile_map_layer")
 			return
 	
-	# Now that we know tile_map_layer exists, check selected_cryptid
+	# Save the previously selected cryptid early
 	var previous_selected = null
 	if "selected_cryptid" in tile_map_layer and tile_map_layer.selected_cryptid != null:
 		previous_selected = tile_map_layer.selected_cryptid
 	
+	# IMPORTANT: Check if cryptid is stunned BEFORE processing turn start
+	var is_stunned = false
+	if enemy_cryptid.has_node("StatusEffectManager"):
+		var status_manager = enemy_cryptid.get_node("StatusEffectManager")
+		
+		# Check if stunned BEFORE processing effects
+		is_stunned = status_manager.has_status_effect(StatusEffect.EffectType.STUN)
+		
+		if is_stunned:
+			print("AI: Cryptid is STUNNED - will skip turn after processing effects")
+		
+		# Process turn start effects (this will remove the stun)
+		status_manager.process_turn_start()
+		
+		# If cryptid was stunned, skip their turn
+		if is_stunned:
+			print("AI: Cryptid was STUNNED - skipping turn!")
+			
+			# Show stun message
+			var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+			if game_instructions:
+				game_instructions.text = enemy_cryptid.cryptid.name + " is STUNNED and cannot act!"
+			
+			# Mark both actions as used
+			enemy_cryptid.cryptid.top_card_played = true
+			enemy_cryptid.cryptid.bottom_card_played = true
+			enemy_cryptid.cryptid.completed_turn = true
+			
+			# Wait a moment for the player to see the message
+			await get_tree().create_timer(2.0).timeout
+			
+			# Show the End Turn button for the player to proceed
+			show_end_turn_button_for_enemy()
+			
+			# Restore the previously selected cryptid
+			if previous_selected != null:
+				tile_map_layer.selected_cryptid = previous_selected
+			
+			# Clear any movement highlights
+			clear_all_movement_highlights()
+			
+			return  # Exit early - don't take any actions
+	
+	# Only continue if not stunned
 	tile_map_layer.selected_cryptid = enemy_cryptid
 	
 	# IMPORTANT: Enable the hex occupied by this cryptid on the grid
