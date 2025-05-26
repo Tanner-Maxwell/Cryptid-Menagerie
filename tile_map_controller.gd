@@ -3598,38 +3598,74 @@ func calculate_pull_destination(start_pos: Vector2i, pull_direction: Vector2i, a
 	print("Puller at:", puller_pos)
 	print("Pull amount:", amount)
 	
-	# CRITICAL: Temporarily enable the target's current position in the grid
+	# Check if already at puller position
+	if start_pos == puller_pos:
+		print("Already at puller position")
+		return start_pos
+	
+	# Check hex distance
+	var hex_distance = cube_distance(axial_to_cube(start_pos), axial_to_cube(puller_pos))
+	print("Hex distance between target and puller:", hex_distance)
+	
+	if hex_distance <= 1:
+		print("Already adjacent to puller")
+		return start_pos
+	
+	# CRITICAL: Temporarily enable BOTH positions in the grid
 	var target_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	var was_disabled = a_star_hex_grid.is_point_disabled(target_point)
-	if was_disabled:
-		print("Temporarily enabling target's position for pathfinding")
+	var target_was_disabled = a_star_hex_grid.is_point_disabled(target_point)
+	if target_was_disabled:
+		print("Temporarily enabling target's position")
 		a_star_hex_grid.set_point_disabled(target_point, false)
 	
-	# Use A* to find the path from target to puller
-	var path = a_star_hex_grid.get_id_path(
-		a_star_hex_grid.get_closest_point(start_pos, true),
-		a_star_hex_grid.get_closest_point(puller_pos, true)
-	)
+	var puller_point = a_star_hex_grid.get_closest_point(puller_pos, true)
+	var puller_was_disabled = a_star_hex_grid.is_point_disabled(puller_point)
+	if puller_was_disabled:
+		print("Temporarily enabling puller's position")
+		a_star_hex_grid.set_point_disabled(puller_point, false)
 	
-	# Restore the target position's disabled state
-	if was_disabled:
-		a_star_hex_grid.set_point_disabled(target_point, true)
+	# Use A* to find the path from target to puller
+	var path = a_star_hex_grid.get_id_path(target_point, puller_point)
 	
 	print("A* path found with", path.size(), "points")
 	
-	# If no path or already at destination
-	if path.size() <= 1:
-		print("No path found or already at destination")
+	# Restore the disabled states
+	if target_was_disabled:
+		a_star_hex_grid.set_point_disabled(target_point, true)
+	if puller_was_disabled:
+		a_star_hex_grid.set_point_disabled(puller_point, true)
+	
+	# Check path validity
+	if path.size() == 0:
+		print("ERROR: No path found")
 		return start_pos
 	
-	# Take steps along the path (up to 'amount' steps)
-	# path[0] is current position, so we want path[amount] or last element
-	var step_index = min(amount, path.size() - 1)
-	var final_point_id = path[step_index]
+	if path.size() == 1:
+		print("Already at destination")
+		return start_pos
+	
+	# Calculate how many steps we can actually take
+	var max_steps = min(amount, path.size() - 1)
+	
+	# CRITICAL: Don't pull onto the puller's position
+	# Check if the final position would be the puller
+	var final_point_id = path[max_steps]
 	var final_position = a_star_hex_grid.get_point_position(final_point_id)
 	var final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
 	
-	print("Moving", step_index, "steps along path to:", final_pos_i)
+	if final_pos_i == puller_pos:
+		print("Would pull onto puller - stopping one hex short")
+		# Go one step less
+		if max_steps > 1:
+			final_point_id = path[max_steps - 1]
+			final_position = a_star_hex_grid.get_point_position(final_point_id)
+			final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
+			print("Stopping at:", final_pos_i)
+		else:
+			print("Can't pull - would land on puller")
+			return start_pos
+	
+	print("Moving", max_steps, "steps along path to:", final_pos_i)
 	
 	return final_pos_i
 	
@@ -4131,36 +4167,52 @@ func calculate_pull_preview_path(start_pos: Vector2i, amount: int) -> Array[Vect
 	
 	print("Preview pull from", start_pos, "toward", puller_pos, "for", amount, "steps")
 	
-	# CRITICAL: Temporarily enable the target's current position in the grid
+	# CRITICAL: Temporarily enable BOTH positions
 	var target_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	var was_disabled = a_star_hex_grid.is_point_disabled(target_point)
-	if was_disabled:
-		print("Temporarily enabling target's position for pathfinding")
+	var target_was_disabled = a_star_hex_grid.is_point_disabled(target_point)
+	if target_was_disabled:
 		a_star_hex_grid.set_point_disabled(target_point, false)
 	
-	# Use A* to find the path from target to puller
-	var path = a_star_hex_grid.get_id_path(
-		a_star_hex_grid.get_closest_point(start_pos, true),
-		a_star_hex_grid.get_closest_point(puller_pos, true)
-	)
+	var puller_point = a_star_hex_grid.get_closest_point(puller_pos, true)
+	var puller_was_disabled = a_star_hex_grid.is_point_disabled(puller_point)
+	if puller_was_disabled:
+		a_star_hex_grid.set_point_disabled(puller_point, false)
 	
-	# Restore the target position's disabled state
-	if was_disabled:
+	# Use A* to find the path
+	var path = a_star_hex_grid.get_id_path(target_point, puller_point)
+	
+	# Restore the disabled states
+	if target_was_disabled:
 		a_star_hex_grid.set_point_disabled(target_point, true)
+	if puller_was_disabled:
+		a_star_hex_grid.set_point_disabled(puller_point, true)
 	
 	if path.size() <= 1:
 		return []
 	
-	# Build the preview path - include ALL hexes along the path
+	# Calculate how many steps we can actually take
+	var max_steps = min(amount, path.size() - 1)
+	
+	# Check if the final position would be the puller
+	var final_point_id = path[max_steps]
+	var final_position = a_star_hex_grid.get_point_position(final_point_id)
+	var final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
+	
+	# Adjust if we would land on the puller
+	var actual_steps = max_steps
+	if final_pos_i == puller_pos:
+		print("Preview: Would pull onto puller - showing one hex short")
+		actual_steps = max_steps - 1
+		if actual_steps < 1:
+			print("Preview: Can't pull without landing on puller")
+			return []
+	
+	# Build the preview path
 	var preview_path: Array[Vector2i] = []
 	
-	# Determine how far we actually move (limited by amount)
-	var actual_steps = min(amount, path.size() - 1)
-	
-	# Add ALL hexes from start to the actual destination
 	for i in range(1, actual_steps + 1):
 		var point_pos = a_star_hex_grid.get_point_position(path[i])
 		preview_path.append(Vector2i(int(point_pos.x), int(point_pos.y)))
 	
-	print("Preview path (all hexes):", preview_path)
+	print("Preview path:", preview_path)
 	return preview_path
