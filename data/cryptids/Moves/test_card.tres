@@ -22,9 +22,9 @@ elemental_type = Array[int]([])
 
 [sub_resource type="Resource" id="Resource_r2em4"]
 script = ExtResource("2_4emrf")
-action_types = Array[int]([0])
-range = 1
-amount = 3
+action_types = Array[int]([3])
+range = 5
+amount = 2
 area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
 disabled = false
 

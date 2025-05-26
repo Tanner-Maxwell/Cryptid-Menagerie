@@ -61,6 +61,14 @@ var move_range_tile_id = Vector2i(2, 0)  # ID for possible movement tiles - adju
 var path_tile_id = Vector2i(2, 0)  # ID for path tiles - adjust based on your tileset
 var is_showing_movement_range = false
 
+var push_action_bool = false
+var pull_action_bool = false
+var push_range = 2
+var pull_range = 6
+var push_amount = 1
+var pull_amount = 2
+var push_pull_preview_hexes = []  # Add this with other variables at the top
+var preview_tile_id = Vector2i(3, 0)  # Adjust this to your desired preview tile
 
 func _ready():
 	cur_position_cube = axial_to_cube(local_to_map(player_pos))
@@ -207,6 +215,7 @@ func handle_right_click():
 	# Clear movement highlights
 	clear_movement_highlights()
 	hand.clear_card_selections()
+	
 	# If there's movement in progress, finish it
 	if move_action_bool and move_leftover > 0:
 		finish_movement()
@@ -215,6 +224,8 @@ func handle_right_click():
 	# Otherwise clear action states
 	move_action_bool = false
 	attack_action_bool = false
+	push_action_bool = false
+	pull_action_bool = false
 	active_movement_card_part = ""
 	active_movement_card = null
 	
@@ -222,6 +233,7 @@ func handle_right_click():
 	delete_all_lines()
 	delete_all_indicators()
 	remove_movement_indicator()
+	clear_movement_highlights()
 	
 	# Re-enable eligible card halves
 	enable_all_card_halves()
@@ -292,9 +304,19 @@ func calculate_path(current_pos: Vector2i, target_pos: Vector2i):
 
 # Update the original function to use the new one
 func handle_mouse_motion():
-	if not move_action_bool:
+	if not (move_action_bool or push_action_bool or pull_action_bool):
 		return
-		
+	
+	# Clear previous preview
+	for hex in push_pull_preview_hexes:
+		if hex in original_tile_states:
+			# Restore to range indicator or original tile
+			if hex in possible_move_hexes or is_showing_movement_range:
+				set_cell(hex, 0, move_range_tile_id, 2)
+			else:
+				set_cell(hex, 0, original_tile_states[hex], 0)
+	push_pull_preview_hexes.clear()
+	
 	# Get the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
 	
@@ -305,11 +327,18 @@ func handle_mouse_motion():
 	var current_pos = local_to_map(selected_cryptid.position)
 	var target_pos = local_to_map(get_local_mouse_position())
 	
-	# Show the movement path
-	show_movement_path(current_pos, target_pos)
-	
-	# Also calculate path for visualization
-	calculate_path(current_pos, target_pos)
+	if move_action_bool:
+		# Show the movement path
+		show_movement_path(current_pos, target_pos)
+		
+		# Also calculate path for visualization
+		calculate_path(current_pos, target_pos)
+	elif push_action_bool or pull_action_bool:
+		# Check if there's a cryptid at the target position
+		var target_cryptid = get_cryptid_at_position(target_pos)
+		if target_cryptid and target_cryptid != selected_cryptid:
+			# Show the push/pull preview path
+			show_push_pull_preview(target_cryptid, target_pos)
 			
 # Update the handle_left_click function to prevent actions during discard mode
 func handle_left_click(event):
@@ -327,6 +356,8 @@ func handle_left_click(event):
 	print("Left click detected!")
 	print("move_action_bool = ", move_action_bool)
 	print("attack_action_bool = ", attack_action_bool)
+	print("push_action_bool = ", push_action_bool)
+	print("pull_action_bool = ", pull_action_bool)
 	
 	if selected_cryptid == null:
 		print("WARNING: No selected cryptid found, using first cryptid")
@@ -351,11 +382,168 @@ func handle_left_click(event):
 		print("Handling attack action")
 		# Mark this event as handled to prevent other nodes from processing it
 		get_viewport().set_input_as_handled()
-		handle_attack_action(pos_clicked) 
+		handle_attack_action(pos_clicked)
+	elif push_action_bool:
+		print("Handling push action")
+		get_viewport().set_input_as_handled()
+		handle_push_action(pos_clicked)
+	elif pull_action_bool:
+		print("Handling pull action")
+		get_viewport().set_input_as_handled()
+		handle_pull_action(pos_clicked)
 	else:
 		print("No action type active")
 
+func handle_push_action(pos_clicked):
+	print("\n---------- HANDLE PUSH ACTION DEBUG ----------")
 	
+	# Get the selected cryptid (the one doing the pushing)
+	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found for push")
+		return false
+	
+	# Get the target cryptid at the clicked position
+	var target_cryptid = get_cryptid_at_position(pos_clicked)
+	print("Target position:", pos_clicked)
+	print("Target cryptid:", target_cryptid)
+	
+	if target_cryptid == null:
+		print("No valid target at the selected position")
+		# Reset action state
+		push_action_bool = false
+		active_movement_card_part = ""
+		active_movement_card = null
+		delete_all_lines()
+		delete_all_indicators()
+		return false
+	
+	# Calculate distance to target
+	var current_pos = local_to_map(selected_cryptid.position)
+	var target_pos = local_to_map(target_cryptid.position)
+	
+	# Use attack grid for pathfinding
+	var path = a_star_hex_attack_grid.get_id_path(
+		a_star_hex_attack_grid.get_closest_point(current_pos),
+		a_star_hex_attack_grid.get_closest_point(target_pos)
+	)
+	
+	if path.size() == 0:
+		print("ERROR: No valid path to target")
+		return false
+	
+	var distance = path.size() - 1
+	print("Distance to target:", distance, "Push range:", push_range)
+	
+	if distance <= push_range:
+		print("Target is within range")
+		
+		# Calculate push direction
+		var push_direction = calculate_push_direction(current_pos, target_pos)
+		print("Push direction:", push_direction)
+		
+		# Calculate final position after push
+		var final_position = calculate_push_destination(target_pos, push_direction, push_amount)
+		print("Target will be pushed from", target_pos, "to", final_position)
+		
+		# Animate the push
+		animate_push(target_cryptid, target_pos, final_position)
+		
+		# Mark the action as used
+		mark_action_used()
+		
+		# Clean up action state
+		push_action_bool = false
+		active_movement_card_part = ""
+		active_movement_card = null
+		delete_all_lines()
+		delete_all_indicators()
+		
+		# Update UI
+		update_ui_after_action()
+		
+		return true
+	else:
+		print("Target out of range")
+		return false
+	
+	print("---------- END HANDLE PUSH ACTION DEBUG ----------\n")
+
+func handle_pull_action(pos_clicked):
+	print("\n---------- HANDLE PULL ACTION DEBUG ----------")
+	
+	# Get the selected cryptid (the one doing the pulling)
+	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found for pull")
+		return false
+	
+	# Get the target cryptid at the clicked position
+	var target_cryptid = get_cryptid_at_position(pos_clicked)
+	print("Target position:", pos_clicked)
+	print("Target cryptid:", target_cryptid)
+	
+	if target_cryptid == null:
+		print("No valid target at the selected position")
+		# Reset action state
+		pull_action_bool = false
+		active_movement_card_part = ""
+		active_movement_card = null
+		delete_all_lines()
+		delete_all_indicators()
+		return false
+	
+	# Calculate distance to target
+	var current_pos = local_to_map(selected_cryptid.position)
+	var target_pos = local_to_map(target_cryptid.position)
+	
+	# Use attack grid for pathfinding
+	var path = a_star_hex_attack_grid.get_id_path(
+		a_star_hex_attack_grid.get_closest_point(current_pos),
+		a_star_hex_attack_grid.get_closest_point(target_pos)
+	)
+	
+	if path.size() == 0:
+		print("ERROR: No valid path to target")
+		return false
+	
+	var distance = path.size() - 1
+	print("Distance to target:", distance, "Pull range:", pull_range)
+	
+	if distance <= pull_range:
+		print("Target is within range")
+		
+		# Calculate pull direction (opposite of push)
+		var pull_direction = calculate_pull_direction(current_pos, target_pos)
+		print("Pull direction:", pull_direction)
+		
+		# Calculate final position after pull
+		var final_position = calculate_pull_destination(target_pos, pull_direction, pull_amount)
+		print("Target will be pulled from", target_pos, "to", final_position)
+		
+		# Animate the pull
+		animate_pull(target_cryptid, target_pos, final_position)
+		
+		# Mark the action as used
+		mark_action_used()
+		
+		# Clean up action state
+		pull_action_bool = false
+		active_movement_card_part = ""
+		active_movement_card = null
+		delete_all_lines()
+		delete_all_indicators()
+		
+		# Update UI
+		update_ui_after_action()
+		
+		return true
+	else:
+		print("Target out of range")
+		return false
+	
+	print("---------- END HANDLE PULL ACTION DEBUG ----------\n")
+
 func handle_move_action(pos_clicked):
 	# Print basic debug info
 	print("\n=== HANDLE MOVE ACTION ===")
@@ -1081,13 +1269,13 @@ func _input(event):
 	if event is InputEventMouse:
 		if event.button_mask == MOUSE_BUTTON_RIGHT and event.is_pressed():
 			handle_right_click()
-		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool):
+		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool):
 			if event is InputEventMouseMotion:
 				handle_mouse_motion()
-		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool):
-			# IMPORTANT: When we're in attack mode, handle clicks directly here,
+		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool):
+			# IMPORTANT: When we're in attack/push/pull mode, handle clicks directly here,
 			# not in the individual cryptid nodes
-			if attack_action_bool:
+			if attack_action_bool or push_action_bool or pull_action_bool:
 				# This ensures cryptids don't handle the click separately
 				get_viewport().set_input_as_handled()
 			handle_left_click(event)
@@ -1671,6 +1859,8 @@ func delete_all_indicators():
 func reset_action_modes():
 	move_action_bool = false
 	attack_action_bool = false
+	push_action_bool = false
+	pull_action_bool = false
 	active_movement_card_part = ""
 	active_movement_card = null
 	move_leftover = 0
@@ -2973,4 +3163,682 @@ func clear_path_highlights():
 	
 	highlighted_path_hexes.clear()
 
+func push_action_selected(current_card):
+	# Check if we're in discard mode
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.in_discard_mode:
+		print("In discard mode, ignoring push action selection")
+		return
+	
+	print("\n---------- PUSH ACTION SELECTED DEBUG ----------")
+	card_dialog = current_card
+	
+	# Reset action states
+	move_action_bool = false
+	attack_action_bool = false
+	push_action_bool = false
+	pull_action_bool = false
+	
+	# Make sure we have the currently selected cryptid
+	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found")
+		return
+	
+	print("Selected cryptid:", selected_cryptid.cryptid.name)
+	
+	# Clear visual indicators
+	delete_all_lines()
+	clear_movement_highlights()
+	
+	# Get the VBoxContainer first
+	var vbox = card_dialog.get_node_or_null("VBoxContainer")
+	if not vbox:
+		print("ERROR: VBoxContainer not found")
+		return
+	
+	# Get the correct container nodes
+	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
+	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
+	
+	if not top_half_container or not bottom_half_container:
+		print("ERROR: Container nodes not found")
+		return
+	
+	# Check which half is currently highlighted
+	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
+	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
+	
+	print("Top half highlighted:", top_highlighted)
+	print("Bottom half highlighted:", bottom_highlighted)
+	
+	# Check for push action and get the actual values from the card
+	var found_push = false
+	
+	if card_dialog.get("card_resource") != null:
+		var card_resource = card_dialog.card_resource
+		
+		# Check top move actions
+		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
+			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
+				for action in card_resource.top_move.actions:
+					if 2 in action.action_types:  # Push action type (2)
+						print("Found push action in top half")
+						push_range = action.range  # How far we can target
+						push_amount = action.amount  # How far to push
+						push_action_bool = true
+						active_movement_card_part = "top"
+						found_push = true
+						print("Push range (targeting):", push_range)
+						print("Push amount (distance):", push_amount)
+						break
+		
+		# Check bottom move actions
+		if not found_push and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
+			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
+				for action in card_resource.bottom_move.actions:
+					if 2 in action.action_types:  # Push action type (2)
+						print("Found push action in bottom half")
+						push_range = action.range  # How far we can target
+						push_amount = action.amount  # How far to push
+						push_action_bool = true
+						active_movement_card_part = "bottom"
+						found_push = true
+						print("Push range (targeting):", push_range)
+						print("Push amount (distance):", push_amount)
+						break
+	
+	if push_action_bool:
+		print("Successfully activated push action")
+		print("Can target cryptids up to", push_range, "hexes away")
+		print("Will push them", push_amount, "hexes")
+		
+		# Show targetable area using tile highlighting
+		show_targetable_area(selected_cryptid.position, push_range, "push")
+		
+		# Store references for handle_push_action
+		if active_movement_card_part == "top":
+			card_dialog.top_half_container = top_half_container
+			disable_other_cards_exact("top")
+		elif active_movement_card_part == "bottom":
+			card_dialog.bottom_half_container = bottom_half_container
+			disable_other_cards_exact("bottom")
+	else:
+		print("ERROR: Failed to activate push action")
+	
+	print("---------- END PUSH ACTION SELECTED DEBUG ----------\n")
 
+func pull_action_selected(current_card):
+	# Check if we're in discard mode
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.in_discard_mode:
+		print("In discard mode, ignoring pull action selection")
+		return
+	
+	print("\n---------- PULL ACTION SELECTED DEBUG ----------")
+	card_dialog = current_card
+	
+	# Reset action states
+	move_action_bool = false
+	attack_action_bool = false
+	push_action_bool = false
+	pull_action_bool = false
+	
+	# Make sure we have the currently selected cryptid
+	selected_cryptid = currently_selected_cryptid()
+	if selected_cryptid == null:
+		print("ERROR: No selected cryptid found")
+		return
+	
+	print("Selected cryptid:", selected_cryptid.cryptid.name)
+	
+	# Clear visual indicators
+	delete_all_lines()
+	
+	# Get the VBoxContainer first
+	var vbox = card_dialog.get_node_or_null("VBoxContainer")
+	if not vbox:
+		print("ERROR: VBoxContainer not found")
+		return
+	
+	# Get the correct container nodes
+	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
+	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
+	
+	if not top_half_container or not bottom_half_container:
+		print("ERROR: Container nodes not found")
+		return
+	
+	# Check which half is currently highlighted
+	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
+	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
+	
+	print("Top half highlighted:", top_highlighted)
+	print("Bottom half highlighted:", bottom_highlighted)
+	
+	# Check for pull action
+	var found_pull = false
+	
+	if card_dialog.get("card_resource") != null:
+		var card_resource = card_dialog.card_resource
+		
+		# Check top move actions
+		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
+			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
+				for action in card_resource.top_move.actions:
+					if 3 in action.action_types:  # Pull action type (3)
+						print("Found pull action in top half")
+						pull_range = action.range
+						pull_amount = action.amount
+						pull_action_bool = true
+						active_movement_card_part = "top"
+						found_pull = true
+						break
+		
+		# Check bottom move actions
+		if not found_pull and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
+			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
+				for action in card_resource.bottom_move.actions:
+					if 3 in action.action_types:  # Pull action type (3)
+						print("Found pull action in bottom half")
+						pull_range = action.range
+						pull_amount = action.amount
+						pull_action_bool = true
+						active_movement_card_part = "bottom"
+						found_pull = true
+						break
+	
+	if pull_action_bool:
+		print("Successfully activated pull action with range:", pull_range, "and amount:", pull_amount)
+		
+		# Show targetable area
+		var current_pos = local_to_map(selected_cryptid.position)
+		show_targetable_area(selected_cryptid.position, pull_range, "pull")
+		
+		# Store references for handle_pull_action
+		if active_movement_card_part == "top":
+			card_dialog.top_half_container = top_half_container
+			disable_other_cards_exact("top")
+		elif active_movement_card_part == "bottom":
+			card_dialog.bottom_half_container = bottom_half_container
+			disable_other_cards_exact("bottom")
+	else:
+		print("ERROR: Failed to activate pull action")
+	
+	print("---------- END PULL ACTION SELECTED DEBUG ----------\n")
+
+func show_targetable_area(center_pos, max_range, action_type = "attack"):
+	var center_hex = local_to_map(center_pos)
+	
+	# Clear any existing indicators and highlights
+	delete_all_indicators()
+	clear_movement_highlights()
+	
+	# For push/pull, use movement-style tile highlighting
+	if action_type == "push" or action_type == "pull":
+		is_showing_movement_range = true
+		
+		# Store all hexes within range first
+		var hexes_in_range = []
+		
+		# Check all positions on the map
+		for point_id in a_star_hex_attack_grid.get_point_ids():
+			var hex_pos = a_star_hex_attack_grid.get_point_position(point_id)
+			
+			# Convert to Vector2i for comparison
+			var hex_pos_i = Vector2i(int(hex_pos.x), int(hex_pos.y))
+			
+			# Skip the center position
+			if hex_pos_i == center_hex:
+				continue
+			
+			# Calculate path using attack grid
+			var path = a_star_hex_attack_grid.get_id_path(
+				a_star_hex_attack_grid.get_closest_point(center_hex),
+				a_star_hex_attack_grid.get_closest_point(hex_pos_i)
+			)
+			
+			# Check if within range
+			if path.size() > 0 and path.size() - 1 <= max_range:
+				hexes_in_range.append(hex_pos_i)
+				
+				# Store original tile state
+				original_tile_states[hex_pos_i] = get_cell_atlas_coords(hex_pos_i)
+				
+				# Set base range indicator
+				set_cell(hex_pos_i, 0, move_range_tile_id, 2)
+		
+		# Now highlight cryptids that are valid targets
+		for cryptid in all_cryptids_in_play:
+			var cryptid_pos = local_to_map(cryptid.position)
+			
+			# Skip the caster
+			if cryptid == selected_cryptid:
+				continue
+			
+			# Check if this cryptid is in range
+			if cryptid_pos in hexes_in_range:
+				# Use a different tile to show this is a valid target
+				set_cell(cryptid_pos, 0, path_tile_id, 1)
+				print("Valid target found at:", cryptid_pos)
+	else:
+		# Original attack indicator code
+		var center_cube = axial_to_cube(center_hex)
+		
+		for x in range(-max_range, max_range + 1):
+			for y in range(max(-max_range, -x - max_range), min(max_range, -x + max_range) + 1):
+				var z = -x - y
+				var cube = Vector3i(center_cube.x + x, center_cube.y + y, center_cube.z + z)
+				var hex = cube_to_axial(cube)
+				
+				# Check if hex is valid
+				if get_cell_atlas_coords(hex) != Vector2i(-1, -1):
+					# Draw indicator
+					var indicator = ColorRect.new()
+					indicator.color = Color(1, 0, 0, 0.3)  # Red for attack
+					indicator.size = Vector2(10, 10)
+					indicator.position = map_to_local(hex) - Vector2(5, 5)
+					indicator.name = "attack_indicator"
+					add_child(indicator)
+
+func calculate_push_direction(pusher_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
+	# For a straight line in hex grids, we need to find the dominant direction
+	var diff = target_pos - pusher_pos
+	
+	# Debug output
+	print("Calculate push direction - pusher_pos:", pusher_pos, "target_pos:", target_pos, "diff:", diff)
+	
+	# In a vertical offset hex grid, the 6 neighbor directions are:
+	# (1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)
+	var hex_directions = [
+		Vector2i(1, 0),   # East
+		Vector2i(1, -1),  # Northeast
+		Vector2i(0, -1),  # Northwest
+		Vector2i(-1, 0),  # West
+		Vector2i(-1, 1),  # Southwest
+		Vector2i(0, 1)    # Southeast
+	]
+	
+	# Find the direction that best matches our difference vector
+	var best_direction = Vector2i(0, 0)
+	var best_dot = -999999.0
+	
+	for dir in hex_directions:
+		# Ensure dir is valid
+		if dir == null:
+			print("ERROR: Null direction in hex_directions array!")
+			continue
+			
+		# Calculate dot product to find most aligned direction
+		var dot = float(diff.x * dir.x + diff.y * dir.y)  # Convert to float explicitly
+		
+		print("Testing direction", dir, "dot product:", dot)
+		
+		if dot > best_dot:
+			best_dot = dot
+			best_direction = dir
+	
+	print("Push direction from", pusher_pos, "to", target_pos, "is", best_direction)
+	return best_direction
+
+func calculate_pull_direction(puller_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
+	# Pull direction is from target towards puller
+	var diff = puller_pos - target_pos
+	
+	# Debug output
+	print("Calculate pull direction - puller_pos:", puller_pos, "target_pos:", target_pos, "diff:", diff)
+	
+	# In a vertical offset hex grid, the 6 neighbor directions are:
+	# (1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)
+	var hex_directions = [
+		Vector2i(1, 0),   # East
+		Vector2i(1, -1),  # Northeast
+		Vector2i(0, -1),  # Northwest
+		Vector2i(-1, 0),  # West
+		Vector2i(-1, 1),  # Southwest
+		Vector2i(0, 1)    # Southeast
+	]
+	
+	# Find the direction that best matches our difference vector
+	var best_direction = Vector2i(0, 0)
+	var best_dot = -999999.0
+	
+	for dir in hex_directions:
+		# Ensure dir is valid
+		if dir == null:
+			print("ERROR: Null direction in hex_directions array!")
+			continue
+			
+		# Calculate dot product to find most aligned direction
+		var dot = float(diff.x * dir.x + diff.y * dir.y)  # Convert to float explicitly
+		
+		print("Testing direction", dir, "dot product:", dot)
+		
+		if dot > best_dot:
+			best_dot = dot
+			best_direction = dir
+	
+	print("Pull direction from", target_pos, "towards", puller_pos, "is", best_direction)
+	return best_direction
+
+func calculate_push_destination(start_pos: Vector2i, direction: Vector2i, amount: int) -> Vector2i:
+	var current_pos = start_pos
+	var steps_taken = 0
+	
+	print("Calculating push destination from", start_pos, "direction", direction, "amount", amount)
+	
+	while steps_taken < amount:
+		# Calculate next position
+		var next_pos = current_pos + direction
+		
+		# Check if the next position is valid
+		if not is_valid_push_position(next_pos):
+			print("Position", next_pos, "is invalid, stopping at", current_pos)
+			break
+		
+		# Move to next position
+		current_pos = next_pos
+		steps_taken += 1
+		print("Step", steps_taken, "moved to", current_pos)
+	
+	return current_pos
+
+func calculate_pull_destination(start_pos: Vector2i, direction: Vector2i, amount: int) -> Vector2i:
+	var current_pos = start_pos
+	var steps_taken = 0
+	
+	print("Calculating pull destination from", start_pos, "direction", direction, "amount", amount)
+	
+	while steps_taken < amount:
+		# Calculate next position
+		var next_pos = current_pos + direction
+		
+		# Check if the next position is valid
+		if not is_valid_push_position(next_pos):
+			print("Position", next_pos, "is invalid, stopping at", current_pos)
+			break
+		
+		# Move to next position
+		current_pos = next_pos
+		steps_taken += 1
+		print("Step", steps_taken, "moved to", current_pos)
+	
+	return current_pos
+
+func is_valid_push_position(pos: Vector2i) -> bool:
+	# Check if position is on the map
+	if get_cell_atlas_coords(pos) == Vector2i(-1, -1):
+		print("Position", pos, "is off the map")
+		return false
+	
+	# Check if position is occupied
+	for cryptid in all_cryptids_in_play:
+		if local_to_map(cryptid.position) == pos:
+			print("Position", pos, "is occupied")
+			return false
+	
+	return true
+
+func animate_push(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
+	print("Animating push from", start_pos, "to", end_pos)
+	
+	# If no movement needed, return
+	if start_pos == end_pos:
+		print("No movement needed for push")
+		return
+	
+	# Update grid state - enable old position
+	var old_point = a_star_hex_grid.get_closest_point(start_pos, true)
+	a_star_hex_grid.set_point_disabled(old_point, false)
+	
+	# Update grid state - disable new position
+	var new_point = a_star_hex_grid.get_closest_point(end_pos, true)
+	a_star_hex_grid.set_point_disabled(new_point, true)
+	
+	# Update walkable hexes
+	if not start_pos in walkable_hexes:
+		walkable_hexes.append(start_pos)
+	walkable_hexes.erase(end_pos)
+	
+	# Convert positions to world coordinates
+	var start_world = map_to_local(start_pos)
+	var end_world = map_to_local(end_pos)
+	
+	# Create push effect
+	create_push_effect(selected_cryptid.position, target_cryptid.position)
+	
+	# Create a tween for smooth movement
+	var tween = create_tween()
+	tween.set_trans(Tween.TRANS_BACK)
+	tween.set_ease(Tween.EASE_OUT)
+	
+	# Move the target cryptid
+	tween.tween_property(target_cryptid, "position", end_world, 0.4)
+	
+	# Add a small bounce effect
+	tween.tween_property(target_cryptid, "scale", Vector2(0.9, 0.9), 0.1)
+	tween.tween_property(target_cryptid, "scale", Vector2(1.0, 1.0), 0.1)
+	
+	# Update debug display
+	update_all_debug_indicators()
+
+func animate_pull(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
+	print("Animating pull from", start_pos, "to", end_pos)
+	
+	# If no movement needed, return
+	if start_pos == end_pos:
+		print("No movement needed for pull")
+		return
+	
+	# Update grid state - enable old position
+	var old_point = a_star_hex_grid.get_closest_point(start_pos, true)
+	a_star_hex_grid.set_point_disabled(old_point, false)
+	
+	# Update grid state - disable new position
+	var new_point = a_star_hex_grid.get_closest_point(end_pos, true)
+	a_star_hex_grid.set_point_disabled(new_point, true)
+	
+	# Update walkable hexes
+	if not start_pos in walkable_hexes:
+		walkable_hexes.append(start_pos)
+	walkable_hexes.erase(end_pos)
+	
+	# Convert positions to world coordinates
+	var start_world = map_to_local(start_pos)
+	var end_world = map_to_local(end_pos)
+	
+	# Create pull effect
+	create_pull_effect(selected_cryptid.position, target_cryptid.position)
+	
+	# Create a tween for smooth movement
+	var tween = create_tween()
+	tween.set_trans(Tween.TRANS_QUAD)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	
+	# Move the target cryptid
+	tween.tween_property(target_cryptid, "position", end_world, 0.4)
+	
+	# Add a small wobble effect
+	tween.tween_property(target_cryptid, "rotation", 0.1, 0.1)
+	tween.tween_property(target_cryptid, "rotation", -0.1, 0.1)
+	tween.tween_property(target_cryptid, "rotation", 0.0, 0.1)
+	
+	# Update debug display
+	update_all_debug_indicators()
+
+func create_push_effect(start_pos, end_pos):
+	# Create a visual line for the push
+	var push_line = Line2D.new()
+	push_line.width = 6
+	push_line.default_color = Color(1, 0.5, 0, 0.8)  # Orange for push
+	push_line.add_point(start_pos)
+	push_line.add_point(end_pos)
+	push_line.name = "push_effect"
+	push_line.z_index = 10
+	add_child(push_line)
+	
+	# Create impact effect at target
+	var impact = ColorRect.new()
+	impact.color = Color(1, 0.5, 0, 0.6)  # Orange
+	impact.size = Vector2(30, 30)
+	impact.position = end_pos - Vector2(15, 15)
+	impact.name = "push_effect"
+	impact.z_index = 10
+	add_child(impact)
+	
+	# Animate the effects
+	var effect_tween = create_tween()
+	effect_tween.set_parallel(true)
+	
+	# Pulse the line
+	effect_tween.tween_property(push_line, "width", 12, 0.2)
+	effect_tween.tween_property(push_line, "width", 3, 0.3)
+	
+	# Expand and fade the impact
+	effect_tween.tween_property(impact, "scale", Vector2(1.5, 1.5), 0.3)
+	effect_tween.tween_property(impact, "modulate", Color(1, 0.5, 0, 0), 0.3)
+	
+	# Clean up after animation
+	effect_tween.tween_callback(Callable(self, "clean_up_push_effects"))
+
+func create_pull_effect(start_pos, end_pos):
+	# Create a visual line for the pull
+	var pull_line = Line2D.new()
+	pull_line.width = 6
+	pull_line.default_color = Color(0, 0.5, 1, 0.8)  # Blue for pull
+	pull_line.add_point(start_pos)
+	pull_line.add_point(end_pos)
+	pull_line.name = "pull_effect"
+	pull_line.z_index = 10
+	add_child(pull_line)
+	
+	# Create swirl effect at puller
+	var swirl = ColorRect.new()
+	swirl.color = Color(0, 0.5, 1, 0.6)  # Blue
+	swirl.size = Vector2(40, 40)
+	swirl.position = start_pos - Vector2(20, 20)
+	swirl.name = "pull_effect"
+	swirl.z_index = 10
+	add_child(swirl)
+	
+	# Animate the effects
+	var effect_tween = create_tween()
+	effect_tween.set_parallel(true)
+	
+	# Pulse the line
+	effect_tween.tween_property(pull_line, "width", 12, 0.2)
+	effect_tween.tween_property(pull_line, "width", 3, 0.3)
+	
+	# Rotate and fade the swirl
+	effect_tween.tween_property(swirl, "rotation", TAU, 0.5)
+	effect_tween.tween_property(swirl, "modulate", Color(0, 0.5, 1, 0), 0.5)
+	
+	# Clean up after animation
+	effect_tween.tween_callback(Callable(self, "clean_up_pull_effects"))
+
+func clean_up_push_effects():
+	for child in get_children():
+		if child.name == "push_effect":
+			child.queue_free()
+
+func clean_up_pull_effects():
+	for child in get_children():
+		if child.name == "pull_effect":
+			child.queue_free()
+
+func mark_action_used():
+	# Mark the appropriate card half as used
+	if active_movement_card_part == "top":
+		selected_cryptid.cryptid.top_card_played = true
+		print("Marked top card as played")
+	elif active_movement_card_part == "bottom":
+		selected_cryptid.cryptid.bottom_card_played = true
+		print("Marked bottom card as played")
+	
+	# Disable the entire card visually
+	if is_instance_valid(card_dialog):
+		disable_entire_card(card_dialog)
+		discard_card(card_dialog, selected_cryptid.cryptid)
+		
+		# Disable other cards with the selected half
+		if active_movement_card_part == "top":
+			disable_other_cards_exact("top")
+		elif active_movement_card_part == "bottom":
+			disable_other_cards_exact("bottom")
+
+func update_ui_after_action():
+	# Update hand to reflect changes
+	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
+	if hand_node and hand_node.has_method("update_card_availability"):
+		hand_node.update_card_availability()
+	
+	# Check if turn is complete
+	if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+		selected_cryptid.cryptid.completed_turn = true
+		print("Marked cryptid's turn as complete")
+		
+		# Update the UI to prompt for the End Turn button
+		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+		if action_menu and action_menu.has_method("show_end_turn_only"):
+			action_menu.show_end_turn_only()
+			
+		var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+		if game_instructions:
+			game_instructions.text = "Turn complete. Press End Turn to continue."
+	else:
+		# Show the action menu again with updated button state
+		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
+		if action_menu and action_menu.has_method("update_menu_visibility"):
+			action_menu.update_menu_visibility(selected_cryptid.cryptid)
+			action_menu.show()
+
+func show_push_pull_preview(target_cryptid, target_pos: Vector2i):
+	# Clear previous preview
+	for hex in push_pull_preview_hexes:
+		if hex in original_tile_states:
+			if is_showing_movement_range:
+				# Check if there's a cryptid at this position to determine tile
+				var has_cryptid = false
+				for cryptid in all_cryptids_in_play:
+					if local_to_map(cryptid.position) == hex:
+						has_cryptid = true
+						break
+				set_cell(hex, 0, path_tile_id if has_cryptid else move_range_tile_id, 1 if has_cryptid else 2)
+			else:
+				set_cell(hex, 0, original_tile_states[hex], 0)
+	push_pull_preview_hexes.clear()
+	
+	var current_pos = local_to_map(selected_cryptid.position)
+	
+	# Calculate direction
+	var direction = Vector2i(0, 0)
+	var amount = 0
+	if push_action_bool:
+		direction = calculate_push_direction(current_pos, target_pos)
+		amount = push_amount
+	elif pull_action_bool:
+		direction = calculate_pull_direction(current_pos, target_pos)
+		amount = pull_amount
+	
+	if direction == Vector2i(0, 0):
+		return
+	
+	# Show the actual path that will be taken
+	var preview_pos = target_pos
+	
+	for i in range(amount):
+		var next_pos = preview_pos + direction
+		
+		# Check if position is valid
+		if not is_valid_push_position(next_pos):
+			break
+		
+		# Add to preview
+		push_pull_preview_hexes.append(next_pos)
+		
+		# Set preview tile
+		set_cell(next_pos, 0, preview_tile_id, 3)  # Using alternate 3 for preview
+		
+		preview_pos = next_pos
+	
+	print("Preview path:", push_pull_preview_hexes)
