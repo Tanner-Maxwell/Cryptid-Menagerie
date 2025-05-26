@@ -79,8 +79,6 @@ func _ready():
 		battle_reward_screen.hide()
 	
 	
-	
-	
 # Add this to the bottom of the file, make it accessible via a keystroke
 func _input(event):
 	# Press F8 to test emergency swap
@@ -462,9 +460,21 @@ func prompt_catch_cryptid():
 		action_selection_menu.prompt_player_for_action()
 		return
 	
+	# Check if player has film
+	if !FilmManager.has_film(FilmManager.FILM_PER_CATCH_ATTEMPT):
+		game_instructions.text = "No film! You need film to catch cryptids!"
+		action_selection_menu.prompt_player_for_action()
+		return
+	
 	# Check if there's only one enemy left
 	if tile_map_layer.enemy_cryptids_in_play.size() != 1:
 		game_instructions.text = "You can only catch the last remaining enemy cryptid!"
+		action_selection_menu.prompt_player_for_action()
+		return
+	
+	# Use film for the catch attempt
+	if !FilmManager.use_film(FilmManager.FILM_PER_CATCH_ATTEMPT, "Catch attempt"):
+		game_instructions.text = "Failed to use film!"
 		action_selection_menu.prompt_player_for_action()
 		return
 	

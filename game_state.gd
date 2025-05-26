@@ -130,6 +130,9 @@ func reset_to_defaults():
 	_current_node_id = ""  # Reset to empty/starting node
 	gold = 0  # Reset gold
 	
+	if FilmManager:
+		FilmManager.reset()
+		
 	print("Reset progression values")
 	
 	# Reset player team completely

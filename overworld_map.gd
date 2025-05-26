@@ -61,6 +61,14 @@ func _ready():
 	if GoldManager and GameState.get_current_node_id() == "":
 		GoldManager.reset()
 		GoldManager.add_gold(100, "Debug test gold")
+		
+	var film_display_scene = load("res://Cryptid-Menagerie/scenes/film_display.tscn")
+	if film_display_scene:
+		var film_display = film_display_scene.instantiate()
+		add_child(film_display)
+		# Move it to the top of the scene tree so it renders above everything
+		move_child(film_display, get_child_count() - 1)
+		print("Film display added to scene")
 
 
 # Handler for when an encounter node is selected

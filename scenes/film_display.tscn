@@ -1,0 +1,27 @@
+[gd_scene load_steps=3 format=3 uid="uid://br427qkaujx1i"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/ui/film_display.gd" id="1_j06e1"]
+[ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="2_73u7s"]
+
+[node name="FilmDisplay" type="PanelContainer"]
+top_level = true
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_j06e1")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+
+[node name="FilmIcon" type="TextureRect" parent="MarginContainer/HBoxContainer"]
+layout_mode = 2
+texture = ExtResource("2_73u7s")
+expand_mode = 3
+
+[node name="FilmLabel" type="Label" parent="MarginContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="AnimationLabel" type="Label" parent="MarginContainer/HBoxContainer"]
+layout_mode = 2
