@@ -50,6 +50,22 @@ func take_enemy_turn(enemy_cryptid):
 		if is_stunned:
 			print("AI: Cryptid was STUNNED - skipping turn!")
 			
+			# Clean up any lingering stun visual effects
+			if tile_map_layer:
+				# Clean up general stun effects
+				if tile_map_layer.has_method("clean_up_stun_effects"):
+					tile_map_layer.clean_up_stun_effects()
+				
+				# Clean up effects specific to this cryptid
+				if tile_map_layer.has_method("clean_up_cryptid_status_visuals"):
+					tile_map_layer.clean_up_cryptid_status_visuals(enemy_cryptid)
+			
+			# Also check if the cryptid itself has any stun effect children
+			for child in enemy_cryptid.get_children():
+				if child.name == "stun_effect" or child.name == "stun_star":
+					print("AI: Removing stun effect from cryptid node")
+					child.queue_free()
+			
 			# Show stun message
 			var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
 			if game_instructions:
@@ -62,6 +78,11 @@ func take_enemy_turn(enemy_cryptid):
 			
 			# Wait a moment for the player to see the message
 			await get_tree().create_timer(2.0).timeout
+			
+			# Debug: Check if effects were properly cleaned
+			if tile_map_layer.has_method("debug_find_all_stun_effects"):
+				await get_tree().create_timer(0.1).timeout
+				tile_map_layer.debug_find_all_stun_effects()
 			
 			# Show the End Turn button for the player to proceed
 			show_end_turn_button_for_enemy()

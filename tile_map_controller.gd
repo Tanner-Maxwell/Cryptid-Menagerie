@@ -77,6 +77,7 @@ var heal_amount = 0
 var stun_action_bool = false
 var stun_range = 2
 var stun_amount = 1  # Usually 1 since stun doesn't stack
+var active_stun_effects = {}  # Key: cryptid instance, Value: array of effect nodes
 
 func _ready():
 	cur_position_cube = axial_to_cube(local_to_map(player_pos))
@@ -5007,15 +5008,36 @@ func _on_stun_tween_finished():
 func create_stun_effect(start_pos, end_pos):
 	print("Creating stun visual effects")
 	
+	# Try to find which cryptid is being stunned based on position
+	var stunned_cryptid = null
+	for cryptid in all_cryptids_in_play:
+		if is_instance_valid(cryptid):
+			var cryptid_pos = cryptid.position
+			if cryptid_pos.distance_to(end_pos) < 10:  # Within 10 pixels
+				stunned_cryptid = cryptid
+				break
+	
+	# Create array to track this stun's effects
+	var effect_nodes = []
+	
 	# Create a line for the stun - yellow color
 	var stun_line = Line2D.new()
 	stun_line.width = 6
 	stun_line.default_color = Color(1, 1, 0, 0.8)  # Yellow for stun
 	stun_line.add_point(start_pos)
 	stun_line.add_point(end_pos)
-	stun_line.name = "stun_effect"
+	stun_line.name = "stun_effect_line"
 	stun_line.z_index = 10
 	add_child(stun_line)
+	effect_nodes.append(stun_line)
+	
+	# Create a container for the rotating stars
+	var star_container = Node2D.new()
+	star_container.name = "stun_effect_stars"
+	star_container.position = end_pos
+	star_container.z_index = 10
+	add_child(star_container)
+	effect_nodes.append(star_container)
 	
 	# Create stun stars at target
 	for i in range(3):
@@ -5024,17 +5046,28 @@ func create_stun_effect(start_pos, end_pos):
 		star.size = Vector2(20, 20)
 		var angle = (TAU / 3) * i
 		var offset = Vector2(cos(angle), sin(angle)) * 30
-		star.position = end_pos + offset - Vector2(10, 10)
-		star.name = "stun_effect"
-		star.z_index = 10
-		add_child(star)
-		
-		# Rotate the stars
-		var star_tween = create_tween()
-		star_tween.set_loops()
-		star_tween.tween_property(star, "rotation", TAU, 2.0)
+		star.position = offset - Vector2(10, 10)
+		star.name = "stun_star_" + str(i)
+		star_container.add_child(star)
 	
-	# Animate the stun effects
+	# Rotate the entire star container
+	var star_tween = create_tween()
+	star_tween.set_loops()
+	star_tween.tween_property(star_container, "rotation", TAU, 2.0).as_relative()
+	
+	# Store the tween reference
+	star_container.set_meta("rotation_tween", star_tween)
+	
+	# Store the effect nodes for this cryptid
+	if stunned_cryptid:
+		active_stun_effects[stunned_cryptid] = effect_nodes
+		print("Stored stun effects for cryptid:", stunned_cryptid.cryptid.name)
+	else:
+		# If we couldn't find the cryptid, store by position
+		active_stun_effects[end_pos] = effect_nodes
+		print("Stored stun effects for position:", end_pos)
+	
+	# Animate the initial stun effect (just the line pulse, not cleanup)
 	var effect_tween = create_tween()
 	effect_tween.set_parallel(true)
 	
@@ -5042,14 +5075,46 @@ func create_stun_effect(start_pos, end_pos):
 	effect_tween.tween_property(stun_line, "width", 12, 0.2)
 	effect_tween.tween_property(stun_line, "width", 3, 0.3)
 	
-	# Clean up after animation
-	effect_tween.tween_callback(Callable(self, "clean_up_stun_effects"))
+	# Fade out ONLY the line after a moment, keep the stars
+	effect_tween.tween_property(stun_line, "modulate:a", 0.0, 0.5).set_delay(0.5)
 
-# Add cleanup function for stun effects:
+# Update the clean_up_stun_effects function to handle the new structure
 func clean_up_stun_effects():
+	print("Cleaning up ALL stun effects")
+	var effects_removed = 0
+	
+	# Clean up tracked stun effects
+	for key in active_stun_effects:
+		var effect_nodes = active_stun_effects[key]
+		for node in effect_nodes:
+			if is_instance_valid(node):
+				# Kill any tweens
+				if node.has_meta("rotation_tween"):
+					var tween = node.get_meta("rotation_tween")
+					if tween and tween.is_valid():
+						tween.kill()
+				node.queue_free()
+				effects_removed += 1
+		
+		if key is Node:
+			print("Removed stun effects for cryptid:", key.cryptid.name if key.get("cryptid") else "Unknown")
+		else:
+			print("Removed stun effects for position:", key)
+	
+	# Clear the tracking dictionary
+	active_stun_effects.clear()
+	
+	# Also clean up any orphaned stun effects
 	for child in get_children():
-		if child.name == "stun_effect":
+		if child.name.begins_with("stun_effect"):
+			if child.has_meta("rotation_tween"):
+				var tween = child.get_meta("rotation_tween")
+				if tween and tween.is_valid():
+					tween.kill()
 			child.queue_free()
+			effects_removed += 1
+	
+	print("Removed", effects_removed, "stun effect nodes")
 
 func show_stun_preview(target_cryptid, target_pos: Vector2i):
 	# Clear previous preview
@@ -5074,3 +5139,107 @@ func show_stun_preview(target_cryptid, target_pos: Vector2i):
 	# Show yellow preview tile at target position
 	push_pull_preview_hexes.append(target_pos)
 	set_cell(target_pos, 0, Vector2i(2, 0), 5)  # Use alternative tile 5 for stun preview hover
+
+func clean_up_cryptid_status_visuals(cryptid_node):
+	print("Cleaning up all status visuals for cryptid:", cryptid_node.cryptid.name)
+	
+	# First try the specific stun cleanup
+	clean_up_cryptid_stun_effects(cryptid_node)
+	
+	# Get the world position of the cryptid
+	var cryptid_world_pos = cryptid_node.position
+	
+	# Clean up any effects that might be near this cryptid
+	for child in get_children():
+		if child.name in ["stun_effect", "stun_effect_line", "stun_effect_stars", "heal_effect", "attack_effect", "push_effect", "pull_effect"]:
+			# Check if this effect is near the cryptid (within 100 pixels)
+			if child.position.distance_to(cryptid_world_pos) < 100:
+				if child.has_meta("rotation_tween"):
+					var tween = child.get_meta("rotation_tween")
+					if tween and tween.is_valid():
+						tween.kill()
+				child.queue_free()
+				print("Removed", child.name, "near cryptid")
+
+func debug_find_all_stun_effects():
+	print("\n=== SEARCHING FOR ALL STUN EFFECTS ===")
+	var total_found = 0
+	
+	# Check tracked effects
+	print("Checking tracked stun effects...")
+	print("Active stun effects tracked:", active_stun_effects.size())
+	for key in active_stun_effects:
+		var effect_nodes = active_stun_effects[key]
+		print("  Key:", key, "has", effect_nodes.size(), "effect nodes")
+		for node in effect_nodes:
+			if is_instance_valid(node):
+				print("    - Valid node:", node.name)
+				total_found += 1
+			else:
+				print("    - Invalid node (already freed)")
+	
+	# Check tile map children
+	print("Checking tile map children...")
+	for child in get_children():
+		if "stun" in child.name.to_lower():
+			print("  Found:", child.name, "at", child.position)
+			total_found += 1
+	
+	# Check all cryptids
+	print("Checking all cryptids...")
+	for cryptid in all_cryptids_in_play:
+		if is_instance_valid(cryptid):
+			print("  Checking cryptid:", cryptid.cryptid.name)
+			for child in cryptid.get_children():
+				if "stun" in child.name.to_lower():
+					print("    Found:", child.name)
+					total_found += 1
+	
+	# Check line container
+	if line_container:
+		print("Checking line container...")
+		for child in line_container.get_children():
+			if "stun" in child.name.to_lower():
+				print("  Found:", child.name)
+				total_found += 1
+	
+	print("Total stun effects found:", total_found)
+	print("=== END STUN EFFECT SEARCH ===\n")
+	
+	return total_found
+
+func clean_up_cryptid_stun_effects(cryptid_node):
+	print("Cleaning up stun effects for specific cryptid:", cryptid_node.cryptid.name)
+	
+	# Check if we have effects tracked for this cryptid
+	if cryptid_node in active_stun_effects:
+		var effect_nodes = active_stun_effects[cryptid_node]
+		for node in effect_nodes:
+			if is_instance_valid(node):
+				# Kill any tweens
+				if node.has_meta("rotation_tween"):
+					var tween = node.get_meta("rotation_tween")
+					if tween and tween.is_valid():
+						tween.kill()
+				node.queue_free()
+		
+		# Remove from tracking
+		active_stun_effects.erase(cryptid_node)
+		print("Removed tracked stun effects for cryptid")
+	
+	# Also check by position
+	var cryptid_pos = cryptid_node.position
+	for pos in active_stun_effects:
+		if pos is Vector2 and pos.distance_to(cryptid_pos) < 50:
+			var effect_nodes = active_stun_effects[pos]
+			for node in effect_nodes:
+				if is_instance_valid(node):
+					if node.has_meta("rotation_tween"):
+						var tween = node.get_meta("rotation_tween")
+						if tween and tween.is_valid():
+							tween.kill()
+					node.queue_free()
+			active_stun_effects.erase(pos)
+			print("Removed stun effects by position")
+
+

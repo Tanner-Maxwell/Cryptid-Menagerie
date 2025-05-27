@@ -41,6 +41,9 @@ func remove_status_effect(effect_type: StatusEffect.EffectType) -> void:
 		active_effects.erase(effect_type)
 		status_effect_removed.emit(effect_type)
 		print("Removed status effect:", StatusEffect.EffectType.keys()[effect_type])
+		
+		# Clean up visual effects based on effect type
+		_cleanup_visual_effects(effect_type)
 
 # Remove stacks from a status effect
 func remove_stacks(effect_type: StatusEffect.EffectType, amount: int) -> void:
@@ -241,3 +244,36 @@ func process_turn_end() -> void:
 	if cryptid_node.has_node("StatusEffectDisplay"):
 		var display = cryptid_node.get_node("StatusEffectDisplay")
 		display.refresh_display()
+
+# Add this new function to clean up visual effects
+func _cleanup_visual_effects(effect_type: StatusEffect.EffectType) -> void:
+	# Get the tile map to access visual cleanup functions
+	var tile_map = get_tree().get_nodes_in_group("map")[0] if get_tree().get_nodes_in_group("map").size() > 0 else null
+	
+	if not tile_map:
+		print("WARNING: Could not find tile map for visual cleanup")
+		return
+	
+	match effect_type:
+		StatusEffect.EffectType.STUN:
+			# Clean up stun visual effects
+			if tile_map.has_method("clean_up_stun_effects"):
+				tile_map.clean_up_stun_effects()
+			# Also try to clean up any effects that might be children of the cryptid
+			_cleanup_cryptid_visual_effects("stun_effect")
+			
+		StatusEffect.EffectType.POISON:
+			_cleanup_cryptid_visual_effects("poison_effect")
+			
+		StatusEffect.EffectType.BURN:
+			_cleanup_cryptid_visual_effects("burn_effect")
+			
+		# Add other effect types as needed
+
+# Helper to clean up effects that might be children of the cryptid node
+func _cleanup_cryptid_visual_effects(effect_name: String) -> void:
+	if cryptid_node:
+		for child in cryptid_node.get_children():
+			if child.name == effect_name:
+				child.queue_free()
+				print("Cleaned up", effect_name, "from cryptid")
