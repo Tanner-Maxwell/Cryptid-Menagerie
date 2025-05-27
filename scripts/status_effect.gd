@@ -1,3 +1,4 @@
+# Updated StatusEffect resource with icon support
 class_name StatusEffect
 extends Resource
 
@@ -24,7 +25,7 @@ enum TriggerTime {
 @export var effect_type: EffectType
 @export var stack_count: int = 1
 @export var max_stacks: int = 99  # Set to 1 for non-stackable effects like stun
-@export var icon: Texture2D
+@export var icon: Texture2D  # This is already here, we'll use it
 @export var effect_name: String
 @export var description: String
 @export var trigger_time: TriggerTime = TriggerTime.MANUAL

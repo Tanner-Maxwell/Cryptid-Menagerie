@@ -109,24 +109,57 @@ func update_health_bar():
 		else:
 			health_bar.modulate = Color(0, 1, 0, 1)  # Green for good health
 
-# Initialize status effect system
 func initialize_status_effects():
 	# Create and add status effect manager
 	status_effect_manager = StatusEffectManager.new()
+	status_effect_manager.name = "StatusEffectManager"
 	add_child(status_effect_manager)
 	status_effect_manager.initialize(self)
 	
 	# Create and add status effect display
 	status_effect_display = StatusEffectDisplay.new()
+	status_effect_display.name = "StatusEffectDisplay"
 	add_child(status_effect_display)
 	
 	# Position the display above the health bar
 	var health_bar = get_node("HealthBar")
 	if health_bar:
+		# Get the left edge of the health bar
+		var health_bar_left = health_bar.position.x - (health_bar.size.x / 2)
+		
 		status_effect_display.position = Vector2(
-			health_bar.position.x,
-			health_bar.position.y - 40  # Adjust this value as needed
+			health_bar.position.x,  # Adjust this value to move left/right
+			health_bar.position.y - 35   # Adjust this value to move up/down
 		)
+	else:
+		# Fallback position if no health bar found
+		status_effect_display.position = Vector2(0, -60)
+	
+	# Set a higher z_index to ensure it renders above everything
+	status_effect_display.z_index = 100
 	
 	# Initialize the display with the manager
 	status_effect_display.initialize(status_effect_manager)
+
+func setup_status_effect_display():
+	# Check if StatusEffectManager exists
+	if not has_node("StatusEffectManager"):
+		var status_manager = StatusEffectManager.new()
+		status_manager.name = "StatusEffectManager"
+		add_child(status_manager)
+		status_manager.initialize(self)
+	
+	# Check if StatusEffectDisplay exists
+	if not has_node("StatusEffectDisplay"):
+		var status_display = StatusEffectDisplay.new()
+		status_display.name = "StatusEffectDisplay"
+		add_child(status_display)
+		
+		# Get the status manager
+		var status_manager = get_node("StatusEffectManager")
+		status_display.initialize(status_manager)
+		
+		# Position it above the cryptid
+		# Adjust these values based on your cryptid sprite size
+		status_display.position = Vector2(0, -60)  # 60 pixels above center
+		status_display.z_index = 10  # Ensure it renders above the cryptid
