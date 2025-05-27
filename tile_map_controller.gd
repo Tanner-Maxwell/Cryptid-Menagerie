@@ -77,7 +77,7 @@ var heal_amount = 0
 var stun_action_bool = false
 var stun_range = 2
 var stun_amount = 1  # Usually 1 since stun doesn't stack
-var active_stun_effects = {}  # Key: cryptid instance, Value: array of effect nodes
+var active_stun_effects: Dictionary = {}  # Track stun effects by cryptid
 
 func _ready():
 	cur_position_cube = axial_to_cube(local_to_map(player_pos))
@@ -482,9 +482,6 @@ func handle_push_action(pos_clicked):
 		# Animate the push
 		animate_push(target_cryptid, target_pos, final_position)
 		
-		# Mark the action as used
-		mark_action_used()
-		
 		# Clean up action state
 		push_action_bool = false
 		active_movement_card_part = ""
@@ -492,8 +489,10 @@ func handle_push_action(pos_clicked):
 		delete_all_lines()
 		delete_all_indicators()
 		
-		# Update UI
-		update_ui_after_action()
+		# NEW: Push complete, notify card to move to next action
+		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+			print("Push complete, moving to next action")
+			card_dialog.next_action()
 		
 		return true
 	else:
@@ -557,9 +556,6 @@ func handle_pull_action(pos_clicked):
 		# Animate the pull
 		animate_pull(target_cryptid, target_pos, final_position)
 		
-		# Mark the action as used
-		mark_action_used()
-		
 		# Clean up action state
 		pull_action_bool = false
 		active_movement_card_part = ""
@@ -567,8 +563,10 @@ func handle_pull_action(pos_clicked):
 		delete_all_lines()
 		delete_all_indicators()
 		
-		# Update UI
-		update_ui_after_action()
+		# NEW: Pull complete, notify card to move to next action
+		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+			print("Pull complete, moving to next action")
+			card_dialog.next_action()
 		
 		return true
 	else:
@@ -655,6 +653,12 @@ func handle_move_action(pos_clicked):
 		var new_pos = local_to_map(selected_cryptid.position)
 		# Recalculate movement range from the new position
 		highlight_possible_movement_hexes(selected_cryptid.position, remaining_movement)
+	else:
+		# NEW: Movement exhausted, notify card to move to next action
+		move_action_bool = false
+		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+			print("Movement complete, moving to next action")
+			card_dialog.next_action()
 	
 	print("=== END HANDLE MOVE ACTION ===\n")
 	return true
@@ -718,10 +722,6 @@ func handle_card_usage(remaining_movement):
 	
 	move_leftover = remaining_movement
 	
-	# ISSUE: This check only looks at the current state, and doesn't respect the 
-	# original card half that started the movement
-	# var using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
-	
 	# FIX: If this is a continuing movement (active_movement_card_part is already set), 
 	# use that value. Otherwise check which half is highlighted
 	var using_top_half
@@ -738,23 +738,25 @@ func handle_card_usage(remaining_movement):
 	var card_half = "top" if using_top_half else "bottom"
 	print("Using", card_half, "half with", remaining_movement, "movement left")
 	
-	# If no movement left, mark the card as used and discard it
+	# If no movement left, we need to clean up but NOT call next_action here
 	if remaining_movement <= 0:
-		if using_top_half:
-			selected_cryptid.cryptid.top_card_played = true
-		else:
-			selected_cryptid.cryptid.bottom_card_played = true
+		print("Movement exhausted in handle_card_usage")
 		
-		# Visually disable the card
-		disable_entire_card(card_dialog)
-		
-		# Discard the card
-		discard_card(card_dialog, selected_cryptid.cryptid)
-		
-		# Reset action state
+		# Reset movement state
 		move_action_bool = false
 		active_movement_card_part = ""
 		active_movement_card = null
+		
+		# Clean up visuals
+		remove_movement_indicator()
+		delete_all_lines()
+		delete_all_indicators()
+		clear_movement_highlights()
+		
+		# Re-enable eligible card halves
+		enable_all_card_halves()
+		
+		# DON'T call next_action here - let handle_move_action do it
 	else:
 		# Still have movement, update the card
 		if using_top_half:
@@ -1155,52 +1157,15 @@ func handle_attack_action(pos_clicked):
 			
 			# Process card state changes immediately
 			if attack_performed:
-				# Mark only the appropriate half as "played" for action economy
-				if using_top_half:
-					selected_cryptid.cryptid.top_card_played = true
-					print("Marked top half as played for action economy")
-				elif using_bottom_half:
-					selected_cryptid.cryptid.bottom_card_played = true
-					print("Marked bottom half as played for action economy")
+				# Reset action state
+				attack_action_bool = false
+				delete_all_lines()
+				delete_all_indicators()
 				
-				# But visually disable the entire card
-				if is_instance_valid(card_dialog):
-					disable_entire_card(card_dialog)
-					
-					# Discard the card
-					discard_card(card_dialog, selected_cryptid.cryptid)
-					
-					# Disable other cards with the selected half
-					if using_top_half:
-						disable_other_cards_exact("top")
-					elif using_bottom_half:
-						disable_other_cards_exact("bottom")
-				
-				# Update hand to reflect changes
-				var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-				if hand_node and hand_node.has_method("update_card_availability"):
-					hand_node.update_card_availability()
-				
-				# Check if turn is complete
-				if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
-					selected_cryptid.cryptid.completed_turn = true
-					print("Marked cryptid's turn as complete")
-					
-					# Instead of directly going to next cryptid, update the UI to prompt
-					# for the End Turn button
-					var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-					if action_menu and action_menu.has_method("show_end_turn_only"):
-						action_menu.show_end_turn_only()
-						
-					var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
-					if game_instructions:
-						game_instructions.text = "Turn complete. Press End Turn to continue."
-				
-				# Show the action menu again with updated button state
-				var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-				if action_menu and action_menu.has_method("update_menu_visibility"):
-					action_menu.update_menu_visibility(selected_cryptid.cryptid)
-					action_menu.show()
+				# NEW: Attack complete, notify card to move to next action
+				if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+					print("Attack complete, moving to next action")
+					card_dialog.next_action()
 		else:
 			print("Target out of range")
 	else:
@@ -1215,14 +1180,6 @@ func handle_attack_action(pos_clicked):
 		delete_all_lines()
 		delete_all_indicators()
 	
-	# Always update the menu if an attack was performed
-	if attack_performed:
-		var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-		if action_menu and action_menu.has_method("update_menu_visibility") and selected_cryptid:
-			# This will update menu to show only End Turn after attack
-			action_menu.update_menu_visibility(selected_cryptid.cryptid)
-			action_menu.show()
-		
 	force_update_discard_display()
 	print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
 	return attack_performed
@@ -1320,15 +1277,15 @@ func move_action_selected(current_card):
 		print("In discard mode, ignoring move action selection")
 		return
 	
+	# Store the card dialog - THIS IS IMPORTANT
+	card_dialog = current_card
+	
 	# If already in segmented movement, only allow continuing with the same card
 	if move_leftover > 0 and active_movement_card != null:
 		# Only allow the same card to continue movement
 		if active_movement_card != current_card:
 			print("Cannot use a different card during active movement")
 			return
-	
-	# Store the card dialog
-	card_dialog = current_card
 	
 	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
@@ -2358,6 +2315,11 @@ func finish_movement():
 		var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
 		if hand_node and hand_node.has_method("update_card_availability"):
 			hand_node.update_card_availability()
+		
+		# NEW: Since movement was voluntarily finished, move to next action
+		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+			print("Movement finished early, moving to next action")
+			card_dialog.next_action()
 		
 		# Check if turn is complete
 		if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
@@ -4008,12 +3970,14 @@ func animate_push(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
 		return
 	
 	# Update grid state - enable old position
-	var old_point = a_star_hex_attack_grid.get_closest_point(start_pos, true)
-	a_star_hex_attack_grid.set_point_disabled(old_point, false)
+	var old_point = a_star_hex_grid.get_closest_point(start_pos, true)
+	a_star_hex_grid.set_point_disabled(old_point, false)
+	print("Enabled old position:", start_pos)
 	
 	# Update grid state - disable new position
-	var new_point = a_star_hex_attack_grid.get_closest_point(end_pos, true)
-	a_star_hex_attack_grid.set_point_disabled(new_point, true)
+	var new_point = a_star_hex_grid.get_closest_point(end_pos, true)
+	a_star_hex_grid.set_point_disabled(new_point, true)
+	print("Disabled new position:", end_pos)
 	
 	# Update walkable hexes
 	if not start_pos in walkable_hexes:
@@ -4039,8 +4003,29 @@ func animate_push(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
 	tween.tween_property(target_cryptid, "scale", Vector2(0.9, 0.9), 0.1)
 	tween.tween_property(target_cryptid, "scale", Vector2(1.0, 1.0), 0.1)
 	
+	# IMPORTANT: Update grid manager if it exists
+	if grid_manager:
+		# Move the entity in the grid manager
+		if not grid_manager.move_entity(start_pos, end_pos, target_cryptid):
+			print("WARNING: Grid manager failed to update entity position")
+			# Try to fix it manually
+			grid_manager.occupied_positions.erase(start_pos)
+			grid_manager.occupied_positions[end_pos] = target_cryptid
+	
+	# Force verify the grid state after movement
+	await tween.finished
+	
+	# Double-check that the new position is disabled
+	var verify_point = a_star_hex_grid.get_closest_point(end_pos, true)
+	if not a_star_hex_grid.is_point_disabled(verify_point):
+		print("WARNING: End position not properly disabled, fixing...")
+		a_star_hex_grid.set_point_disabled(verify_point, true)
+	
 	# Update debug display
 	update_all_debug_indicators()
+	
+	# Verify the grid state
+	verify_grid_state()
 
 func animate_pull(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
 	print("Animating pull from", start_pos, "to", end_pos)
@@ -4051,12 +4036,14 @@ func animate_pull(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
 		return
 	
 	# Update grid state - enable old position
-	var old_point = a_star_hex_attack_grid.get_closest_point(start_pos, true)
-	a_star_hex_attack_grid.set_point_disabled(old_point, false)
+	var old_point = a_star_hex_grid.get_closest_point(start_pos, true)
+	a_star_hex_grid.set_point_disabled(old_point, false)
+	print("Enabled old position:", start_pos)
 	
 	# Update grid state - disable new position
-	var new_point = a_star_hex_attack_grid.get_closest_point(end_pos, true)
-	a_star_hex_attack_grid.set_point_disabled(new_point, true)
+	var new_point = a_star_hex_grid.get_closest_point(end_pos, true)
+	a_star_hex_grid.set_point_disabled(new_point, true)
+	print("Disabled new position:", end_pos)
 	
 	# Update walkable hexes
 	if not start_pos in walkable_hexes:
@@ -4083,8 +4070,29 @@ func animate_pull(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
 	tween.tween_property(target_cryptid, "rotation", -0.1, 0.1)
 	tween.tween_property(target_cryptid, "rotation", 0.0, 0.1)
 	
+	# IMPORTANT: Update grid manager if it exists
+	if grid_manager:
+		# Move the entity in the grid manager
+		if not grid_manager.move_entity(start_pos, end_pos, target_cryptid):
+			print("WARNING: Grid manager failed to update entity position")
+			# Try to fix it manually
+			grid_manager.occupied_positions.erase(start_pos)
+			grid_manager.occupied_positions[end_pos] = target_cryptid
+	
+	# Force verify the grid state after movement
+	await tween.finished
+	
+	# Double-check that the new position is disabled
+	var verify_point = a_star_hex_grid.get_closest_point(end_pos, true)
+	if not a_star_hex_grid.is_point_disabled(verify_point):
+		print("WARNING: End position not properly disabled, fixing...")
+		a_star_hex_grid.set_point_disabled(verify_point, true)
+	
 	# Update debug display
 	update_all_debug_indicators()
+	
+	# Verify the grid state
+	verify_grid_state()
 
 func create_push_effect(start_pos, end_pos):
 	# Create a visual line for the push
@@ -4167,6 +4175,7 @@ func clean_up_pull_effects():
 			child.queue_free()
 
 func mark_action_used():
+	# This should only be called by the card when ALL actions are complete
 	# Mark the appropriate card half as used
 	if active_movement_card_part == "top":
 		selected_cryptid.cryptid.top_card_played = true
@@ -4187,6 +4196,8 @@ func mark_action_used():
 			disable_other_cards_exact("bottom")
 
 func update_ui_after_action():
+	# REMOVED: mark_action_used() - this is now handled by the card
+	
 	# Update hand to reflect changes
 	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
 	if hand_node and hand_node.has_method("update_card_availability"):
@@ -4561,9 +4572,6 @@ func handle_heal_action(pos_clicked):
 		# Apply the healing
 		apply_healing(target_cryptid, heal_amount)
 		
-		# Mark the action as used
-		mark_action_used()
-		
 		# Clean up action state
 		heal_action_bool = false
 		active_movement_card_part = ""
@@ -4572,8 +4580,10 @@ func handle_heal_action(pos_clicked):
 		delete_all_indicators()
 		clear_movement_highlights()
 		
-		# Update UI
-		update_ui_after_action()
+		# NEW: Heal complete, notify card to move to next action
+		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+			print("Heal complete, moving to next action")
+			card_dialog.next_action()
 		
 		return true
 	else:
@@ -4938,9 +4948,6 @@ func handle_stun_action(pos_clicked):
 		# Animate the stun
 		animate_stun(selected_cryptid, target_cryptid)
 		
-		# Mark the action as used
-		mark_action_used()
-		
 		# Clean up action state
 		stun_action_bool = false
 		active_movement_card_part = ""
@@ -4949,8 +4956,10 @@ func handle_stun_action(pos_clicked):
 		delete_all_indicators()
 		clear_movement_highlights()
 		
-		# Update UI
-		update_ui_after_action()
+		# NEW: Stun complete, notify card to move to next action
+		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+			print("Stun complete, moving to next action")
+			card_dialog.next_action()
 		
 		return true
 	else:
@@ -5017,10 +5026,14 @@ func create_stun_effect(start_pos, end_pos):
 				stunned_cryptid = cryptid
 				break
 	
+	if not stunned_cryptid:
+		print("ERROR: Could not find cryptid at stun target position")
+		return
+	
 	# Create array to track this stun's effects
 	var effect_nodes = []
 	
-	# Create a line for the stun - yellow color
+	# Create a line for the stun - yellow color (this stays on the map)
 	var stun_line = Line2D.new()
 	stun_line.width = 6
 	stun_line.default_color = Color(1, 1, 0, 0.8)  # Yellow for stun
@@ -5028,18 +5041,18 @@ func create_stun_effect(start_pos, end_pos):
 	stun_line.add_point(end_pos)
 	stun_line.name = "stun_effect_line"
 	stun_line.z_index = 10
-	add_child(stun_line)
+	add_child(stun_line)  # Line stays on the map
 	effect_nodes.append(stun_line)
 	
-	# Create a container for the rotating stars
+	# Create a container for the rotating stars AS A CHILD OF THE CRYPTID
 	var star_container = Node2D.new()
 	star_container.name = "stun_effect_stars"
-	star_container.position = end_pos
+	star_container.position = Vector2(0, -30)  # Position above the cryptid (local coordinates)
 	star_container.z_index = 10
-	add_child(star_container)
+	stunned_cryptid.add_child(star_container)  # ADD TO CRYPTID, NOT MAP
 	effect_nodes.append(star_container)
 	
-	# Create stun stars at target
+	# Create stun stars
 	for i in range(3):
 		var star = ColorRect.new()
 		star.color = Color(1, 1, 0, 0.8)  # Yellow
@@ -5059,13 +5072,8 @@ func create_stun_effect(start_pos, end_pos):
 	star_container.set_meta("rotation_tween", star_tween)
 	
 	# Store the effect nodes for this cryptid
-	if stunned_cryptid:
-		active_stun_effects[stunned_cryptid] = effect_nodes
-		print("Stored stun effects for cryptid:", stunned_cryptid.cryptid.name)
-	else:
-		# If we couldn't find the cryptid, store by position
-		active_stun_effects[end_pos] = effect_nodes
-		print("Stored stun effects for position:", end_pos)
+	active_stun_effects[stunned_cryptid] = effect_nodes
+	print("Stored stun effects for cryptid:", stunned_cryptid.cryptid.name)
 	
 	# Animate the initial stun effect (just the line pulse, not cleanup)
 	var effect_tween = create_tween()
@@ -5080,41 +5088,26 @@ func create_stun_effect(start_pos, end_pos):
 
 # Update the clean_up_stun_effects function to handle the new structure
 func clean_up_stun_effects():
-	print("Cleaning up ALL stun effects")
-	var effects_removed = 0
+	# Clean up line effects on the map
+	for child in get_children():
+		if child.name == "stun_effect_line":
+			child.queue_free()
 	
-	# Clean up tracked stun effects
-	for key in active_stun_effects:
-		var effect_nodes = active_stun_effects[key]
-		for node in effect_nodes:
-			if is_instance_valid(node):
-				# Kill any tweens
-				if node.has_meta("rotation_tween"):
-					var tween = node.get_meta("rotation_tween")
-					if tween and tween.is_valid():
-						tween.kill()
-				node.queue_free()
-				effects_removed += 1
-		
-		if key is Node:
-			print("Removed stun effects for cryptid:", key.cryptid.name if key.get("cryptid") else "Unknown")
-		else:
-			print("Removed stun effects for position:", key)
+	# Clean up star effects on cryptids
+	for cryptid in active_stun_effects:
+		if is_instance_valid(cryptid):
+			# Find and remove the star container from the cryptid
+			for child in cryptid.get_children():
+				if child.name == "stun_effect_stars":
+					# Stop the rotation tween if it exists
+					if child.has_meta("rotation_tween"):
+						var tween = child.get_meta("rotation_tween")
+						if tween and is_instance_valid(tween):
+							tween.kill()
+					child.queue_free()
 	
 	# Clear the tracking dictionary
 	active_stun_effects.clear()
-	
-	# Also clean up any orphaned stun effects
-	for child in get_children():
-		if child.name.begins_with("stun_effect"):
-			if child.has_meta("rotation_tween"):
-				var tween = child.get_meta("rotation_tween")
-				if tween and tween.is_valid():
-					tween.kill()
-			child.queue_free()
-			effects_removed += 1
-	
-	print("Removed", effects_removed, "stun effect nodes")
 
 func show_stun_preview(target_cryptid, target_pos: Vector2i):
 	# Clear previous preview
@@ -5139,6 +5132,20 @@ func show_stun_preview(target_cryptid, target_pos: Vector2i):
 	# Show yellow preview tile at target position
 	push_pull_preview_hexes.append(target_pos)
 	set_cell(target_pos, 0, Vector2i(2, 0), 5)  # Use alternative tile 5 for stun preview hover
+
+# Also add a function to remove stun effect when the status is removed
+func remove_stun_effect_from_cryptid(cryptid):
+	if cryptid in active_stun_effects:
+		var effect_nodes = active_stun_effects[cryptid]
+		for node in effect_nodes:
+			if is_instance_valid(node):
+				# Stop any tweens
+				if node.has_meta("rotation_tween"):
+					var tween = node.get_meta("rotation_tween")
+					if tween and is_instance_valid(tween):
+						tween.kill()
+				node.queue_free()
+		active_stun_effects.erase(cryptid)
 
 func clean_up_cryptid_status_visuals(cryptid_node):
 	print("Cleaning up all status visuals for cryptid:", cryptid_node.cryptid.name)

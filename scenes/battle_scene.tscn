@@ -245,6 +245,12 @@ layout_mode = 2
 size_flags_vertical = 3
 text = "Confirm Discard"
 
+[node name="SkipButton" type="Button" parent="UIRoot/ActionSelectMenu/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+text = "Catch"
+
 [node name="GameInstructions" type="Label" parent="UIRoot"]
 unique_name_in_owner = true
 offset_left = 31.0

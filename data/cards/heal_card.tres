@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="Card" load_steps=8 format=3 uid="uid://42h0pe04i41q"]
+[gd_resource type="Resource" script_class="Card" load_steps=10 format=3 uid="uid://42h0pe04i41q"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_focrp"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="1_orl6b"]
@@ -12,9 +12,25 @@ amount = 3
 area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
 disabled = false
 
+[sub_resource type="Resource" id="Resource_pyrfm"]
+script = ExtResource("1_orl6b")
+action_types = Array[int]([5])
+range = 6
+amount = 1
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_onl8v"]
+script = ExtResource("1_orl6b")
+action_types = Array[int]([3])
+range = 5
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
 [sub_resource type="Resource" id="Resource_hajcc"]
 script = ExtResource("2_bpdts")
-actions = Array[ExtResource("1_orl6b")]([SubResource("Resource_fdb22")])
+actions = Array[ExtResource("1_orl6b")]([SubResource("Resource_fdb22"), SubResource("Resource_pyrfm"), SubResource("Resource_onl8v")])
 name_prefix = ""
 name_suffix = ""
 card_side = 0

@@ -22,8 +22,14 @@ var icon_container: HBoxContainer  # Changed to HBoxContainer for better layout
 var effect_icons: Dictionary = {}  # Key: EffectType, Value: TextureRect
 
 func _ready():
+	# Set anchors to center the display above the cryptid
+	set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	
 	# Position this display above the cryptid
-	position = Vector2(-icon_size.x * max_icons_per_row / 2, -10)  # Adjust Y offset as needed
+	position = Vector2(0, -60)  # Adjust Y offset as needed
+	
+	# Make sure we don't block mouse events
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	custom_minimum_size = Vector2(
 		(icon_size.x + icon_spacing) * max_icons_per_row, 
@@ -34,7 +40,11 @@ func _ready():
 	icon_container = HBoxContainer.new()
 	icon_container.add_theme_constant_override("separation", icon_spacing)
 	icon_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	icon_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(icon_container)
+	
+	# Center the container
+	icon_container.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 
 # Initialize with reference to status effect manager
 func initialize(manager: StatusEffectManager) -> void:

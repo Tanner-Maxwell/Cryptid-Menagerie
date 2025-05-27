@@ -1,4 +1,3 @@
-# Updated action_select_menu.gd
 extends Control
 
 # Signal to notify the selected action type
@@ -17,6 +16,8 @@ enum ActionType { SWAP, REST, CATCH, BATTLE_PHASE, END_TURN }
 @onready var end_turn_button = $VBoxContainer/EndTurnButton
 @onready var confirm_discard_button = $VBoxContainer/DiscardButton
 @onready var round_button = $VBoxContainer/RoundButton
+# NEW: Add skip button reference
+@onready var skip_button = $VBoxContainer/SkipButton
 @onready var action_selection_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 @onready var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
 
@@ -36,6 +37,9 @@ func _ready():
 		catch_button = get_node_or_null("VBoxContainer/CatchButton")
 	if not end_turn_button:
 		end_turn_button = get_node_or_null("VBoxContainer/EndTurnButton")
+	# NEW: Find skip button
+	if not skip_button:
+		skip_button = get_node_or_null("VBoxContainer/SkipButton")
 	
 	# Print button references to verify we have the correct paths
 	print("Button references in action_select_menu:")
@@ -43,6 +47,7 @@ func _ready():
 	print("  rest_button =", rest_button != null)
 	print("  catch_button =", catch_button != null)
 	print("  end_turn_button =", end_turn_button != null)
+	print("  skip_button =", skip_button != null)
 	
 	# Exit early if we're missing critical references
 	if not swap_button or not rest_button or not catch_button or not end_turn_button:
@@ -55,6 +60,10 @@ func _ready():
 	catch_button.connect("pressed", Callable(self, "_on_catch_pressed"))
 	end_turn_button.connect("pressed", Callable(self, "_on_end_turn_pressed"))
 	
+	# NEW: Connect skip button if it exists
+	if skip_button:
+		skip_button.connect("pressed", Callable(self, "_on_skip_pressed"))
+	
 	# Initialize the round button if it doesn't exist
 	round_button = get_node_or_null("VBoxContainer/RoundButton")
 	if not round_button:
@@ -65,12 +74,25 @@ func _ready():
 		$VBoxContainer.add_child(new_round_button)
 		round_button = new_round_button
 	
+	# NEW: Create skip button if it doesn't exist
+	if not skip_button:
+		var new_skip_button = Button.new()
+		new_skip_button.name = "SkipButton"
+		new_skip_button.text = "Skip Action"
+		new_skip_button.connect("pressed", Callable(self, "_on_skip_pressed"))
+		$VBoxContainer.add_child(new_skip_button)
+		skip_button = new_skip_button
+	
 	# Hide all buttons first
 	if round_button:
 		round_button.hide()
 		
 	if end_turn_button:
 		end_turn_button.hide()
+	
+	# NEW: Hide skip button initially
+	if skip_button:
+		skip_button.hide()
 	
 	# Start with only the basic action buttons visible
 	if swap_button:
@@ -109,8 +131,23 @@ func update_menu_visibility(cryptid: Cryptid):
 	# Hide all buttons first
 	hide_all_buttons()
 	
+	# NEW: Check if there's an active action sequence
+	var active_card = find_active_card()
+	
+	# NEW: If there's an active action sequence, show skip button AND end turn
+	if active_card:
+		if skip_button:
+			skip_button.show()
+			var action_name = active_card.get_action_name(active_card.active_actions[active_card.current_action_index].action_types)
+			skip_button.text = "Skip " + action_name
+		# IMPORTANT: Also show End Turn button during action sequences
+		if end_turn_button:
+			end_turn_button.show()
+		# Show the menu
+		show()
+		return
+	
 	# Check if the cryptid has used ANY card action this turn (top OR bottom)
-	# This is an important change - we now check if EITHER action is used
 	if cryptid.top_card_played or cryptid.bottom_card_played:
 		print("Card action used - showing only End Turn button")
 		if end_turn_button:
@@ -118,7 +155,11 @@ func update_menu_visibility(cryptid: Cryptid):
 	else:
 		print("No card action used - showing action buttons")
 		if swap_button:
-			swap_button.show()
+			# Check if we have bench cryptids before showing swap button
+			if has_bench_cryptids():
+				swap_button.show()
+			else:
+				swap_button.hide()
 		if rest_button:
 			rest_button.show()
 		if catch_button:
@@ -128,6 +169,33 @@ func update_menu_visibility(cryptid: Cryptid):
 			
 	# Always ensure the menu itself is visible
 	show()
+
+# NEW: Helper function to find active card
+func find_active_card():
+	var hand_node = get_node_or_null("/root/VitaChrome/UIRoot/Hand")
+	if not hand_node:
+		hand_node = hand
+	
+	if hand_node:
+		for card in hand_node.get_children():
+			if card.has_method("get_action_name") and card.active_actions.size() > 0:
+				return card
+	
+	return null
+
+# NEW: Skip button handler
+func _on_skip_pressed():
+	print("Skip button pressed")
+	
+	# Find the active card
+	var active_card = find_active_card()
+	if active_card:
+		# Skip the current action
+		active_card.skip_current_action()
+		
+		# Hide skip button temporarily
+		if skip_button:
+			skip_button.hide()
 
 # And update prompt_player_for_action to be more defensive
 func prompt_player_for_action():
@@ -170,6 +238,19 @@ func prompt_player_for_action():
 	
 	# Hide all buttons first to get a clean slate
 	hide_all_buttons()
+	
+	# NEW: Check for active card first
+	var active_card = find_active_card()
+	if active_card:
+		# Show skip button during active action
+		if skip_button:
+			skip_button.show()
+			var action_name = active_card.get_action_name(active_card.active_actions[active_card.current_action_index].action_types)
+			skip_button.text = "Skip " + action_name
+		# IMPORTANT: Also show End Turn button
+		if end_turn_button:
+			end_turn_button.show()
+		return
 	
 	# Show the basic buttons if they exist
 	if swap_button:
