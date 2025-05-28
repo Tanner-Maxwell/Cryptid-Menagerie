@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="Card" load_steps=10 format=3 uid="uid://bq34jadoxwiwe"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_2g62r"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_l6uc0"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="3_vfdgx"]
+
+[sub_resource type="Resource" id="Resource_er50p"]
+script = ExtResource("2_l6uc0")
+action_types = Array[int]([2])
+range = 4
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_b423p"]
+script = ExtResource("2_l6uc0")
+action_types = Array[int]([0])
+range = 2
+amount = 2
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_8y700"]
+script = ExtResource("3_vfdgx")
+actions = Array[ExtResource("2_l6uc0")]([SubResource("Resource_er50p"), SubResource("Resource_b423p")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_unxis"]
+script = ExtResource("2_l6uc0")
+action_types = Array[int]([0])
+range = 4
+amount = 4
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_32lgo"]
+script = ExtResource("2_l6uc0")
+action_types = Array[int]([7])
+range = 3
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_kjvqc"]
+script = ExtResource("3_vfdgx")
+actions = Array[ExtResource("2_l6uc0")]([SubResource("Resource_unxis"), SubResource("Resource_32lgo")])
+name_prefix = ""
+name_suffix = ""
+card_side = 0
+elemental_type = Array[int]([])
+
+[resource]
+script = ExtResource("1_2g62r")
+top_move = SubResource("Resource_kjvqc")
+bottom_move = SubResource("Resource_8y700")

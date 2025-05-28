@@ -284,6 +284,14 @@ func take_enemy_turn(enemy_cryptid):
 		  "cryptid.top_card_played =", enemy_cryptid.cryptid.top_card_played,
 		  "cryptid.bottom_card_played =", enemy_cryptid.cryptid.bottom_card_played)
 	
+	if enemy_cryptid.has_node("StatusEffectManager"):
+		var status_manager = enemy_cryptid.get_node("StatusEffectManager")
+		print("AI: Processing turn end effects for", enemy_cryptid.cryptid.name)
+		status_manager.process_turn_end()
+	
+		# Wait a moment for the player to see the damage
+		await get_tree().create_timer(1.0).timeout
+	
 	# Mark the cryptid's turn as completed
 	enemy_cryptid.cryptid.completed_turn = true
 	

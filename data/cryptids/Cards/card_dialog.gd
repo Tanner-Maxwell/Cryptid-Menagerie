@@ -231,7 +231,10 @@ func execute_current_action():
 				print("Setting up STUN action with range:", current_action.range, "amount:", current_action.amount)
 				tile_map_layer.stun_range = current_action.range
 				tile_map_layer.stun_amount = current_action.amount
-	
+			ActionType.POISON:
+				print("Setting up POISON action with range:", current_action.range, "amount:", current_action.amount)
+				tile_map_layer.poison_range = current_action.range
+				tile_map_layer.poison_amount = current_action.amount
 	# Perform the action based on its type
 	perform_action(current_action.action_types)
 
@@ -265,6 +268,7 @@ func next_action():
 		tile_map.pull_action_bool = false
 		tile_map.heal_action_bool = false
 		tile_map.stun_action_bool = false
+		tile_map.poison_action_bool = false
 		tile_map.active_movement_card = null
 		tile_map.active_movement_card_part = ""
 		
@@ -531,7 +535,18 @@ func apply_vulnerable_action():
 	pass
 
 func poison_action():
-	pass
+	print("Poison action activated in card_dialog")
+	tile_map_layer.poison_action_bool = true
+	tile_map_layer.current_card = self
+	
+	# Make sure we have the current action's parameters
+	if current_action_index < active_actions.size():
+		var current_action = active_actions[current_action_index]
+		tile_map_layer.poison_range = current_action.range
+		tile_map_layer.poison_amount = current_action.amount
+		print("Poison parameters set - range:", current_action.range, "amount:", current_action.amount)
+	
+	tile_map_layer.poison_action_selected(self)
 
 func paralyze_action():
 	pass

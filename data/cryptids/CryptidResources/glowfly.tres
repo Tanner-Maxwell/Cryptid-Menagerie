@@ -1,8 +1,9 @@
-[gd_resource type="Resource" script_class="Cryptid" load_steps=29 format=3 uid="uid://br56bhx3ppp4w"]
+[gd_resource type="Resource" script_class="Cryptid" load_steps=25 format=3 uid="uid://br56bhx3ppp4w"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_g85ft"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_cpnsb"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="3_22xla"]
+[ext_resource type="Resource" uid="uid://bq34jadoxwiwe" path="res://Cryptid-Menagerie/data/cryptids/Cards/poison_test.tres" id="4_ip1yb"]
 [ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="4_m54fr"]
 [ext_resource type="Resource" uid="uid://42h0pe04i41q" path="res://Cryptid-Menagerie/data/cards/heal_card.tres" id="4_s0acb"]
 [ext_resource type="PackedScene" uid="uid://bejk4igyv1d0e" path="res://Cryptid-Menagerie/assets/grove_starter_sprite.tscn" id="5_a4chy"]
@@ -87,43 +88,6 @@ script = ExtResource("1_g85ft")
 top_move = SubResource("Resource_g86gh")
 bottom_move = SubResource("Resource_c0xx2")
 
-[sub_resource type="Resource" id="Resource_8sj7e"]
-script = ExtResource("2_cpnsb")
-action_types = Array[int]([0])
-range = 3
-amount = 3
-area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
-disabled = false
-
-[sub_resource type="Resource" id="Resource_1vjol"]
-script = ExtResource("3_22xla")
-actions = Array[ExtResource("2_cpnsb")]([SubResource("Resource_8sj7e")])
-name_prefix = ""
-name_suffix = ""
-card_side = 0
-elemental_type = Array[int]([])
-
-[sub_resource type="Resource" id="Resource_eu62p"]
-script = ExtResource("2_cpnsb")
-action_types = Array[int]([0])
-range = 3
-amount = 3
-area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
-disabled = false
-
-[sub_resource type="Resource" id="Resource_bl4vx"]
-script = ExtResource("3_22xla")
-actions = Array[ExtResource("2_cpnsb")]([SubResource("Resource_eu62p")])
-name_prefix = ""
-name_suffix = ""
-card_side = 0
-elemental_type = Array[int]([])
-
-[sub_resource type="Resource" id="Resource_rg5bv"]
-script = ExtResource("1_g85ft")
-top_move = SubResource("Resource_bl4vx")
-bottom_move = SubResource("Resource_1vjol")
-
 [sub_resource type="Resource" id="Resource_b5cho"]
 script = ExtResource("2_cpnsb")
 action_types = Array[int]([0])
@@ -166,7 +130,7 @@ script = ExtResource("6_n31ss")
 name = "Wendigo"
 scene = ExtResource("5_a4chy")
 icon = ExtResource("4_m54fr")
-deck = Array[ExtResource("1_g85ft")]([SubResource("Resource_j352g"), SubResource("Resource_2xgjs"), SubResource("Resource_wkj7f"), SubResource("Resource_rg5bv"), ExtResource("4_s0acb"), SubResource("Resource_5o1h4")])
+deck = Array[ExtResource("1_g85ft")]([SubResource("Resource_j352g"), SubResource("Resource_2xgjs"), SubResource("Resource_wkj7f"), ExtResource("4_ip1yb"), ExtResource("4_s0acb"), SubResource("Resource_5o1h4")])
 discard = Array[ExtResource("1_g85ft")]([])
 completed_turn = false
 currently_selected = false
