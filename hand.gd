@@ -616,6 +616,24 @@ func rest_action():
 	if game_instructions:
 		game_instructions.text = "Rested: recovered " + str(cards_recovered) + " cards from discard pile!"
 	
+	# Process turn end effects before marking turn complete
+	var cryptid_node = null
+	var tile_map_layer = get_tree().get_nodes_in_group("map")[0]
+	for node in tile_map_layer.all_cryptids_in_play:
+		if node.cryptid == selected_cryptid:
+			cryptid_node = node
+			break
+	
+	if cryptid_node and cryptid_node.has_node("StatusEffectManager"):
+		var status_manager = cryptid_node.get_node("StatusEffectManager")
+		print("Processing turn end effects after rest for", selected_cryptid.name)
+		status_manager.process_turn_end()
+		
+		# Update the status effect display
+		if cryptid_node.has_node("StatusEffectDisplay"):
+			var display = cryptid_node.get_node("StatusEffectDisplay")
+			display.refresh_display()
+	
 	# Mark the cryptid's turn as completed
 	selected_cryptid.top_card_played = true
 	selected_cryptid.bottom_card_played = true

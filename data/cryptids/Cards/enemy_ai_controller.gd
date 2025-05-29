@@ -79,6 +79,20 @@ func take_enemy_turn(enemy_cryptid):
 			# Wait a moment for the player to see the message
 			await get_tree().create_timer(2.0).timeout
 			
+			# IMPORTANT: Process turn end effects even though turn was skipped
+			if enemy_cryptid.has_node("StatusEffectManager"):
+				status_manager = enemy_cryptid.get_node("StatusEffectManager")
+				print("AI: Processing turn end effects for stunned cryptid")
+				status_manager.process_turn_end()
+				
+				# Update the status effect display
+				if enemy_cryptid.has_node("StatusEffectDisplay"):
+					var display = enemy_cryptid.get_node("StatusEffectDisplay")
+					display.refresh_display()
+				
+				# Wait a moment to show damage effects
+				await get_tree().create_timer(1.0).timeout
+			
 			# Debug: Check if effects were properly cleaned
 			if tile_map_layer.has_method("debug_find_all_stun_effects"):
 				await get_tree().create_timer(0.1).timeout
@@ -284,11 +298,17 @@ func take_enemy_turn(enemy_cryptid):
 		  "cryptid.top_card_played =", enemy_cryptid.cryptid.top_card_played,
 		  "cryptid.bottom_card_played =", enemy_cryptid.cryptid.bottom_card_played)
 	
+	# Process turn end effects (like poison damage) before completing turn
 	if enemy_cryptid.has_node("StatusEffectManager"):
 		var status_manager = enemy_cryptid.get_node("StatusEffectManager")
 		print("AI: Processing turn end effects for", enemy_cryptid.cryptid.name)
 		status_manager.process_turn_end()
-	
+		
+		# Update the status effect display
+		if enemy_cryptid.has_node("StatusEffectDisplay"):
+			var display = enemy_cryptid.get_node("StatusEffectDisplay")
+			display.refresh_display()
+		
 		# Wait a moment for the player to see the damage
 		await get_tree().create_timer(1.0).timeout
 	

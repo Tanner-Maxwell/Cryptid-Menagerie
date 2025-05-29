@@ -910,6 +910,18 @@ func update_action_menu():
 
 func check_if_turn_complete():
 	if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
+		# Process turn end effects for THIS cryptid before marking turn complete
+		if selected_cryptid.has_node("StatusEffectManager"):
+			var status_manager = selected_cryptid.get_node("StatusEffectManager")
+			print("Processing turn end effects for", selected_cryptid.cryptid.name)
+			status_manager.process_turn_end()
+			
+			# Update the status effect display
+			if selected_cryptid.has_node("StatusEffectDisplay"):
+				var display = selected_cryptid.get_node("StatusEffectDisplay")
+				display.refresh_display()
+		
+		# Mark the cryptid's turn as completed
 		selected_cryptid.cryptid.completed_turn = true
 		
 		# Instead of directly going to next cryptid, update the UI to prompt
@@ -5478,6 +5490,12 @@ func handle_poison_action(pos_clicked):
 			var status_manager = target_cryptid.get_node("StatusEffectManager")
 			status_manager.add_status_effect(StatusEffect.EffectType.POISON, poison_amount)
 			print("Applied", poison_amount, "poison stacks to", target_cryptid.cryptid.name)
+			
+			# REFRESH THE STATUS DISPLAY IMMEDIATELY
+			if target_cryptid.has_node("StatusEffectDisplay"):
+				var display = target_cryptid.get_node("StatusEffectDisplay")
+				display.refresh_display()
+				print("Refreshed status display for", target_cryptid.cryptid.name)
 		else:
 			print("ERROR: Target has no StatusEffectManager")
 			return false

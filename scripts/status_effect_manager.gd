@@ -20,6 +20,9 @@ func add_status_effect(effect_type: StatusEffect.EffectType, stacks: int = 1, cu
 		active_effects[effect_type].add_stacks(stacks)
 		print("Added", stacks, "stacks to", StatusEffect.EffectType.keys()[effect_type], 
 			  "Total:", active_effects[effect_type].stack_count)
+		
+		# TRIGGER DISPLAY REFRESH HERE
+		status_effect_added.emit(active_effects[effect_type])
 	else:
 		# Create new effect instance
 		var new_effect: StatusEffect
