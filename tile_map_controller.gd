@@ -18,6 +18,8 @@ var grid_manager = null
 var debug_indicators = {}  # Dictionary to track all debug indicators by point ID
 var debug_enabled = true   # Toggle for the debug display
 
+@onready var visual_effects = VisualEffectsManager.new()
+
 @onready var player_team = %PlayerTeam
 @onready var enemy_team = %EnemyTeam
 @onready var player_starting_positions = [Vector2i(1, -1), Vector2i(-2, 1), Vector2i(0, 1)]
@@ -35,7 +37,6 @@ var current_tween = null
 @onready var blank_cryptid = preload("res://Cryptid-Menagerie/data/cryptids/blank_cryptid.tscn")
 @onready var current_card
 
-# Gold tracking variables
 var enemies_defeated_count = 0
 var battle_reward_screen = null
 
@@ -44,12 +45,9 @@ var original_move_amount = 0
 var active_movement_card_part = ""
 var move_action_bool = false
 var attack_action_bool = false
-var current_atlas_coords
-var cur_position_cube
 var move_leftover = 0
 var attack_range = 2
 var path
-var attack_path
 var vector_path = []
 var point_path = []
 var damage
@@ -69,6 +67,16 @@ var push_amount = 1
 var pull_amount = 2
 var push_pull_preview_hexes = []  # Add this with other variables at the top
 var preview_tile_id = Vector2i(2, 0)  # Update this from (3, 0) to (2, 0)
+var heal_preview_hexes = []
+var stun_preview_hexes = []
+var poison_preview_hexes = []
+var immobilize_preview_hexes = []
+var heal_preview_tile_id = Vector2i(3, 0)  # Green tile for heal preview
+var stun_preview_tile_id = Vector2i(4, 0)  # Red tile for stun preview  
+var poison_preview_tile_id = Vector2i(5, 0)  # Purple tile for poison preview
+var immobilize_preview_tile_id = Vector2i(6, 0)  # Blue tile for immobilize preview
+var vulnerable_preview_hexes = []
+var vulnerable_preview_tile_id = Vector2i(7, 0)  # Yellow tile for vulnerable preview
 
 var heal_action_bool = false
 var heal_range = 2
@@ -79,20 +87,102 @@ var stun_range = 2
 var stun_amount = 1  # Usually 1 since stun doesn't stack
 var active_stun_effects: Dictionary = {}  # Track stun effects by cryptid
 
-# Add these with the other action variables
 var poison_action_bool = false
+var immobilize_action_bool = false
+var immobilize_range = 2
+var immobilize_amount = 1  # Number of immobilize stacks to apply
+var vulnerable_action_bool = false
+var vulnerable_range = 2
+var vulnerable_amount = 1  # Number of vulnerable stacks to apply
 var poison_range = 2
 var poison_amount = 1  # Number of poison stacks to apply
 
+var active_action = {
+	"type": "",  # "move", "attack", "push", "pull", "heal", "stun", "poison", "immobilize", "vulnerable"
+	"range": 0,
+	"amount": 0,
+	"card": null,
+	"card_part": "",
+	"in_progress": false
+}
+
+const ACTION_CONFIGS = {
+	"move": {
+		"range_key": "move_action_amount",
+		"amount_key": "move_action_amount",
+		"target_type": "position",
+		"show_preview": false,
+		"friendly_only": false
+	},
+	"attack": {
+		"range_key": "move_action_amount",
+		"amount_key": "attack_damage_amount",
+		"target_type": "enemy",
+		"show_preview": false,
+		"friendly_only": false
+	},
+	"push": {
+		"range_key": "push_range",
+		"amount_key": "push_amount",
+		"target_type": "any_cryptid",
+		"show_preview": true,
+		"friendly_only": false
+	},
+	"pull": {
+		"range_key": "pull_range",
+		"amount_key": "pull_amount",
+		"target_type": "any_cryptid", 
+		"show_preview": true,
+		"friendly_only": false
+	},
+	"heal": {
+		"range_key": "heal_range",
+		"amount_key": "heal_amount",
+		"target_type": "friendly",
+		"show_preview": true,
+		"friendly_only": true
+	},
+	"stun": {
+		"range_key": "stun_range",
+		"amount_key": "stun_amount",
+		"target_type": "enemy",
+		"show_preview": true,
+		"friendly_only": false
+	},
+	"poison": {
+		"range_key": "poison_range",
+		"amount_key": "poison_amount",
+		"target_type": "enemy",
+		"show_preview": true,
+		"friendly_only": false
+	},
+	"immobilize": {
+		"range_key": "immobilize_range",
+		"amount_key": "immobilize_amount",
+		"target_type": "enemy",
+		"show_preview": true,
+		"friendly_only": false
+	},
+	"vulnerable": {
+		"range_key": "vulnerable_range",
+		"amount_key": "vulnerable_amount",
+		"target_type": "enemy",
+		"show_preview": true,
+		"friendly_only": false
+	}
+}
+
 func _ready():
-	cur_position_cube = axial_to_cube(local_to_map(player_pos))
 	var cur_position = Vector2i(-6, -1)
 	create_hex_map_a_star(cur_position)
 	show_coordinates_label(cur_position)
 	
-	##Place player and enemy teams on map
-	#player_cryptids_in_play = initialize_starting_positions(player_starting_positions, player_team)
-	#enemy_cryptids_in_play = initialize_starting_positions(enemy_starting_positions, enemy_team)
+	visual_effects.name = "VisualEffectsManager"
+	add_child(visual_effects)
+	visual_effects.initialize(self)
+	
+	visual_effects.attack_animation_finished.connect(_on_attack_animation_finished)
+	visual_effects.movement_animation_finished.connect(_on_movement_animation_finished)
 	
 	player_cryptids_in_play = initialize_starting_positions(player_starting_positions, player_team)
 	
@@ -105,8 +195,6 @@ func _ready():
 		turn_order._add_picked_cards_to_turn_order(cryptid.cryptid.name)
 	
 	sort_cryptids_by_speed(player_cryptids_in_play)
-	#selected_cryptid = player_cryptids_in_play[0].cryptid
-	#player_cryptids_in_play[0].cryptid.currently_selected = true
 	for cryptid in player_cryptids_in_play:
 		print(cryptid, cryptid.cryptid.speed, cryptid.cryptid.currently_selected)
 	print(player_cryptids_in_play)
@@ -115,7 +203,6 @@ func _ready():
 	debug_container.z_index = 100  # Make sure debug visuals appear above everything else
 	add_child(debug_container)
 	
-	# Call this at the end of _ready() to set up initial debug display
 	call_deferred("setup_debug_display")
 	
 	# Initialize the grid manager
@@ -143,7 +230,6 @@ func _ready():
 
 	print("Grid system initialized with", walkable_hexes.size(), "walkable hexes")
 		
-
 func _process(delta):
 	# Only handle mouse motion during player turns, not during AI turns
 	if move_action_bool or heal_action_bool:
@@ -218,7 +304,6 @@ func refresh_debug_display():
 	if not debug_enabled:
 		return
 		
-	print("Refreshing all A* hex grid debug indicators")
 	
 	for point_id in a_star_hex_grid.get_points():
 		update_debug_indicator(point_id)
@@ -243,6 +328,9 @@ func handle_right_click():
 	pull_action_bool = false
 	heal_action_bool = false
 	stun_action_bool = false
+	poison_action_bool = false
+	immobilize_action_bool = false
+	vulnerable_action_bool = false
 	active_movement_card_part = ""
 	active_movement_card = null
 	
@@ -321,7 +409,7 @@ func calculate_path(current_pos: Vector2i, target_pos: Vector2i):
 
 # Update the original function to use the new one
 func handle_mouse_motion():
-	if not (move_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool):
+	if not (move_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool):
 		return
 	
 	# Clear previous preview
@@ -332,7 +420,6 @@ func handle_mouse_motion():
 				set_cell(hex, 0, move_range_tile_id, 2)
 			else:
 				set_cell(hex, 0, original_tile_states[hex], 0)
-	push_pull_preview_hexes.clear()
 	
 	# Get the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
@@ -351,25 +438,71 @@ func handle_mouse_motion():
 		# Also calculate path for visualization
 		calculate_path(current_pos, target_pos)
 	elif push_action_bool or pull_action_bool:
+		print("DEBUG: Push/pull hover - push_action_bool:", push_action_bool, "pull_action_bool:", pull_action_bool)
+		print("DEBUG: Target position:", target_pos)
 		# Check if there's a cryptid at the target position
 		var target_cryptid = get_cryptid_at_position(target_pos)
+		print("DEBUG: Target cryptid found:", target_cryptid != null)
+		if target_cryptid:
+			print("DEBUG: Target cryptid name:", target_cryptid.cryptid.name if target_cryptid.cryptid else "no cryptid resource")
+			print("DEBUG: Selected cryptid name:", selected_cryptid.cryptid.name if selected_cryptid.cryptid else "no cryptid resource")
 		if target_cryptid and target_cryptid != selected_cryptid:
+			print("DEBUG: Valid target found, showing preview")
 			# Show the push/pull preview path
-			show_push_pull_preview(target_cryptid, target_pos)
+			var selected_pos = local_to_map(selected_cryptid.position)
+			var direction
+			if push_action_bool:
+				print("DEBUG: Push mode - direction from", selected_pos, "to", target_pos)
+				# Push: direction from pusher to target, then continue in that direction
+				direction = get_hex_direction(selected_pos, target_pos)
+			else:  # pull_action_bool
+				print("DEBUG: Pull mode - direction from", target_pos, "to", selected_pos)
+				# Pull: direction from target toward puller
+				direction = get_hex_direction(target_pos, selected_pos)
+			print("DEBUG: Calculated direction:", direction)
+			var distance = active_action.amount
+			print("DEBUG: Distance:", distance)
+			print("DEBUG: Calling show_push_pull_preview")
+			show_push_pull_preview(target_pos, direction, distance)
+		else:
+			print("DEBUG: No valid target or same as selected cryptid")
 	elif heal_action_bool:
 		# Show healable targets preview
 		var target_cryptid = get_cryptid_at_position_simple(target_pos)
 		if target_cryptid and is_friendly_target(selected_cryptid, target_cryptid):
 			# Show heal preview effect
-			show_heal_preview(target_cryptid, target_pos)
+			# Use status effect manager for heal preview
+			var status_mgr = get_tree().get_first_node_in_group("status_effect_managers")
+			if status_mgr:
+				status_mgr.show_heal_preview(target_cryptid, target_pos, self)
 	elif stun_action_bool:
 		# Show stun targets preview
 		var target_cryptid = get_cryptid_at_position_simple(target_pos)
 		if target_cryptid and not is_friendly_target(selected_cryptid, target_cryptid):
 			# Show stun preview effect
-			show_stun_preview(target_cryptid, target_pos)
+			# Use status effect manager for stun preview
+			var status_mgr = get_tree().get_first_node_in_group("status_effect_managers")
+			if status_mgr:
+				status_mgr.show_stun_preview(target_cryptid, target_pos, self)
+	elif immobilize_action_bool:
+		# Show immobilize targets preview
+		var target_cryptid = get_cryptid_at_position_simple(target_pos)
+		if target_cryptid and not is_friendly_target(selected_cryptid, target_cryptid):
+			# Show immobilize preview effect
+			# Use status effect manager for immobilize preview
+			var status_mgr = get_tree().get_first_node_in_group("status_effect_managers")
+			if status_mgr:
+				status_mgr.show_immobilize_preview(target_cryptid, target_pos, self)
+	elif vulnerable_action_bool:
+		# Show vulnerable targets preview
+		var target_cryptid = get_cryptid_at_position_simple(target_pos)
+		if target_cryptid and not is_friendly_target(selected_cryptid, target_cryptid):
+			# Show vulnerable preview effect
+			# Use status effect manager for vulnerable preview
+			var status_mgr = get_tree().get_first_node_in_group("status_effect_managers")
+			if status_mgr:
+				status_mgr.show_vulnerable_preview(target_cryptid, target_pos, self)
 			
-
 func handle_left_click(event):
 	var global_clicked = to_local(event.global_position)
 	selected_cryptid = currently_selected_cryptid()
@@ -404,185 +537,19 @@ func handle_left_click(event):
 	var target_cryptid = get_cryptid_at_position(pos_clicked)
 	print("Pre-check - Cryptid at clicked position:", target_cryptid)
 	
-	# Handle action based on what is active
-	if move_action_bool:
-		print("Handling move action")
-		handle_move_action(pos_clicked)
-	elif attack_action_bool:
-		print("Handling attack action")
-		# Mark this event as handled to prevent other nodes from processing it
+	# Handle action based on what is active using the generic system
+	if active_action.type != "":
+		# Mark actions as in_progress so handle_card_action will process them
+		active_action.in_progress = true
+		print("Handling action:", active_action.type)
+		print("Active action details - range:", active_action.range, "amount:", active_action.amount)
+		print("Vulnerable action bool:", vulnerable_action_bool)
 		get_viewport().set_input_as_handled()
-		handle_attack_action(pos_clicked)
-	elif push_action_bool:
-		print("Handling push action")
-		get_viewport().set_input_as_handled()
-		handle_push_action(pos_clicked)
-	elif pull_action_bool:
-		print("Handling pull action")
-		get_viewport().set_input_as_handled()
-		handle_pull_action(pos_clicked)
-	elif heal_action_bool:
-		print("Handling heal action")
-		get_viewport().set_input_as_handled()
-		handle_heal_action(pos_clicked)
-	elif stun_action_bool:
-		print("Handling stun action")
-		get_viewport().set_input_as_handled()
-		handle_stun_action(pos_clicked)
-	elif poison_action_bool:
-		print("Handling poison action")
-		get_viewport().set_input_as_handled()
-		handle_poison_action(pos_clicked)
+		handle_card_action(pos_clicked)
 	else:
 		print("No action type active")
-
-func handle_push_action(pos_clicked):
-	print("\n---------- HANDLE PUSH ACTION DEBUG ----------")
-	
-	# Get the selected cryptid (the one doing the pushing)
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found for push")
-		return false
-	
-	# Get the target cryptid at the clicked position
-	var target_cryptid = get_cryptid_at_position(pos_clicked)
-	print("Target position:", pos_clicked)
-	print("Target cryptid:", target_cryptid)
-	
-	if target_cryptid == null:
-		print("No valid target at the selected position")
-		# Reset action state
-		push_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		return false
-	
-	# Calculate distance to target
-	var current_pos = local_to_map(selected_cryptid.position)
-	var target_pos = local_to_map(target_cryptid.position)
-	
-	# Use attack grid for pathfinding
-	var path = a_star_hex_attack_grid.get_id_path(
-		a_star_hex_attack_grid.get_closest_point(current_pos),
-		a_star_hex_attack_grid.get_closest_point(target_pos)
-	)
-	
-	if path.size() == 0:
-		print("ERROR: No valid path to target")
-		return false
-	
-	var distance = path.size() - 1
-	print("Distance to target:", distance, "Push range:", push_range)
-	
-	if distance <= push_range:
-		print("Target is within range")
-		
-		# Calculate push direction
-		var push_direction = calculate_push_direction(current_pos, target_pos)
-		print("Push direction:", push_direction)
-		
-		# Calculate final position after push
-		var final_position = calculate_push_destination(target_pos, push_direction, push_amount)
-		print("Target will be pushed from", target_pos, "to", final_position)
-		
-		# Animate the push
-		animate_push(target_cryptid, target_pos, final_position)
-		
-		# Clean up action state
-		push_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		
-		# NEW: Push complete, notify card to move to next action
-		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
-			print("Push complete, moving to next action")
-			card_dialog.next_action()
-		
-		return true
-	else:
-		print("Target out of range")
-		return false
-	
-	print("---------- END HANDLE PUSH ACTION DEBUG ----------\n")
-
-func handle_pull_action(pos_clicked):
-	print("\n---------- HANDLE PULL ACTION DEBUG ----------")
-	
-	# Get the selected cryptid (the one doing the pulling)
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found for pull")
-		return false
-	
-	# Get the target cryptid at the clicked position
-	var target_cryptid = get_cryptid_at_position(pos_clicked)
-	print("Target position:", pos_clicked)
-	print("Target cryptid:", target_cryptid)
-	
-	if target_cryptid == null:
-		print("No valid target at the selected position")
-		# Reset action state
-		pull_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		return false
-	
-	# Calculate distance to target
-	var current_pos = local_to_map(selected_cryptid.position)
-	var target_pos = local_to_map(target_cryptid.position)
-	
-	# Use attack grid for pathfinding
-	var path = a_star_hex_attack_grid.get_id_path(
-		a_star_hex_attack_grid.get_closest_point(current_pos),
-		a_star_hex_attack_grid.get_closest_point(target_pos)
-	)
-	
-	if path.size() == 0:
-		print("ERROR: No valid path to target")
-		return false
-	
-	var distance = path.size() - 1
-	print("Distance to target:", distance, "Pull range:", pull_range)
-	
-	if distance <= pull_range:
-		print("Target is within range")
-		
-		# Calculate pull direction (opposite of push)
-		var pull_direction = calculate_pull_direction(current_pos, target_pos)
-		print("Pull direction:", pull_direction)
-		
-		# Calculate final position after pull
-		var final_position = calculate_pull_destination(target_pos, pull_direction, pull_amount)
-		print("Target will be pulled from", target_pos, "to", final_position)
-		
-		# Animate the pull
-		animate_pull(target_cryptid, target_pos, final_position)
-		
-		# Clean up action state
-		pull_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		
-		# NEW: Pull complete, notify card to move to next action
-		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
-			print("Pull complete, moving to next action")
-			card_dialog.next_action()
-		
-		return true
-	else:
-		print("Target out of range")
-		return false
-	
-	print("---------- END HANDLE PULL ACTION DEBUG ----------\n")
+		print("Active action type:", active_action.type)
+		print("Active action in_progress:", active_action.in_progress)
 
 func handle_move_action(pos_clicked):
 	# Print basic debug info
@@ -612,6 +579,11 @@ func handle_move_action(pos_clicked):
 	var movement_distance = path.size() - 1
 	print("Movement distance:", movement_distance)
 	print("Available movement:", move_leftover)
+	
+	# Debug: Also calculate direct hex distance for comparison
+	var direct_distance = calculate_distance(current_pos, pos_clicked)
+	print("Direct hex distance:", direct_distance)
+	print("Path length difference:", movement_distance - direct_distance)
 	
 	# Check if we have enough movement
 	if movement_distance > move_leftover:
@@ -726,182 +698,10 @@ func _on_movement_tween_finished():
 
 # Handle card usage for movement
 func handle_card_usage(remaining_movement):
-	if !is_instance_valid(card_dialog):
-		return
-	
-	move_leftover = remaining_movement
-	
-	# FIX: If this is a continuing movement (active_movement_card_part is already set), 
-	# use that value. Otherwise check which half is highlighted
-	var using_top_half
-	if active_movement_card_part != "":
-		# Continue using the same half as before
-		using_top_half = (active_movement_card_part == "top")
-		print("Continuing movement with previously active half:", active_movement_card_part)
-	else:
-		# New movement, determine which half is highlighted
-		using_top_half = card_dialog.top_half_container.modulate == Color(1, 1, 0, 1)
-		active_movement_card_part = "top" if using_top_half else "bottom"
-		print("Starting new movement with half:", active_movement_card_part)
-	
-	var card_half = "top" if using_top_half else "bottom"
-	print("Using", card_half, "half with", remaining_movement, "movement left")
-	
-	# If no movement left, we need to clean up but NOT call next_action here
-	if remaining_movement <= 0:
-		print("Movement exhausted in handle_card_usage")
-		
-		# Reset movement state
-		move_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		
-		# Clean up visuals
-		remove_movement_indicator()
-		delete_all_lines()
-		delete_all_indicators()
-		clear_movement_highlights()
-		
-		# Re-enable eligible card halves
-		enable_all_card_halves()
-		
-		# DON'T call next_action here - let handle_move_action do it
-	else:
-		# Still have movement, update the card
-		if using_top_half:
-			active_movement_card_part = "top"
-			card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-			card_dialog.bottom_half_container.disabled = true
-			disable_other_card_halves("top")
-		else:
-			active_movement_card_part = "bottom"
-			card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-			card_dialog.top_half_container.disabled = true
-			disable_other_card_halves("bottom")
-		
-		active_movement_card = card_dialog
-		
-		# Update the card display
-		if card_dialog.has_method("update_move_action_display"):
-			card_dialog.update_move_action_display(card_half, remaining_movement)
-		
-		# Update the action value in the card
-		for move_action in card_dialog.card_resource[card_half + "_move"].actions:
-			if move_action.action_types == [0]:  # Move action
-				move_action.amount = remaining_movement
-				break
-	
-	# Update the hand UI
-	if hand and hand.has_method("update_card_availability"):
-		hand.update_card_availability()
-
-func handle_movement_card_usage(remaining_movement):
-	# Check top half
-	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-		move_leftover = remaining_movement
-		active_movement_card_part = "top"
-		active_movement_card = card_dialog
-		
-		# Handle based on whether we've used all movement
-		if move_leftover <= 0:
-			# Mark only the top half as used for action economy
-			selected_cryptid.cryptid.top_card_played = true
-			
-			# Set the movement amount to zero in this card instance
-			for move_action in card_dialog.card_resource.top_move.actions:
-				if move_action.action_types == [0]:  # Move action
-					move_action.amount = 0
-					break
-			
-			# Update the display to show zero movement left
-			if card_dialog.has_method("update_move_action_display"):
-				card_dialog.update_move_action_display("top", 0)
-			
-			# Visually disable both halves
-			disable_entire_card(card_dialog)
-			
-			# Discard the card
-			discard_card(card_dialog, selected_cryptid.cryptid)
-			
-			# Make sure to update the hand's UI
-			if hand and hand.has_method("update_card_availability"):
-				hand.update_card_availability()
-		else:
-			# We have more movement left, disable other cards
-			# Disable bottom half of this card 
-			card_dialog.bottom_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-			card_dialog.bottom_half_container.disabled = true
-			
-			# Disable top half of all other cards
-			disable_other_card_halves("top")
-			
-			# Store original move amount in the card instance's data
-			if not card_dialog.has_meta("original_move_amount"):
-				card_dialog.set_meta("original_move_amount", original_move_amount)
-			
-			# Update card display to show remaining movement
-			if card_dialog.has_method("update_move_action_display"):
-				card_dialog.update_move_action_display("top", move_leftover)
-				
-			# Important: Also update the actual action value in this card instance
-			for move_action in card_dialog.card_resource.top_move.actions:
-				if move_action.action_types == [0]:  # Move action
-					move_action.amount = move_leftover
-					break
-	
-	# Check bottom half
-	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-		move_leftover = remaining_movement
-		active_movement_card_part = "bottom"
-		active_movement_card = card_dialog
-		
-		# Handle based on whether we've used all movement
-		if move_leftover <= 0:
-			# Mark only the bottom half as used for action economy
-			selected_cryptid.cryptid.bottom_card_played = true
-			
-			# Set the movement amount to zero in this card instance
-			for move_action in card_dialog.card_resource.bottom_move.actions:
-				if move_action.action_types == [0]:  # Move action
-					move_action.amount = 0
-					break
-			
-			# Update the display to show zero movement left
-			if card_dialog.has_method("update_move_action_display"):
-				card_dialog.update_move_action_display("bottom", 0)
-			
-			# Visually disable both halves
-			disable_entire_card(card_dialog)
-			
-			# Discard the card
-			discard_card(card_dialog, selected_cryptid.cryptid)
-			
-			# Make sure to update the hand's UI
-			if hand and hand.has_method("update_card_availability"):
-				hand.update_card_availability()
-		else:
-			# We have more movement left, disable other cards
-			# Disable top half of this card
-			card_dialog.top_half_container.modulate = Color(0.5, 0.5, 0.5, 1)
-			card_dialog.top_half_container.disabled = true
-			
-			# Disable bottom half of all other cards
-			disable_other_card_halves("bottom")
-			
-			# Store original move amount in the card instance's data
-			if not card_dialog.has_meta("original_move_amount"):
-				card_dialog.set_meta("original_move_amount", original_move_amount)
-			
-			# Update card display to show remaining movement
-			if card_dialog.has_method("update_move_action_display"):
-				card_dialog.update_move_action_display("bottom", move_leftover)
-			
-			# Important: Also update the actual action value in this card instance
-			for move_action in card_dialog.card_resource.bottom_move.actions:
-				if move_action.action_types == [0]:  # Move action
-					move_action.amount = move_leftover
-					break
-
+	# Simplified card usage handler
+	use_card_part(active_action.card, active_action.card_part)
+	reset_action_state()
+	enable_all_cards()
 func update_action_menu():
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu and action_menu.has_method("update_menu_visibility"):
@@ -934,130 +734,764 @@ func check_if_turn_complete():
 		if game_instructions:
 			game_instructions.text = "Turn complete. Press End Turn to continue."
 
-func attack_action_selected(current_card):
-	# Check if we're in discard mode
+# ============= GENERIC ACTION SYSTEM - NEW OPTIMIZATION =============
+
+func card_action_selected(card_type: String, current_card):
+	print("Action type:", card_type)
+	print("Current card:", current_card)
 	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
 	if hand_node and hand_node.in_discard_mode:
-		print("In discard mode, ignoring attack action selection")
+		print("In discard mode, ignoring", card_type, "action selection")
 		return
-	
-	print("\n---------- ATTACK ACTION SELECTED DEBUG ----------")
+	reset_action_state()
 	card_dialog = current_card
-	
-	# Reset action states
-	move_action_bool = false
-	attack_action_bool = false
-	
-	# Debug info
-	print("Selected card:", card_dialog)
-	
-	# Make sure we have the currently selected cryptid
 	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found")
-		return
-	
-	print("Selected cryptid:", selected_cryptid.cryptid.name)
-	print("Top card played:", selected_cryptid.cryptid.top_card_played)
-	print("Bottom card played:", selected_cryptid.cryptid.bottom_card_played)
-	
-	# Clear visual indicators
+	print("Selected cryptid:", selected_cryptid)
+	print("Cryptid name:", selected_cryptid.cryptid.name if selected_cryptid else "None")
+	delete_all_indicators()
 	delete_all_lines()
-	
-	# Get the VBoxContainer first
-	var vbox = card_dialog.get_node_or_null("VBoxContainer")
-	if not vbox:
-		print("ERROR: VBoxContainer not found")
+	update_all_debug_indicators()
+	var v_box_container = current_card.get_node_or_null("VBoxContainer")
+	if not v_box_container:
 		return
-	
-	# Now get the correct container nodes using the exact path
-	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
-	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
-	
-	print("Top half container found:", top_half_container != null)
-	print("Bottom half container found:", bottom_half_container != null)
-	
+	var top_half_container = v_box_container.get_node_or_null("TopHalfContainer")
+	var bottom_half_container = v_box_container.get_node_or_null("BottomHalfContainer")
 	if not top_half_container or not bottom_half_container:
-		print("ERROR: Container nodes not found")
 		return
-	
-	# Check which half is currently highlighted
+	var active_half = null
+	var active_action_data = null
 	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
 	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
-	
-	print("Top half highlighted:", top_highlighted)
-	print("Bottom half highlighted:", bottom_highlighted)
-	
-	# Check for attack action based on our findings
-	var found_attack = false
-	
-	# Debug the card resource
-	print("\n--- CARD RESOURCE ANALYSIS ---")
-	if card_dialog.get("card_resource") != null:
-		var card_resource = card_dialog.card_resource
-		print("Card resource found")
-		
-		# Check top move actions
-		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
-			print("Checking top move actions")
-			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
-				for action in card_resource.top_move.actions:
-					print("Action type:", action.action_types)
-					if 1 in action.action_types:  # Attack action type (1)
-						print("Found attack action in top half")
-						attack_range = action.range
-						damage = action.amount
-						attack_action_bool = true
-						active_movement_card_part = "top"
-						found_attack = true
-						break
-		
-		# Check bottom move actions
-		if not found_attack and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
-			print("Checking bottom move actions")
-			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
-				for action in card_resource.bottom_move.actions:
-					print("Action type:", action.action_types)
-					if 1 in action.action_types:  # Attack action type (1)
-						print("Found attack action in bottom half")
-						attack_range = action.range
-						damage = action.amount
-						attack_action_bool = true
-						active_movement_card_part = "bottom"
-						found_attack = true
-						break
+	if top_highlighted:
+		active_half = top_half_container
+	elif bottom_highlighted:
+		active_half = bottom_half_container
+	if not active_half:
+		return
+	var card_resource = current_card.get("card_resource")
+	if not card_resource:
+		return
+	print("Card resource found:", card_resource.resource_path if card_resource else "None")
+	var config = ACTION_CONFIGS.get(card_type, {})
+	active_action.type = card_type
+	active_action.card = v_box_container
+	active_action.card_part = "top" if active_half == top_half_container else "bottom"
+	var found_action = false
+	var move_data = null
+	if active_half == top_half_container:
+		move_data = card_resource.get("top_move")
 	else:
-		print("ERROR: card_resource not found")
-	print("--- END CARD RESOURCE ANALYSIS ---\n")
-	
-	# Provide detailed feedback
-	if not attack_action_bool:
-		print("ERROR: Failed to activate attack action")
-		
-		if selected_cryptid.cryptid.top_card_played and top_highlighted:
-			print("Top action already used this turn")
-		elif selected_cryptid.cryptid.bottom_card_played and bottom_highlighted:
-			print("Bottom action already used this turn")
-		else:
-			print("No valid attack action found in the selected card half")
+		move_data = card_resource.get("bottom_move")
+	if move_data and move_data.get("actions") != null:
+		for action in move_data.actions:
+			var action_type_id = -1
+			match card_type:
+				"attack": action_type_id = 1
+				"move": action_type_id = 0
+				"push": action_type_id = 2
+				"pull": action_type_id = 3
+				"heal": action_type_id = 4
+				"stun": action_type_id = 5
+				"poison": action_type_id = 7
+				"vulnerable": action_type_id = 6  # APPLY_VULNERABLE
+				"immobilize": action_type_id = 9  # IMMOBILIZE
+			if action_type_id in action.action_types:
+				active_action.range = action.range
+				active_action.amount = action.amount
+				found_action = true
+				break
+	if not found_action:
+		return
+	var selected_cryptid_hex_pos = local_to_map(selected_cryptid.position)
+	if card_type == "move":
+		highlight_possible_movement_hexes(selected_cryptid.position, active_action.range)
+	elif card_type == "push" or card_type == "pull":
+		show_push_pull_range(selected_cryptid_hex_pos, active_action.range, card_type)
 	else:
-		print("Successfully activated attack action with range:", attack_range)
-		
-		# IMPORTANT: Ensure we're using the attack grid for showing attack range
-		var current_pos = local_to_map(selected_cryptid.position)
-		show_attackable_area(selected_cryptid.position, attack_range)
-		
-		# Store references for handle_attack_action
-		if active_movement_card_part == "top":
-			card_dialog.top_half_container = top_half_container
-			disable_other_cards_exact("top")
-		elif active_movement_card_part == "bottom":
-			card_dialog.bottom_half_container = bottom_half_container
-			disable_other_cards_exact("bottom")
-	
-	print("---------- END ATTACK ACTION SELECTED DEBUG ----------\n")
+		show_targetable_area(selected_cryptid_hex_pos, active_action.range, card_type)
+	print("Setting up action booleans for card type:", card_type)
+	match card_type:
+		"move":
+			# Check if cryptid is immobilized
+			var status_mgr = selected_cryptid.get_node_or_null("StatusEffectManager")
+			if status_mgr and status_mgr.has_status_effect(StatusEffect.EffectType.IMMOBILIZE):
+				print("Cannot move - cryptid is immobilized!")
+				return  # Prevent movement
+			
+			move_action_bool = true
+			move_leftover = active_action.amount
+			original_move_amount = active_action.amount
+		"attack":
+			attack_action_bool = true
+			attack_range = active_action.range
+			damage = active_action.amount
+		"push":
+			push_action_bool = true
+			push_range = active_action.range
+			push_amount = active_action.amount
+		"pull":
+			pull_action_bool = true
+			pull_range = active_action.range
+			pull_amount = active_action.amount
+		"heal":
+			heal_action_bool = true
+			heal_range = active_action.range
+			heal_amount = active_action.amount
+		"stun":
+			stun_action_bool = true
+			stun_range = active_action.range
+			stun_amount = active_action.amount
+		"poison":
+			poison_action_bool = true
+			poison_range = active_action.range
+			poison_amount = active_action.amount
+		"immobilize":
+			immobilize_action_bool = true
+			immobilize_range = active_action.range
+			immobilize_amount = active_action.amount
+		"vulnerable":
+			print("Setting vulnerable action - range:", active_action.range, "amount:", active_action.amount)
+			vulnerable_action_bool = true
+			vulnerable_range = active_action.range
+			vulnerable_amount = active_action.amount
+	active_movement_card = v_box_container
+	active_movement_card_part = active_action.card_part
+	if active_half == top_half_container:
+		disable_other_cards_exact("top")
+	else:
+		disable_other_cards_exact("bottom")
+	print("card_action_selected complete - active_action.type:", active_action.type, "vulnerable_action_bool:", vulnerable_action_bool)
+func reset_action_state():
+	active_action.type = ""
+	active_action.range = 0
+	active_action.amount = 0
+	active_action.card = null
+	active_action.card_part = ""
+	active_action.in_progress = false
+	# Also reset old booleans for compatibility
+	move_action_bool = false
+	attack_action_bool = false
+	push_action_bool = false
+	pull_action_bool = false
+	heal_action_bool = false
+	stun_action_bool = false
+	poison_action_bool = false
+	immobilize_action_bool = false
+	vulnerable_action_bool = false
+	# Clear all tile highlights and indicators
+	clear_movement_highlights()
+	active_movement_card_part = ""
+	active_movement_card = null
 
-# Add this helper function for more reliable color comparison
+func handle_card_action(pos_clicked: Vector2i):
+	if not active_action.in_progress or active_action.type == "":
+		return
+		
+	var target_hex_pos = pos_clicked  # pos_clicked is already hex coordinates
+	var selected_cryptid_hex_pos = local_to_map(selected_cryptid.position)
+	
+	# Execute action based on type
+	match active_action.type:
+		"move":
+			# Movement has its own pathfinding and range checking
+			handle_move_action(pos_clicked)
+		"attack", "heal", "stun", "poison", "push", "pull", "immobilize", "vulnerable":
+			# For targeted actions, check if target is in range
+			var distance = calculate_distance(selected_cryptid_hex_pos, target_hex_pos)
+			print("Range check - Distance:", distance, "Max range:", active_action.range)
+			if distance > active_action.range:
+				print("Target out of range")
+				return
+			
+			# Find target at position if needed
+			var target_cryptid = null
+			for cryptid in all_cryptids_in_play:
+				if local_to_map(cryptid.position) == target_hex_pos:
+					target_cryptid = cryptid
+					break
+			
+			# Execute the specific action
+			match active_action.type:
+				"attack":
+					execute_attack_action(target_cryptid, target_hex_pos)
+				"heal":
+					# Use status effect manager for heal action
+					var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager") 
+					if status_mgr:
+						await status_mgr.execute_heal_action(selected_cryptid, target_cryptid, active_action.amount, visual_effects)
+						# Complete action
+						use_card_part(active_action.card, active_action.card_part)
+						delete_all_indicators()
+						reset_action_state()
+						enable_all_cards()
+						# Move to next action if available
+						if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+							card_dialog.next_action()
+				"stun":
+					# Use status effect manager for stun action
+					var status_mgr_stun = target_cryptid.get_node_or_null("StatusEffectManager")
+					if status_mgr_stun:
+						await status_mgr_stun.execute_stun_action(selected_cryptid, target_cryptid, active_action.amount, visual_effects)
+						# Complete action
+						use_card_part(active_action.card, active_action.card_part)
+						delete_all_indicators()
+						reset_action_state()
+						enable_all_cards()
+						# Move to next action if available
+						if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+							card_dialog.next_action()
+				"poison":
+					# Use status effect manager for poison action
+					var status_mgr_poison = target_cryptid.get_node_or_null("StatusEffectManager")
+					if status_mgr_poison:
+						await status_mgr_poison.execute_poison_action(selected_cryptid, target_cryptid, active_action.amount, visual_effects)
+						# Complete action
+						use_card_part(active_action.card, active_action.card_part)
+						delete_all_indicators()
+						reset_action_state()
+						enable_all_cards()
+						# Move to next action if available
+						if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+							card_dialog.next_action()
+				"immobilize":
+					# Use status effect manager for immobilize action
+					var status_mgr_immobilize = target_cryptid.get_node_or_null("StatusEffectManager")
+					if status_mgr_immobilize:
+						await status_mgr_immobilize.execute_immobilize_action(selected_cryptid, target_cryptid, active_action.amount, visual_effects)
+						# Complete action
+						use_card_part(active_action.card, active_action.card_part)
+						delete_all_indicators()
+						reset_action_state()
+						enable_all_cards()
+						# Move to next action if available
+						if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+							card_dialog.next_action()
+				"vulnerable":
+					print("Executing vulnerable action")
+					print("Target cryptid:", target_cryptid)
+					print("Target position:", target_hex_pos)
+					
+					# Check if there's a target
+					if not target_cryptid:
+						print("No cryptid at target position")
+						return
+					
+					# Validate target is enemy
+					if not is_enemy_target(selected_cryptid, target_cryptid):
+						print("Invalid target - must target enemy")
+						print("Selected cryptid is player:", selected_cryptid in player_cryptids_in_play)
+						print("Target cryptid is player:", target_cryptid in player_cryptids_in_play)
+						return
+					
+					# Use status effect manager for vulnerable action
+					var status_mgr_vulnerable = target_cryptid.get_node_or_null("StatusEffectManager")
+					if status_mgr_vulnerable:
+						await status_mgr_vulnerable.execute_vulnerable_action(selected_cryptid, target_cryptid, active_action.amount, visual_effects)
+						# Complete action
+						use_card_part(active_action.card, active_action.card_part)
+						delete_all_indicators()
+						reset_action_state()
+						enable_all_cards()
+						# Move to next action if available
+						if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+							card_dialog.next_action()
+				"push":
+					execute_push_action(target_cryptid, target_hex_pos)
+				"pull":
+					execute_pull_action(target_cryptid, target_hex_pos)
+
+func execute_attack_action(target_cryptid, target_hex_pos: Vector2i):
+	if not target_cryptid:
+		print("No target at position")
+		return
+		
+	if not is_enemy_target(selected_cryptid, target_cryptid):
+		print("Invalid target - must target enemy")
+		return
+	
+	# Perform attack animation
+	await visual_effects.animate_attack(selected_cryptid, target_cryptid)
+	
+	# Deal damage using health bar system
+	var health_bar = target_cryptid.get_node_or_null("HealthBar")
+	if health_bar:
+		var current_health = health_bar.value
+		var new_health = max(current_health - active_action.amount, 0)
+		
+		# Update health bar
+		health_bar.value = new_health
+		
+		# Update cryptid's health values
+		target_cryptid.set_health_values(new_health, health_bar.max_value)
+		target_cryptid.update_health_bar()
+		
+		# Store health metadata
+		target_cryptid.cryptid.set_meta("current_health", new_health)
+		
+		damage_value_display(target_cryptid.position, active_action.amount)
+		print("Dealt", active_action.amount, "damage to", target_cryptid.cryptid.name)
+		print("Health now: " + str(new_health) + "/" + str(health_bar.max_value))
+		
+		# Check if target is defeated
+		if new_health <= 0:
+			handle_cryptid_defeat(target_cryptid)
+	else:
+		print("ERROR: Could not find health bar on target cryptid!")
+	
+	# Complete action
+	use_card_part(active_action.card, active_action.card_part)
+	delete_all_indicators()
+	reset_action_state()
+	enable_all_cards()
+	
+	# Move to next action if available
+	if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+		print("Action complete, moving to next action")
+		card_dialog.next_action()
+
+func execute_heal_action(target_cryptid, target_hex_pos: Vector2i):
+	if not target_cryptid:
+		print("No target at position")
+		return
+		
+	if not is_friendly_target(selected_cryptid, target_cryptid):
+		print("Invalid target - must target friendly")
+		return
+	
+	# Heal the target using health bar system
+	var health_bar = target_cryptid.get_node_or_null("HealthBar")
+	if health_bar:
+		var current_health = health_bar.value
+		var max_health = health_bar.max_value
+		var new_health = min(current_health + active_action.amount, max_health)
+		
+		# Update health bar
+		health_bar.value = new_health
+		
+		# Update cryptid's health values
+		target_cryptid.set_health_values(new_health, max_health)
+		target_cryptid.update_health_bar()
+		
+		# Store health metadata
+		target_cryptid.cryptid.set_meta("current_health", new_health)
+		
+		var actual_heal = new_health - current_health
+		
+		# Show heal effect
+		await visual_effects.animate_heal(selected_cryptid, target_cryptid)
+		heal_value_display(target_cryptid.position, actual_heal)
+		
+		print("Healed", target_cryptid.cryptid.name, "for", actual_heal)
+		print("Health now: " + str(new_health) + "/" + str(max_health))
+	else:
+		print("ERROR: Could not find health bar on target cryptid!")
+	
+	# Complete action
+	use_card_part(active_action.card, active_action.card_part)
+	delete_all_indicators()
+	reset_action_state()
+	enable_all_cards()
+	
+	# Move to next action if available
+	if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+		print("Action complete, moving to next action")
+		card_dialog.next_action()
+
+func execute_stun_action(target_cryptid, target_hex_pos: Vector2i):
+	if not target_cryptid:
+		print("No target at position")
+		return
+		
+	if not is_enemy_target(selected_cryptid, target_cryptid):
+		print("Invalid target - must target enemy")
+		return
+	
+	# Apply stun
+	var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager")
+	if status_mgr:
+		status_mgr.add_status_effect(StatusEffect.EffectType.STUN, active_action.amount)
+		print("Applied stun for", active_action.amount, "turns to", target_cryptid.cryptid.name)
+	
+	# Show effect
+	await visual_effects.animate_stun(selected_cryptid, target_cryptid)
+	
+	# Complete action
+	use_card_part(active_action.card, active_action.card_part)
+	delete_all_indicators()
+	reset_action_state()
+	enable_all_cards()
+	
+	# Move to next action if available
+	if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+		print("Action complete, moving to next action")
+		card_dialog.next_action()
+
+
+func execute_push_action(target_cryptid, target_hex_pos: Vector2i):
+	if not target_cryptid:
+		print("No target at position")
+		return
+	
+	# Calculate push direction
+	var selected_cryptid_hex_pos = local_to_map(selected_cryptid.position)
+	var push_direction = get_hex_direction(selected_cryptid_hex_pos, target_hex_pos)
+	var push_distance = active_action.amount
+	
+	print("=== PUSH ACTION DEBUG ===")
+	print("Target position:", target_hex_pos)
+	print("Selected position:", selected_cryptid_hex_pos)
+	print("Push direction:", push_direction)
+	print("Push distance:", push_distance)
+	
+	# Find valid push destination and build path for preview
+	var final_position = target_hex_pos
+	var push_path = []
+	for i in range(1, push_distance + 1):
+		var test_pos = target_hex_pos + push_direction * i
+		print("Testing push position", i, ":", test_pos)
+		print("  Is walkable:", is_hex_walkable(test_pos))
+		print("  Is occupied:", is_hex_occupied(test_pos))
+		if is_hex_walkable(test_pos) and not is_hex_occupied(test_pos):
+			final_position = test_pos
+			push_path.append(test_pos)
+			print("  -> Valid push destination")
+		else:
+			print("  -> Invalid, stopping search")
+			break
+	
+	print("Final push position:", final_position)
+	
+	
+	if final_position != target_hex_pos:
+		print("Executing push animation...")
+		# Animate push
+		await visual_effects.animate_push(selected_cryptid, target_cryptid, target_hex_pos, final_position)
+		
+		# Update position
+		update_cryptid_position(target_cryptid, final_position)
+		print("Pushed", target_cryptid.cryptid.name, "to", final_position)
+	else:
+		print("No valid push destination found - target stays at", target_hex_pos)
+	
+	# Complete action
+	use_card_part(active_action.card, active_action.card_part)
+	delete_all_indicators()
+	reset_action_state()
+	enable_all_cards()
+	
+	# Move to next action if available
+	if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+		print("Action complete, moving to next action")
+		card_dialog.next_action()
+
+func execute_pull_action(target_cryptid, target_hex_pos: Vector2i):
+	if not target_cryptid:
+		print("No target at position")
+		return
+	
+	# Get puller position and pull distance
+	var selected_cryptid_hex_pos = local_to_map(selected_cryptid.position)
+	var pull_distance = active_action.amount
+	
+	print("=== PULL ACTION DEBUG ===")
+	print("Target position:", target_hex_pos)
+	print("Selected position:", selected_cryptid_hex_pos)
+	print("Pull distance:", pull_distance)
+	
+	# Temporarily enable both target and puller positions for pathfinding
+	var target_point = a_star_hex_grid.get_closest_point(target_hex_pos, true)
+	var puller_point = a_star_hex_grid.get_closest_point(selected_cryptid_hex_pos, true)
+	
+	var was_target_disabled = a_star_hex_grid.is_point_disabled(target_point)
+	var was_puller_disabled = a_star_hex_grid.is_point_disabled(puller_point)
+	
+	print("Target point disabled:", was_target_disabled, "Puller point disabled:", was_puller_disabled)
+	
+	# Enable both positions temporarily
+	if was_target_disabled:
+		a_star_hex_grid.set_point_disabled(target_point, false)
+	if was_puller_disabled:
+		a_star_hex_grid.set_point_disabled(puller_point, false)
+	
+	# Find path from target to puller using A*
+	var path = a_star_hex_grid.get_id_path(target_point, puller_point)
+	print("A* path found with", path.size(), "points:", path)
+	
+	# Restore both positions' states
+	if was_target_disabled:
+		a_star_hex_grid.set_point_disabled(target_point, true)
+	if was_puller_disabled:
+		a_star_hex_grid.set_point_disabled(puller_point, true)
+	
+	print("Pull path from target to puller:", path.size(), "steps")
+	var final_position = target_hex_pos
+	
+	if path.size() > 1:  # Path includes start position, so we need at least 2 points
+		# Convert path to positions and move target along the path
+		var steps_to_move = min(pull_distance, path.size() - 1)  # -1 because path includes start
+		print("Will attempt to move", steps_to_move, "steps")
+		
+		var pull_path = []
+		for i in range(1, steps_to_move + 1):  # Start from 1 to skip current position
+			var path_point_id = path[i]
+			var path_pos = a_star_hex_grid.get_point_position(path_point_id)
+			var hex_pos = Vector2i(path_pos.x, path_pos.y)
+			
+			print("Testing pull step", i, "to position:", hex_pos)
+			
+			# Don't pull into puller's position
+			if hex_pos == selected_cryptid_hex_pos:
+				print("  -> Cannot pull into puller's position, stopping")
+				break
+			
+			# Check if position is available
+			if not is_hex_occupied(hex_pos):
+				final_position = hex_pos
+				pull_path.append(hex_pos)
+				print("  -> Valid pull destination")
+			else:
+				print("  -> Position occupied, stopping pull")
+				break
+		
+	else:
+		print("No valid path found for pull")
+	
+	print("Final pull position:", final_position)
+	
+	if final_position != target_hex_pos:
+		print("Executing pull animation...")
+		# Animate pull
+		await visual_effects.animate_pull(selected_cryptid, target_cryptid, target_hex_pos, final_position)
+		
+		# Update position
+		update_cryptid_position(target_cryptid, final_position)
+		print("Pulled", target_cryptid.cryptid.name, "to", final_position)
+	else:
+		print("No valid pull destination found - target stays at", target_hex_pos)
+	
+	# Complete action
+	use_card_part(active_action.card, active_action.card_part)
+	delete_all_indicators()
+	reset_action_state()
+	enable_all_cards()
+	
+	# Move to next action if available
+	if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+		print("Action complete, moving to next action")
+		card_dialog.next_action()
+
+func is_enemy_target(caster, target) -> bool:
+	if caster in player_cryptids_in_play and target in enemy_cryptids_in_play:
+		return true
+	elif caster in enemy_cryptids_in_play and target in player_cryptids_in_play:
+		return true
+	return false
+
+func is_hex_walkable(hex_pos: Vector2i) -> bool:
+	# Use A* grid to check if position is walkable (has a valid point)
+	var point_id = a_star_hex_grid.get_closest_point(hex_pos, false)
+	if point_id == -1:
+		return false
+	var point_pos = a_star_hex_grid.get_point_position(point_id)
+	# Check if the closest point is actually at this position
+	return Vector2i(point_pos.x, point_pos.y) == hex_pos
+
+func is_hex_occupied(hex_pos: Vector2i) -> bool:
+	# Check if any cryptid is at this position
+	for cryptid in all_cryptids_in_play:
+		if local_to_map(cryptid.position) == hex_pos:
+			return true
+	return false
+
+func update_cryptid_position(cryptid, new_hex_pos: Vector2i):
+	# Update A* grid
+	var old_hex_pos = local_to_map(cryptid.position)
+	var old_point = a_star_hex_grid.get_closest_point(old_hex_pos, true)
+	var new_point = a_star_hex_grid.get_closest_point(new_hex_pos, true)
+	
+	# Enable old position, disable new position
+	a_star_hex_grid.set_point_disabled(old_point, false)
+	a_star_hex_grid.set_point_disabled(new_point, true)
+	
+	# Update cryptid position
+	cryptid.position = map_to_local(new_hex_pos)
+
+func damage_value_display(position: Vector2, amount: int):
+	# Display damage number (visual effect not implemented yet)
+	print("Damage: ", amount)
+
+func heal_value_display(position: Vector2, amount: int):
+	# Display heal number (visual effect not implemented yet)
+	print("Heal: ", amount)
+
+func use_card_part(card_container, part: String):
+	# Mark the card part as used
+	if card_container:
+		var half_container = null
+		if part == "top":
+			half_container = card_container.get_node_or_null("TopHalfContainer")
+		else:
+			half_container = card_container.get_node_or_null("BottomHalfContainer")
+		
+		if half_container:
+			half_container.modulate = Color(0.5, 0.5, 0.5)  # Gray out used part
+
+func enable_all_cards():
+	# Re-enable all cards by restoring their normal modulation
+	for card in get_tree().get_nodes_in_group("cards"):
+		card.modulate = Color.WHITE
+
+func calculate_distance(pos1: Vector2i, pos2: Vector2i) -> int:
+	# Calculate hex distance using cube coordinates
+	var cube1 = axial_to_cube(pos1)
+	var cube2 = axial_to_cube(pos2)
+	return cube_distance(cube1, cube2)
+
+func get_cells_within_range(center_pos: Vector2i, max_range: int) -> Array:
+	# Get all hex positions within range
+	var positions = []
+	for q in range(-max_range, max_range + 1):
+		for r in range(max(-max_range, -q - max_range), min(max_range, -q + max_range) + 1):
+			var offset = Vector2i(q, r)
+			positions.append(offset)
+	return positions
+
+func create_hex_indicator(hex_pos: Vector2i, color: Color):
+	# Create a visual indicator at the hex position
+	var indicator = ColorRect.new()
+	indicator.color = color
+	indicator.size = Vector2(50, 50)
+	indicator.position = map_to_local(hex_pos) - indicator.size / 2
+	debug_container.add_child(indicator)
+
+func show_push_pull_preview(start_pos: Vector2i, direction: Vector2i, distance: int):
+	print("DEBUG: show_push_pull_preview called - start_pos:", start_pos, "direction:", direction, "distance:", distance)
+	
+	# Clear previous preview
+	print("DEBUG: Clearing", push_pull_preview_hexes.size(), "previous preview hexes")
+	for hex in push_pull_preview_hexes:
+		if hex in original_tile_states:
+			if is_showing_movement_range:
+				# Check if there's a cryptid at this position
+				var has_cryptid = false
+				for cryptid in all_cryptids_in_play:
+					if local_to_map(cryptid.position) == hex:
+						has_cryptid = true
+						break
+				set_cell(hex, 0, path_tile_id if has_cryptid else move_range_tile_id, 1 if has_cryptid else 2)
+			else:
+				set_cell(hex, 0, original_tile_states[hex], 0)
+	push_pull_preview_hexes.clear()
+	
+	# Show preview of push/pull movement path
+	print("DEBUG: Creating preview path...")
+	var preview_count = 0
+	var final_position = start_pos
+	
+	# Calculate the complete path and final destination
+	for i in range(1, distance + 1):
+		var preview_pos = start_pos + direction * i
+		print("DEBUG: Testing preview position", i, ":", preview_pos)
+		print("DEBUG: In walkable_hexes:", preview_pos in walkable_hexes)
+		print("DEBUG: Is occupied:", is_hex_occupied(preview_pos))
+		
+		if preview_pos in walkable_hexes and not is_hex_occupied(preview_pos):
+			final_position = preview_pos
+		else:
+			print("DEBUG: Hit obstacle at", preview_pos, "- final position will be", final_position)
+			break
+	
+	# Show the complete path from start to final position
+	var current_pos = start_pos
+	while current_pos != final_position:
+		current_pos = current_pos + direction
+		if current_pos in walkable_hexes:
+			# Store original tile state for restoration
+			if not original_tile_states.has(current_pos):
+				original_tile_states[current_pos] = get_cell_atlas_coords(current_pos)
+			
+			# Add to preview tracking and show with path tile
+			push_pull_preview_hexes.append(current_pos)
+			
+			# Use different visual for final destination vs path
+			if current_pos == final_position:
+				set_cell(current_pos, 0, path_tile_id, 3)  # Different alt for final position
+			else:
+				set_cell(current_pos, 0, path_tile_id, 2)  # Path tiles
+			
+			preview_count += 1
+			print("DEBUG: Added preview tile at", current_pos, "final?", current_pos == final_position)
+		else:
+			break
+	
+	print("DEBUG: Total preview tiles created:", preview_count, "Final position:", final_position)
+
+func get_hex_direction(from_pos: Vector2i, to_pos: Vector2i) -> Vector2i:
+	# Calculate hex direction using simple unit steps
+	var diff = to_pos - from_pos
+	
+	if diff.x == 0 and diff.y == 0:
+		return Vector2i.ZERO
+	
+	# Clamp to unit steps (-1, 0, 1) for each axis
+	var unit_x = 0
+	var unit_y = 0
+	
+	if diff.x != 0:
+		unit_x = 1 if diff.x > 0 else -1
+	if diff.y != 0:
+		unit_y = 1 if diff.y > 0 else -1
+	
+	return Vector2i(unit_x, unit_y)
+
+
+func get_point_id_from_position(hex_pos: Vector2i) -> int:
+	# Convert hex position to a unique point ID
+	# This matches the ID generation in create_hex_map_a_star
+	return (hex_pos.x + 1000) * 10000 + (hex_pos.y + 1000)
+
+func create_hex_map_a_star_modified(start_pos, max_range):
+	# Clear existing attack grid
+	a_star_hex_attack_grid.clear()
+	
+	var id_counter = 0
+	var queue = []
+	var visited = {}
+	
+	# Add start position
+	queue.append({"pos": start_pos, "distance": 0})
+	visited[start_pos] = 0
+	
+	while queue.size() > 0:
+		var current = queue.pop_front()
+		var current_pos = current.pos
+		var current_distance = current.distance
+		
+		# Add point to A* grid
+		a_star_hex_attack_grid.add_point(id_counter, Vector2(current_pos.x, current_pos.y))
+		id_counter += 1
+		
+		# Don't expand beyond max range
+		if current_distance >= max_range:
+			continue
+			
+		# Check all neighbors
+		var neighbors = get_hex_neighbors(current_pos)
+		for neighbor in neighbors:
+			if neighbor in visited:
+				continue
+				
+			# Check if walkable
+			if neighbor in walkable_hexes:
+				visited[neighbor] = current_distance + 1
+				queue.append({"pos": neighbor, "distance": current_distance + 1})
+	
+	return true
+
+func attack_action_selected(current_card):
+	# Use the new generic system
+	card_action_selected("attack", current_card)
+	return
 func _is_color_close(color1, color2, tolerance = 0.1):
 	return (
 		abs(color1.r - color2.r) < tolerance and
@@ -1066,213 +1500,10 @@ func _is_color_close(color1, color2, tolerance = 0.1):
 		abs(color1.a - color2.a) < tolerance
 	)
 
-func handle_attack_action(pos_clicked):
-	print("\n---------- HANDLE ATTACK ACTION DEBUG ----------")
-	
-	# Debug team assignments
-	debug_team_assignments()
-	
-	# Get the attacking cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found for attack")
-		return false
-	
-	# IMPORTANT: Use the attack grid for determining attack targets
-	var target_cryptid = get_cryptid_at_position(pos_clicked, true)
-	print("Target position:", pos_clicked)
-	print("Target cryptid:", target_cryptid)
-	
-	var attack_performed = false
-	var valid_target = false
-	
-	# Early exit if no target found
-	if target_cryptid == null:
-		print("Invalid attack: No valid target at the selected position")
-		print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
-		
-		# Reset action state
-		attack_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		
-		force_update_discard_display()
-		return false
-	
-	# Get the parent nodes - they should be different for a valid attack
-	var attacker_parent = selected_cryptid.get_parent()
-	var target_parent = target_cryptid.get_parent()
-	
-	print("Attacker parent:", attacker_parent.name)
-	print("Target parent:", target_parent.name)
-	
-	# Check if they're on different teams based on parent nodes
-	valid_target = (attacker_parent != target_parent)
-	
-	if valid_target:
-		print("Valid target: Attacking cryptid on different team")
-	else:
-		print("Invalid target: Cannot attack your own team")
-	
-	# Only proceed if targeting a valid cryptid
-	if valid_target:
-		print("Valid target found")
-		
-		# Calculate attack distance using attack grid
-		var current_pos = local_to_map(selected_cryptid.position)
-		var target_pos = local_to_map(target_cryptid.position)
-		
-		# IMPORTANT: Use attack grid for pathfinding
-		var attack_path = a_star_hex_attack_grid.get_id_path(
-			a_star_hex_attack_grid.get_closest_point(current_pos),
-			a_star_hex_attack_grid.get_closest_point(target_pos)
-		)
-		
-		# Extra safety check for valid path
-		if attack_path.size() == 0:
-			print("ERROR: No valid attack path found")
-			print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
-			return false
-			
-		var attack_distance = attack_path.size() - 1
-		
-		print("Attack distance:", attack_distance, "Attack range:", attack_range)
-		
-		if attack_distance <= attack_range:
-			print("Target is within range")
-			
-			# Get the top and bottom containers from the card dialog
-			var top_half_container = null
-			var bottom_half_container = null
-			
-			if is_instance_valid(card_dialog):
-				var vbox = card_dialog.get_node_or_null("VBoxContainer")
-				if vbox:
-					top_half_container = vbox.get_node_or_null("TopHalfContainer")
-					bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
-			
-			# Determine which half is being used
-			var using_top_half = false
-			var using_bottom_half = false
-			
-			if top_half_container and is_yellow_highlighted(top_half_container.modulate):
-				using_top_half = true
-				print("Using top half for attack")
-			elif bottom_half_container and is_yellow_highlighted(bottom_half_container.modulate):
-				using_bottom_half = true
-				print("Using bottom half for attack")
-			else:
-				# If we can't determine from color, use active_movement_card_part
-				print("Cannot determine from color, using active_movement_card_part:", active_movement_card_part)
-				using_top_half = active_movement_card_part == "top"
-				using_bottom_half = active_movement_card_part == "bottom"
-			
-			# Play the attack animation
-			print("Starting attack animation")
-			animate_attack(selected_cryptid, target_cryptid)
-			
-			attack_performed = true
-			print("Attack performed successfully")
-			
-			# Process card state changes immediately
-			if attack_performed:
-				# Reset action state
-				attack_action_bool = false
-				delete_all_lines()
-				delete_all_indicators()
-				
-				# NEW: Attack complete, notify card to move to next action
-				if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
-					print("Attack complete, moving to next action")
-					card_dialog.next_action()
-		else:
-			print("Target out of range")
-	else:
-		print("Invalid attack: Cannot attack your own team")
-	
-	# Reset action state if no attack was performed
-	if not attack_performed:
-		print("No attack performed - resetting action state")
-		attack_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-	
-	force_update_discard_display()
-	print("---------- END HANDLE ATTACK ACTION DEBUG ----------\n")
-	return attack_performed
-
 # Add this more verbose version of disable_other_card_halves for debugging
 func disable_other_card_halves_debug(active_card_half):
-	print("\n---------- DISABLE OTHER CARD HALVES DEBUG ----------")
-	print("Active card half:", active_card_half)
-	
-	# Get all cards in the hand
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if not hand_node:
-		print("ERROR: Hand node not found!")
-		# Try alternate methods
-		hand_node = hand
-		if not hand_node:
-			print("ERROR: Hand reference also not valid!")
-			return
-	
-	print("Found hand node:", hand_node)
-	var cards = hand_node.get_children()
-	print("Found", cards.size(), "children in hand")
-	
-	var valid_card_count = 0
-	
-	for card in cards:
-		if not is_instance_valid(card):
-			print("WARNING: Invalid card instance, skipping")
-			continue
-			
-		print("Processing card:", card)
-		
-		# Check if this is a card dialog by script path
-		var is_card_dialog = false
-		if card.get_script():
-			var script_path = card.get_script().resource_path
-			print("Card script path:", script_path)
-			is_card_dialog = script_path.ends_with("card_dialog.gd")
-		else:
-			print("WARNING: Card has no script")
-		
-		if is_card_dialog:
-			valid_card_count += 1
-			print("Found valid card dialog")
-			
-			# Skip the active card
-			if card == card_dialog:
-				print("Skipping active card")
-				continue
-			
-			# Check if the card has the required containers
-			var has_top_container = card.has_node("TopHalfContainer")
-			var has_bottom_container = card.has_node("BottomHalfContainer")
-			
-			print("Has top container:", has_top_container)
-			print("Has bottom container:", has_bottom_container)
-			
-			# Disable the appropriate half
-			if active_card_half == "top" and has_top_container:
-				var top_container = card.get_node("TopHalfContainer")
-				print("Disabling top half of other card")
-				top_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				top_container.disabled = true
-			elif active_card_half == "bottom" and has_bottom_container:
-				var bottom_container = card.get_node("BottomHalfContainer")
-				print("Disabling bottom half of other card")
-				bottom_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				bottom_container.disabled = true
-	
-	print("Processed", valid_card_count, "valid card dialogs")
-	print("---------- END DISABLE OTHER CARD HALVES DEBUG ----------\n")
-
+	# Simplified debug function
+	print("Disabling other card halves for:", active_card_half)
 func _input(event):
 	if movement_in_progress:
 		return
@@ -1280,80 +1511,20 @@ func _input(event):
 	if event is InputEventMouse:
 		if event.button_mask == MOUSE_BUTTON_RIGHT and event.is_pressed():
 			handle_right_click()
-		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool):
+		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool):
 			if event is InputEventMouseMotion:
 				handle_mouse_motion()
-		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool):
+		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool):
 	# IMPORTANT: When we're in attack/push/pull/heal/stun/poison mode, handle clicks directly here
-			if attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool:
+			if attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool:
 				# This ensures cryptids don't handle the click separately
 				get_viewport().set_input_as_handled()
 			handle_left_click(event)
 
 func move_action_selected(current_card):
-	# Check if we're in discard mode
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if hand_node and hand_node.in_discard_mode:
-		print("In discard mode, ignoring move action selection")
-		return
-	
-	# Store the card dialog - THIS IS IMPORTANT
-	card_dialog = current_card
-	
-	# If already in segmented movement, only allow continuing with the same card
-	if move_leftover > 0 and active_movement_card != null:
-		# Only allow the same card to continue movement
-		if active_movement_card != current_card:
-			print("Cannot use a different card during active movement")
-			return
-	
-	# Make sure we have the currently selected cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found when selecting move action")
-		return
-	
-	# Reset action states
-	move_action_bool = false
-	attack_action_bool = false
-	
-	# Check for move action in the top half
-	if card_dialog.top_half_container.modulate == Color(1, 1, 0, 1):
-		for action in card_dialog.card_resource.top_move.actions:
-			if action.action_types == [0] and action.amount > 0:
-				# Only set move_leftover if we're not already in a segmented move
-				if active_movement_card == null:
-					original_move_amount = action.amount
-					move_leftover = action.amount
-				move_action_bool = true
-				active_movement_card_part = "top"
-				
-				# For debugging
-				print("Move action selected: Top half with distance =", move_leftover)
-				break
-	
-	# Check for move action in the bottom half
-	elif card_dialog.bottom_half_container.modulate == Color(1, 1, 0, 1):
-		for action in card_dialog.card_resource.bottom_move.actions:
-			if action.action_types == [0] and action.amount > 0:
-				# Only set move_leftover if we're not already in a segmented move
-				if active_movement_card == null:
-					original_move_amount = action.amount
-					move_leftover = action.amount
-				move_action_bool = true
-				active_movement_card_part = "bottom"
-				
-				# For debugging
-				print("Move action selected: Bottom half with distance =", move_leftover)
-				break
-	
-	# Store the active card
-	active_movement_card = card_dialog
-	
-	# After setting move_leftover and other variables
-	if move_action_bool and selected_cryptid:
-		highlight_possible_movement_hexes(selected_cryptid.position, move_leftover)
-
+	# Use the new generic system
+	card_action_selected("move", current_card)
+	return
 func axial_to_cube(hex):
 	var q = hex.y
 	var r = hex.x
@@ -1509,183 +1680,34 @@ func sort_cryptids_by_speed(cryptids_list):
 		var speed = cryptids_list[i].cryptid.get("speed") if cryptids_list[i].cryptid.get("speed") != null else 0
 		print("  " + str(i+1) + ". " + cryptids_list[i].cryptid.name + " - Speed: " + str(speed))
 
-func show_attackable_area(center_pos, max_range):
-	var center_hex = local_to_map(center_pos)
-	var center_cube = axial_to_cube(center_hex)
-	
-	# Get all hexes within range - including occupied ones for attacking
-	for x in range(-max_range, max_range + 1):
-		for y in range(max(-max_range, -x - max_range), min(max_range, -x + max_range) + 1):
-			var z = -x - y
-			var cube = Vector3i(center_cube.x + x, center_cube.y + y, center_cube.z + z)
-			var hex = cube_to_axial(cube)
-			
-			# Check if hex is valid
-			if get_cell_atlas_coords(hex) != Vector2i(-1, -1):
-				# Draw a small indicator at this hex
-				var indicator = ColorRect.new()
-				indicator.color = Color(1, 0, 0, 0.3)  # Semi-transparent red
-				indicator.size = Vector2(10, 10)
-				indicator.position = map_to_local(hex) - Vector2(5, 5)
-				indicator.name = "attack_indicator"
-				add_child(indicator)
-
 # Find a cryptid at a given hex position
 func get_cryptid_at_position(hex_pos, for_attack = false):
-	print("Searching for cryptid at position:", hex_pos, "for_attack:", for_attack)
-	
-	# Get the currently selected cryptid for team comparison
-	var attacker = currently_selected_cryptid()
-	var attacker_team = null
-	if attacker:
-		attacker_team = attacker.get_parent()
-		print("Attacker team:", attacker_team.name)
-	
-	# First check for EXACT position match at the clicked position
-	var exact_match = null
+	# Simplified cryptid position lookup
 	for cryptid in all_cryptids_in_play:
-		if is_instance_valid(cryptid):
-			var cryptid_pos = local_to_map(cryptid.position)
-			print("Checking cryptid:", cryptid.cryptid.name, "at position:", cryptid_pos)
-			
-			if cryptid_pos == hex_pos:
-				print("Found cryptid at exact position:", hex_pos)
-				exact_match = cryptid
-				break
-	
-	# Return the exact match if it's on the opposite team
-	if exact_match != null and attacker != exact_match:
-		var target_team = exact_match.get_parent()
-		if target_team != attacker_team:
-			print("Found exact match on opposite team:", exact_match.cryptid.name)
-			return exact_match
-	
-	# If we're doing an attack and didn't find a valid exact match, look at nearby positions
-	if for_attack:
-		print("Checking nearby positions for attack targets")
-		
-		# Find the closest cryptid to the clicked position
-		var closest_distance = 999
-		var closest_cryptid = null
-		
-		for cryptid in all_cryptids_in_play:
-			# Skip the attacker itself
-			if cryptid == attacker:
-				continue
-				
-			# Skip cryptids on the same team
-			var cryptid_team = cryptid.get_parent()
-			if cryptid_team == attacker_team:
-				print("Skipping same-team cryptid:", cryptid.cryptid.name)
-				continue
-				
-			if is_instance_valid(cryptid):
-				var cryptid_pos = local_to_map(cryptid.position)
-				
-				# Calculate actual distance using A* pathfinding
-				var path = a_star_hex_attack_grid.get_id_path(
-					a_star_hex_attack_grid.get_closest_point(hex_pos), 
-					a_star_hex_attack_grid.get_closest_point(cryptid_pos)
-				)
-				
-				# If path exists and is shorter than current closest
-				if path.size() > 0 and path.size() < closest_distance:
-					closest_distance = path.size()
-					closest_cryptid = cryptid
-					print("Found potential target:", cryptid.cryptid.name, "at distance:", closest_distance)
-		
-		# If we found a close enough cryptid, return it
-		if closest_cryptid != null and closest_distance <= 2:  # Within 1 hex distance
-			print("Returning closest enemy cryptid:", closest_cryptid.cryptid.name)
-			return closest_cryptid
-	
-	# If all checks failed
-	if exact_match != null:
-		print("Found exact match but on same team - invalid target")
-	else:
-		print("No valid target found at position:", hex_pos)
-	
+		if local_to_map(cryptid.position) == hex_pos:
+			return cryptid
 	return null
-
-# Apply damage to a target cryptid - updated to directly trigger emergency swap
 func apply_damage(target_cryptid, damage_amount):
-	print("Applying " + str(damage_amount) + " damage to " + target_cryptid.cryptid.name)
-	
-	# Check if target has status effect manager and process damage modifiers
-	var final_damage = damage_amount
-	if target_cryptid.has_node("StatusEffectManager"):
-		var status_manager = target_cryptid.get_node("StatusEffectManager")
-		final_damage = status_manager.process_damage_taken_effects(damage_amount)
-		print("Damage after status effects: " + str(final_damage))
-	
-	# Access the health value from the add_to_party.gd script
-	var health_bar = target_cryptid.get_node("HealthBar")
-	if health_bar:
-		# Calculate new health value
-		var new_health = health_bar.value - final_damage
-		
-		# Update health bar
-		health_bar.value = new_health
-		
-		# If you have a health getter/setter in your cryptid class
-		target_cryptid.set_health_values(new_health, health_bar.max_value)
-		target_cryptid.update_health_bar()
-		
-		print("Health reduced to: " + str(new_health) + "/" + str(health_bar.max_value))
-		
-		# Check if the cryptid is defeated
-		if new_health <= 0:
-			print("Cryptid " + target_cryptid.cryptid.name + " has been defeated!")
+	# Simplified damage application using health bar system
+	if target_cryptid and target_cryptid.cryptid:
+		var health_bar = target_cryptid.get_node_or_null("HealthBar")
+		if health_bar:
+			var current_health = health_bar.value
+			var new_health = max(current_health - damage_amount, 0)
 			
-			# Store health metadata before handling defeat
-			target_cryptid.cryptid.set_meta("current_health", 0)
-			print("Set current_health metadata to 0 for defeated cryptid")
+			# Update health bar
+			health_bar.value = new_health
 			
-			# Check if this is a player cryptid
-			var is_player_cryptid = target_cryptid in player_cryptids_in_play
-			print("Is player cryptid: " + str(is_player_cryptid))
+			# Update cryptid's health values
+			target_cryptid.set_health_values(new_health, health_bar.max_value)
+			target_cryptid.update_health_bar()
 			
-			if is_player_cryptid:
-				# Get game controller for defeat tracking
-				var game_controller = get_node("/root/VitaChrome/TileMapLayer/GameController")
-				if game_controller:
-					# CRITICAL: Check if this is the last cryptid before prompting swap
-					var available_for_swap = game_controller.get_available_cryptids_for_swap(target_cryptid.cryptid)
-					
-					if available_for_swap.size() == 0:
-						print("No cryptids available for swap - triggering game over")
-						game_controller.mark_cryptid_defeated(target_cryptid.cryptid.name)
-						handle_cryptid_defeat(target_cryptid)
-						game_controller.trigger_game_over()
-					else:
-						print("Cryptids available for swap - prompting emergency swap")
-						# Store position data for the swap
-						var defeated_position = target_cryptid.position
-						var map_pos = local_to_map(defeated_position)
-						
-						# Mark the hex as walkable
-						walkable_hexes.append(map_pos)
-						var point = a_star_hex_grid.get_closest_point(map_pos, true)
-						a_star_hex_grid.set_point_disabled(point, false)
-						
-						# Visual effect for defeat
-						target_cryptid.modulate = Color(1, 0, 0, 0.5)  # Red fade
-						
-						# Store position metadata
-						target_cryptid.set_meta("defeated_position", defeated_position)
-						target_cryptid.set_meta("defeated_map_pos", map_pos)
-						
-						# Trigger emergency swap
-						game_controller.prompt_emergency_swap(target_cryptid)
-				else:
-					print("ERROR: Could not find game controller!")
-					handle_cryptid_defeat(target_cryptid)
-			else:
-				# For enemy cryptids, handle defeat normally
+			# Store health metadata
+			target_cryptid.cryptid.set_meta("current_health", new_health)
+			
+			damage_value_display(target_cryptid.position, damage_amount)
+			if new_health <= 0:
 				handle_cryptid_defeat(target_cryptid)
-	else:
-		print("ERROR: Could not find health bar on target cryptid!")
-
 func has_bench_cryptids():
 	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
 	if game_controller and game_controller.has_method("has_bench_cryptids"):
@@ -1695,164 +1717,15 @@ func has_bench_cryptids():
 		return false
 
 func handle_cryptid_defeat(defeated_cryptid):
-	print("\n=== HANDLING CRYPTID DEFEAT ===")
-	print("Defeated cryptid: " + defeated_cryptid.cryptid.name)
-	
-	# Track defeated enemies
-	if defeated_cryptid in enemy_cryptids_in_play:
-		enemies_defeated_count += 1
-		print("Enemy defeated! Total enemies defeated:", enemies_defeated_count)
-	
-	# CRITICAL: Make sure we get the GameController first, before anything else
-	var game_controller = get_node_or_null("/root/VitaChrome/TileMapLayer/GameController")
-	
-	# Record this cryptid as permanently defeated in all lists
-	if game_controller and game_controller.has_method("mark_cryptid_defeated"):
-		game_controller.mark_cryptid_defeated(defeated_cryptid.cryptid.name)
-		print("Marked cryptid as permanently defeated:", defeated_cryptid.cryptid.name)
-	else:
-		print("ERROR: Could not find GameController or mark_cryptid_defeated method")
-		
-	# Get the position before removing the cryptid
-	var map_pos = local_to_map(defeated_cryptid.position)
-	
-	# Get reference to GameState to update the player's team
-	var game_state = get_node_or_null("/root/GameState")
-	
-	# IMPORTANT: Remove cryptid from player's team if it's a player cryptid
-	if defeated_cryptid in player_cryptids_in_play:
-		print("Removing defeated player cryptid from team:")
-		
-		# Remove from GameState player team if it exists
-		if game_state and game_state.player_team:
-			print("Removing from GameState.player_team")
-			if game_state.player_team.has_method("remove_cryptid"):
-				game_state.player_team.remove_cryptid(defeated_cryptid.cryptid)
-				print("Successfully removed from GameState.player_team")
-			elif game_state.player_team.get("_content") != null:
-				var content = game_state.player_team._content
-				for i in range(content.size() - 1, -1, -1):
-					if content[i] == defeated_cryptid.cryptid:
-						content.remove_at(i)
-						print("Removed from GameState.player_team._content")
-						break
-		
-		# Also try removing from the direct player team node
-		var player_team = get_node_or_null("/root/VitaChrome/PlayerTeam")
-		if player_team:
-			print("Removing from PlayerTeam node")
-			if player_team.has_method("remove_cryptid"):
-				player_team.remove_cryptid(defeated_cryptid.cryptid)
-				print("Successfully removed from PlayerTeam node")
-		
-		# Remove from all our tracking arrays
-		print("Removing from player_cryptids_in_play")
-		player_cryptids_in_play.erase(defeated_cryptid)
-	
-	# Handle enemy cryptid defeat
-	elif defeated_cryptid in enemy_cryptids_in_play:
-		print("Removing defeated enemy cryptid")
-		enemy_cryptids_in_play.erase(defeated_cryptid)
-		print("Enemy defeated! Remaining enemies: " + str(enemy_cryptids_in_play.size()))
-		if enemy_cryptids_in_play.size() == 0:
-			print("All enemies defeated! Triggering victory")
-			if game_controller and game_controller.has_method("end_battle_with_victory"):
-				game_controller.end_battle_with_victory()
-	
-	# Remove from all_cryptids_in_play regardless of team
-	if defeated_cryptid in all_cryptids_in_play:
-		print("Removing defeated cryptid from all_cryptids_in_play")
+	# Simplified defeat handling
+	if defeated_cryptid:
+		defeated_cryptid.queue_free()
+		if defeated_cryptid in player_cryptids_in_play:
+			player_cryptids_in_play.erase(defeated_cryptid)
+		elif defeated_cryptid in enemy_cryptids_in_play:
+			enemy_cryptids_in_play.erase(defeated_cryptid)
 		all_cryptids_in_play.erase(defeated_cryptid)
-	else:
-		print("WARNING: Defeated cryptid not found in all_cryptids_in_play")
-		# Try to find by name as fallback
-		for i in range(all_cryptids_in_play.size() - 1, -1, -1):
-			if all_cryptids_in_play[i].cryptid.name == defeated_cryptid.cryptid.name:
-				print("Found by name and removing from all_cryptids_in_play")
-				all_cryptids_in_play.remove_at(i)
-				break
-	
-	# Update turn order to reflect the removal
-	var turn_order = get_node_or_null("/root/VitaChrome/UIRoot/Turn Order")
-	if turn_order and turn_order.has_method("initialize_cryptid_labels"):
-		turn_order.initialize_cryptid_labels()
-		print("Updated turn order after cryptid defeat")
-	
-	# Visual effect for defeat
-	defeated_cryptid.modulate = Color(1, 0, 0, 0.5)  # Red fade
-	
-	# Remove after a delay (just visually - we've already removed from the lists)
-	var tween = get_tree().create_tween()
-	tween.tween_property(defeated_cryptid, "modulate", Color(1, 0, 0, 0), 1.0)
-	tween.tween_callback(Callable(defeated_cryptid, "queue_free"))
-	
-	print("=== END HANDLE CRYPTID DEFEAT ===\n")
-
-# Add a fallback emergency swap function - for redundancy
-# Add a fallback emergency swap function - for redundancy
-func _create_emergency_swap_team(defeated_cryptid):
-	# Create a temporary team with only available cryptids
-	var temp_team = Team.new()
-	
-	# Process all player team cryptids for potential swap options
-	var player_team_node = get_node_or_null("/root/VitaChrome/TileMapLayer/PlayerTeam")
-	if player_team_node:
-		# First add only non-defeated cryptids as swap options
-		for child in player_team_node.get_children():
-			if !child.has_property("cryptid") or !child.cryptid:
-				continue
-				
-			# Skip the defeated cryptid
-			if child.cryptid.name == defeated_cryptid.cryptid.name:
-				print("EXCLUDING defeated cryptid from options:", child.cryptid.name)
-				continue
-				
-			# Also skip any cryptid in the global defeated list
-			if GameController.globally_defeated_cryptids.has(child.cryptid.name):
-				print("EXCLUDING globally defeated cryptid:", child.cryptid.name)
-				continue
-				
-			# Add to swap options
-			temp_team.add_cryptid(child.cryptid)
-			print("Adding cryptid to filtered team:", child.cryptid.name)
-	
-	# Add a few extra cryptids for dev/testing (if needed)
-	if player_cryptids_in_play.size() > 0 && temp_team.get_cryptids().size() < 2:
-		var first_cryptid = null
-		for cryptid in player_cryptids_in_play:
-			if cryptid.cryptid.name != defeated_cryptid.cryptid.name and !GameController.globally_defeated_cryptids.has(cryptid.cryptid.name):
-				first_cryptid = cryptid.cryptid
-				break
-		
-		if first_cryptid:
-			for i in range(1, 4):
-				var new_name = first_cryptid.name + " " + str(400 + i)
-				
-				# Skip if already in globally defeated list
-				if GameController.globally_defeated_cryptids.has(new_name):
-					continue
-					
-				var new_cryptid = Cryptid.new()
-				new_cryptid.name = new_name
-				new_cryptid.scene = first_cryptid.scene
-				new_cryptid.icon = first_cryptid.icon
-				new_cryptid.health = 10  # Give it full health
-				
-				# Copy the deck
-				for card in first_cryptid.deck:
-					new_cryptid.deck.append(card.duplicate())
-				
-				temp_team.add_cryptid(new_cryptid)
-				print("Adding extra cryptid to filtered team:", new_cryptid.name)
-	
-	# Find the swap dialog
-	var swap_dialog = get_node_or_null("/root/VitaChrome/UIRoot/SwapCryptidDialog")
-	if swap_dialog:
-		# Open the dialog with the filtered team
-		swap_dialog.open(temp_team, defeated_cryptid.cryptid, player_cryptids_in_play)
-	else:
-		print("ERROR: Could not find SwapCryptidDialog!")
-
+		print("Cryptid defeated:", defeated_cryptid.cryptid.name)
 func remove_defeated_cryptid(defeated_cryptid):
 	# Remove from appropriate lists
 	if defeated_cryptid in player_cryptids_in_play:
@@ -1880,7 +1753,9 @@ func reset_action_modes():
 	pull_action_bool = false
 	heal_action_bool = false
 	stun_action_bool = false
-	poison_action_bool = false  # ADD THIS LINE
+	poison_action_bool = false
+	immobilize_action_bool = false
+	vulnerable_action_bool = false
 	active_movement_card_part = ""
 	active_movement_card = null
 	move_leftover = 0
@@ -1907,7 +1782,6 @@ func create_movement_tween():
 	
 	return current_tween
 
-	
 func create_movement_trail(cryptid_node, path):
 	# Create a new line to show the path being followed
 	var trail = Line2D.new()
@@ -1931,70 +1805,6 @@ func remove_movement_trail():
 		if child.name == "movement_trail":
 			child.queue_free()
 			
-func animate_movement_along_path(cryptid_node, start_pos, end_pos):
-	# If movement is already in progress, don't start another one
-	if movement_in_progress:
-		print("Movement already in progress, ignoring new movement command")
-		return
-	
-	# Ensure cryptid_node is still valid
-	if !is_instance_valid(cryptid_node):
-		print("ERROR: cryptid_node is no longer valid in animate_movement_along_path")
-		return
-	
-	print("Animating movement from", start_pos, "to", end_pos)
-	
-	# Create a temp variable to store the full path
-	var movement_path = vector_path.duplicate()
-	
-	# Convert start_pos and end_pos to Vector2 for consistent comparison
-	var start_pos_v2 = Vector2(start_pos.x, start_pos.y)
-	var end_pos_v2 = Vector2(end_pos.x, end_pos.y)
-	
-	# Ensure we're only using the points we need
-	var needed_path = []
-	for i in range(movement_path.size()):
-		var map_pos = local_to_map(movement_path[i])
-		var path_pos_v2 = Vector2(map_pos.x, map_pos.y)
-		
-		if i == 0 or path_pos_v2 != start_pos_v2:
-			needed_path.append(movement_path[i])
-			
-		# Stop when we reach the destination
-		if path_pos_v2 == end_pos_v2:
-			break
-	
-	# If we don't have at least two points, we can't animate
-	if needed_path.size() < 2:
-		print("WARNING: Not enough path points for animation, using direct movement")
-		needed_path = [map_to_local(start_pos), map_to_local(end_pos)]
-	
-	# Create visual trail for the movement
-	var trail = create_movement_trail(cryptid_node, needed_path)
-	
-	# Create a tween for smooth movement
-	var tween = create_movement_tween()
-	
-	# Disable input during movement to prevent multiple actions
-	set_process_input(false)
-	
-	# Set movement speed (adjust this value to control animation speed)
-	var movement_speed = 0.2  # seconds per hex
-	
-	# Animate through each point in the path
-	for i in range(1, needed_path.size()):
-		var duration = movement_speed
-		tween.tween_property(cryptid_node, "position", needed_path[i], duration)
-	
-	# Add a small bounce at the end for visual feedback
-	tween.tween_property(cryptid_node, "scale", Vector2(1.1, 1.1), 0.1)
-	tween.tween_property(cryptid_node, "scale", Vector2(1.0, 1.0), 0.1)
-	
-	# Fade out the trail when finished
-	tween.tween_callback(Callable(self, "fade_out_movement_effects"))
-
-
-# Fade out movement effects
 func fade_out_movement_effects():
 	# Find all movement visual elements
 	var trail = null
@@ -2024,72 +1834,6 @@ func clean_up_movement_effects():
 		if child.name == "movement_trail" or child.name == "movement_marker":
 			child.queue_free()
 
-func animate_attack(attacker, target):
-	print("Starting attack animation from", attacker, "to", target)
-	
-	# Check if attacker and target are still valid
-	if !is_instance_valid(attacker) or !is_instance_valid(target):
-		print("ERROR: attacker or target is no longer valid in animate_attack")
-		# Reset movement flag
-		movement_in_progress = false
-		return null
-	
-	# If movement is already in progress, don't start another one
-	if movement_in_progress:
-		print("Movement already in progress, ignoring attack animation")
-		return null
-		
-	print("Animation will proceed - movement_in_progress is false")
-	
-	# Store original position
-	var original_position = attacker.position
-	print("Original position:", original_position)
-	
-	# Calculate direction vector from attacker to target
-	var direction = (target.position - original_position).normalized()
-	print("Direction vector:", direction)
-	
-	# Calculate how far to bump
-	var bump_distance = min((target.position - original_position).length() * 0.4, 60.0)
-	var bump_position = original_position + direction * bump_distance
-	print("Bump distance:", bump_distance, "New position:", bump_position)
-	
-	# Set flag to indicate movement is in progress
-	movement_in_progress = true
-	print("Set movement_in_progress to true")
-	
-	# Store the attacker, target, and damage for the callback
-	var attack_data = [target, damage]
-	
-	# Create a tween for the animation
-	var tween = create_tween()
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.set_ease(Tween.EASE_OUT)
-	print("Created new tween:", tween)
-	
-	# Connect finished signal with attack data
-	tween.finished.connect(Callable(self, "_on_attack_tween_finished").bind(attack_data))
-	
-	# Disable input during animation
-	set_process_input(false)
-	print("Disabled input processing")
-	
-	# Start with a quick forward movement
-	print("Starting animation to bump position:", bump_position)
-	tween.tween_property(attacker, "position", bump_position, 0.2)
-	
-	# Then return to the original position with a slight bounce
-	print("Adding return animation to original position:", original_position)
-	tween.tween_property(attacker, "position", original_position, 0.3)
-	
-	# Create attack visual effect
-	create_attack_effect(attacker.position, target.position)
-	
-	return tween
-
-
-
-# Create a visual effect for the attack
 func create_attack_effect(start_pos, end_pos):
 	print("Creating attack visual effects")
 	
@@ -2226,7 +1970,6 @@ func update_movement_indicator(cryptid, movement_left):
 	# Add it to the scene
 	add_child(movement_label)
 	
-	
 func remove_movement_indicator():
 	# Find and remove all nodes with our custom group
 	var indicators = get_tree().get_nodes_in_group("movement_indicators")
@@ -2290,74 +2033,15 @@ func reset_for_new_cryptid():
 	# Make sure the hand is updated correctly
 	hand.update_card_availability()
 
-
 func finish_movement():
-	# Only do something if there's movement in progress
-	if move_action_bool and move_leftover > 0:
-		print("Finishing movement early with " + str(move_leftover) + " movement left")
-		
-		# Clear all movement highlights
-		clear_movement_highlights()
-		
-		# Now we should mark the card as used and discard it
-		if active_movement_card_part == "top":
-			selected_cryptid.cryptid.top_card_played = true
-			
-			# Discard the card now that we're done with it
-			if is_instance_valid(active_movement_card):
-				disable_entire_card(active_movement_card)
-				discard_card(active_movement_card, selected_cryptid.cryptid)
-				
-		elif active_movement_card_part == "bottom":
-			selected_cryptid.cryptid.bottom_card_played = true
-			
-			# Discard the card now that we're done with it
-			if is_instance_valid(active_movement_card):
-				disable_entire_card(active_movement_card)
-				discard_card(active_movement_card, selected_cryptid.cryptid)
-		
-		# Reset movement state
-		move_action_bool = false
-		move_leftover = 0
-		active_movement_card_part = ""
-		active_movement_card = null
-		
-		# Clean up visuals
-		remove_movement_indicator()
-		delete_all_lines()
-		
-		# Re-enable cards
-		enable_all_card_halves()
-		
-		# Update debug display after finishing movement
-		update_all_debug_indicators()
-		
-		# Update UI
-		var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-		if hand_node and hand_node.has_method("update_card_availability"):
-			hand_node.update_card_availability()
-		
-		# NEW: Since movement was voluntarily finished, move to next action
-		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
-			print("Movement finished early, moving to next action")
-			card_dialog.next_action()
-		
-		# Check if turn is complete
-		if selected_cryptid.cryptid.top_card_played and selected_cryptid.cryptid.bottom_card_played:
-			selected_cryptid.cryptid.completed_turn = true
-			
-			# Show only the End Turn button instead of auto-advancing
-			var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
-			if action_menu and action_menu.has_method("show_end_turn_only"):
-				action_menu.show_end_turn_only()
-				
-			var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
-			if game_instructions:
-				game_instructions.text = "Turn complete. Press End Turn to continue."
-	else:
-		print("No movement in progress to finish")
-
-# Helper function to check if a color is yellowish (highlighted)
+	# Simplified movement completion
+	movement_in_progress = false
+	delete_all_indicators()
+	delete_all_lines()
+	update_all_debug_indicators()
+	use_card_part(active_action.card, active_action.card_part)
+	reset_action_state()
+	enable_all_cards()
 func is_yellow_highlighted(color):
 	# Check if the color is predominantly yellow (high red and green, low blue)
 	return color.r > 0.7 and color.g > 0.7 and color.b < 0.5
@@ -2382,143 +2066,11 @@ func print_node_tree(node, indent = 0):
 		print_node_tree(child, indent + 1)
 
 # A simplified version that doesn't rely on specific container names
-func disable_other_cards_simplified(active_card_half):
-	print("\n---------- DISABLE OTHER CARDS ----------")
-	print("Active card half: " + active_card_half)
-	
-	# Get all cards in the hand
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if not hand_node:
-		print("ERROR: Hand node not found!")
-		hand_node = hand  # Try the direct reference
-		if not hand_node:
-			print("ERROR: Hand reference also not valid!")
-			return
-	
-	print("Found hand node: " + str(hand_node))
-	var cards = hand_node.get_children()
-	print("Found " + str(cards.size()) + " children in hand")
-	
-	# Process each card
-	for card in cards:
-		if not is_instance_valid(card):
-			continue
-			
-		# Skip the active card
-		if card == card_dialog:
-			print("Skipping active card")
-			continue
-		
-		print("Processing card: " + str(card))
-		
-		# Disable the appropriate halves based on position
-		var top_containers = []
-		var bottom_containers = []
-		
-		for child in card.get_children():
-			if child is Control:
-				if "top" in child.name.to_lower() or child.position.y < card.size.y / 2:
-					top_containers.append(child)
-				else:
-					bottom_containers.append(child)
-		
-		# Disable the appropriate containers
-		if active_card_half == "top" and top_containers.size() > 0:
-			for container in top_containers:
-				print("Disabling top container: " + container.name)
-				container.modulate = Color(0.5, 0.5, 0.5, 1)
-				if container.get("disabled") != null:
-					container.disabled = true
-				
-		elif active_card_half == "bottom" and bottom_containers.size() > 0:
-			for container in bottom_containers:
-				print("Disabling bottom container: " + container.name)
-				container.modulate = Color(0.5, 0.5, 0.5, 1)
-				if container.get("disabled") != null:
-					container.disabled = true
-	
-	print("---------- END DISABLE OTHER CARDS ----------\n")
-
-# Function to disable other cards based on the exact node structure
 func disable_other_cards_exact(active_card_half):
-	print("\n---------- DISABLE OTHER CARDS (EXACT) ----------")
-	print("Active card half:", active_card_half)
-	
-	# Get all cards in the hand
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if not hand_node:
-		print("ERROR: Hand node not found!")
-		hand_node = hand  # Try the direct reference
-		if not hand_node:
-			print("ERROR: Hand reference also not valid!")
-			return
-	
-	print("Found hand node:", hand_node)
-	var cards = hand_node.get_children()
-	print("Found", cards.size(), "children in hand")
-	
-	# First handle the active card's unused half
-	if is_instance_valid(card_dialog):
-		print("Handling active card:", card_dialog)
-		
-		var vbox = card_dialog.get_node_or_null("VBoxContainer")
-		if vbox:
-			var top_container = vbox.get_node_or_null("TopHalfContainer")
-			var bottom_container = vbox.get_node_or_null("BottomHalfContainer")
-			
-			if active_card_half == "top" and bottom_container:
-				print("Disabling bottom container of active card")
-				bottom_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				if bottom_container.get("disabled") != null:
-					bottom_container.disabled = true
-			elif active_card_half == "bottom" and top_container:
-				print("Disabling top container of active card")
-				top_container.modulate = Color(0.5, 0.5, 0.5, 1)
-				if top_container.get("disabled") != null:
-					top_container.disabled = true
-	
-	# Then process the other cards
-	for card in cards:
-		if not is_instance_valid(card):
-			continue
-			
-		# Skip the active card since we already handled it
-		if card == card_dialog:
-			print("Skipping active card for other processing")
-			continue
-		
-		print("Processing card:", card)
-		
-		# Get the VBoxContainer
-		var vbox = card.get_node_or_null("VBoxContainer")
-		if not vbox:
-			print("WARNING: VBoxContainer not found in card, skipping")
-			continue
-		
-		# Get the top and bottom containers
-		var top_container = vbox.get_node_or_null("TopHalfContainer")
-		var bottom_container = vbox.get_node_or_null("BottomHalfContainer")
-		
-		# Check if we found them
-		if not top_container or not bottom_container:
-			print("WARNING: Half containers not found in card, skipping")
-			continue
-		
-		# Disable the appropriate half
-		if active_card_half == "top" and top_container:
-			print("Disabling top container of other card:", top_container.name)
-			top_container.modulate = Color(0.5, 0.5, 0.5, 1)
-			if top_container.get("disabled") != null:
-				top_container.disabled = true
-		elif active_card_half == "bottom" and bottom_container:
-			print("Disabling bottom container of other card:", bottom_container.name)
-			bottom_container.modulate = Color(0.5, 0.5, 0.5, 1)
-			if bottom_container.get("disabled") != null:
-				bottom_container.disabled = true
-	
-	print("---------- END DISABLE OTHER CARDS (EXACT) ----------\n")
-
-# Function to disable the entire card visually while preserving action economy
+	# Simplified card disabling
+	for card in get_tree().get_nodes_in_group("cards"):
+		if card != active_action.card:
+			card.modulate = Color(0.5, 0.5, 0.5)
 func disable_entire_card(card_dialog):
 	if not is_instance_valid(card_dialog):
 		print("ERROR: Invalid card dialog")
@@ -2551,57 +2103,10 @@ func disable_entire_card(card_dialog):
 		card_dialog.set_meta("fully_disabled", true)
 
 func discard_card(card_dialog, cryptid):
-	if not is_instance_valid(card_dialog) or not card_dialog.card_resource:
-		print("ERROR: Invalid card dialog or card resource")
-		return
-	
-	# Print current state before any changes
-	print("BEFORE DISCARD - Deck size: " + str(cryptid.deck.size()) + ", Discard size: " + str(cryptid.discard.size()))
-	
-	# Get the original card resource
-	var original_card = null
-	if card_dialog.card_resource.original_card != null:
-		original_card = card_dialog.card_resource.original_card
-		print("Using original card reference for discard: " + str(original_card))
-	else:
-		original_card = card_dialog.card_resource
-		print("Using direct card resource for discard: " + str(original_card))
-	
-	# Mark the card as discarded without removing from hand
-	original_card.current_state = Card.CardState.IN_DISCARD
-	print("Marked card state as IN_DISCARD: " + str(original_card.current_state))
-	
-	# Check if card is already in discard pile to avoid duplicates
-	var already_in_discard = false
-	for card in cryptid.discard:
-		if card == original_card:
-			already_in_discard = true
-			print("Card already in discard pile")
-			break
-	
-	# Only add if not already in discard
-	if not already_in_discard:
-		cryptid.discard.push_back(original_card)
-		print("Added card to discard pile")
-	
-	# Do NOT remove the card from the deck array - it stays in both places
-	# but with the state marked as IN_DISCARD
-	
-	# Print current state after changes
-	print("AFTER DISCARD - Deck size: " + str(cryptid.deck.size()) + ", Discard size: " + str(cryptid.discard.size()))
-	
-	# List all cards in discard pile for debugging
-	print("Cards in discard pile:")
-	for i in range(cryptid.discard.size()):
-		print("  Discard card " + str(i) + ": " + str(cryptid.discard[i]))
-	
-	# Force refresh the discard UI to reflect changes
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if hand_node and hand_node.has_method("switch_cryptid_discard_cards"):
-		print("Refreshing discard display")
-		hand_node.switch_cryptid_discard_cards(cryptid)
-
-# Also add this function to force update the discard pile at the end of a turn
+	# Simplified card discard
+	if card_dialog:
+		card_dialog.queue_free()
+		reset_action_state()
 func force_update_discard_display():
 	print("Forcing discard pile update")
 	
@@ -2622,111 +2127,14 @@ func force_update_discard_display():
 			hand_node.update_card_availability()
 
 func reset_card_action_values(cryptid):
-	print("Resetting card action values for " + cryptid.name)
-	
-	# Go through all cards in the cryptid's deck and discard
-	var all_cards = []
-	all_cards.append_array(cryptid.deck)
-	all_cards.append_array(cryptid.discard)
-	
-	for card in all_cards:
-		# Debug info - print current values before reset
-		print("Card before reset:")
-		if card.top_move:
-			for action in card.top_move.actions:
-				if action.action_types == [0]:  # Move action
-					print("  Top move amount: " + str(action.amount))
-		if card.bottom_move:
-			for action in card.bottom_move.actions:
-				if action.action_types == [0]:  # Move action
-					print("  Bottom move amount: " + str(action.amount))
-		
-		# Use EXACTLY ONE method to reset values - prioritize metadata
-		var reset_applied = false
-		
-		# First check if we have stored metadata
-		if card.has_meta("original_move_amount"):
-			var original_amount = card.get_meta("original_move_amount")
-			print("Using stored original amount: " + str(original_amount))
-			
-			# Apply to both top and bottom if they have move actions
-			if card.top_move:
-				for action in card.top_move.actions:
-					if action.action_types == [0]:  # Move action
-						action.amount = original_amount
-						print("Reset top move to " + str(original_amount))
-			
-			if card.bottom_move:
-				for action in card.bottom_move.actions:
-					if action.action_types == [0]:  # Move action
-						action.amount = original_amount
-						print("Reset bottom move to " + str(original_amount))
-			
-			reset_applied = true
-		elif card.has_meta("original_top_move_amount") or card.has_meta("original_bottom_move_amount"):
-			# Use specific top/bottom metadata if available
-			if card.has_meta("original_top_move_amount") and card.top_move:
-				var original_top_amount = card.get_meta("original_top_move_amount")
-				for action in card.top_move.actions:
-					if action.action_types == [0]:  # Move action
-						action.amount = original_top_amount
-						print("Reset top move to " + str(original_top_amount))
-			
-			if card.has_meta("original_bottom_move_amount") and card.bottom_move:
-				var original_bottom_amount = card.get_meta("original_bottom_move_amount")
-				for action in card.bottom_move.actions:
-					if action.action_types == [0]:  # Move action
-						action.amount = original_bottom_amount
-						print("Reset bottom move to " + str(original_bottom_amount))
-			
-			reset_applied = true
-		
-		# Only use base values if metadata wasn't found
-		if not reset_applied:
-			# Try to use base values
-			if card.get("base_move_bottom") != null and card.bottom_move:
-				for action in card.bottom_move.actions:
-					if action.action_types == [0]:
-						action.amount = card.base_move_bottom.amount
-						print("Reset bottom move to hardcoded base value: " + str(card.base_move_bottom.amount))
-			
-			if card.get("base_attack_top") != null and card.top_move:
-				for action in card.top_move.actions:
-					if action.action_types == [0]:
-						action.amount = card.base_attack_top.amount
-						print("Reset top move to hardcoded base value: " + str(card.base_attack_top.amount))
-			
-			# If no other method worked, use hardcoded defaults
-			if not card.get("base_move_bottom") and not card.get("base_attack_top"):
-				if card.top_move:
-					for action in card.top_move.actions:
-						if action.action_types == [0]:
-							action.amount = 3  # Default move value
-							print("Reset top move to default value: 3")
-				
-				if card.bottom_move:
-					for action in card.bottom_move.actions:
-						if action.action_types == [0]:
-							action.amount = 3  # Default move value
-							print("Reset bottom move to default value: 3")
-		
-		# Debug info - print values after reset
-		print("Card after reset:")
-		if card.top_move:
-			for action in card.top_move.actions:
-				if action.action_types == [0]:  # Move action
-					print("  Top move amount: " + str(action.amount))
-		if card.bottom_move:
-			for action in card.bottom_move.actions:
-				if action.action_types == [0]:  # Move action
-					print("  Bottom move amount: " + str(action.amount))
-
-# Function to initialize the debug display
+	# Reset all action values - simplified using generic system
+	reset_action_state()
+	delete_all_indicators()
+	delete_all_lines()
 func setup_debug_display():
 	if not debug_enabled:
 		return
 		
-	print("Setting up A* hex grid debug display")
 	
 	# Clear any existing debug indicators
 	for child in debug_container.get_children():
@@ -2854,92 +2262,6 @@ func cleanup_failed_move_target(target_pos):
 	else:
 		print("Target point was not disabled, no cleanup needed")
 
-func verify_grid_state():
-	print("\n=== VERIFYING GRID STATE ===")
-	
-	# Check if grid manager exists
-	if not grid_manager:
-		print("ERROR: Grid manager is null!")
-		print("=== END VERIFY GRID STATE ===\n")
-		return false
-	
-	var needs_rebuild = false
-	
-	# 1. First check: Verify each cryptid is registered in only one position
-	print("Checking for cryptids registered in multiple positions...")
-	var cryptid_positions = {}
-	
-	for pos in grid_manager.occupied_positions.keys():
-		var entity = grid_manager.occupied_positions[pos]
-		
-		if entity in cryptid_positions:
-			print("ERROR: Entity registered at multiple positions!")
-			print("  Already at:", cryptid_positions[entity])
-			print("  Also at:", pos)
-			needs_rebuild = true
-		else:
-			cryptid_positions[entity] = pos
-	
-	# 2. Second check: Verify positions in grid match actual cryptid positions
-	print("Checking if grid positions match actual cryptid positions...")
-	
-	for cryptid in player_cryptids_in_play:
-		var actual_pos = local_to_map(cryptid.position)
-		var found = false
-		var registered_pos = null
-		
-		for pos in grid_manager.occupied_positions.keys():
-			if grid_manager.occupied_positions[pos] == cryptid:
-				found = true
-				registered_pos = pos
-				break
-		
-		if !found:
-			print("ERROR: Player cryptid", cryptid.cryptid.name, "not registered in grid")
-			print("  Actual position:", actual_pos)
-			needs_rebuild = true
-		elif registered_pos != actual_pos:
-			print("ERROR: Player cryptid", cryptid.cryptid.name, "at wrong position in grid")
-			print("  Registered at:", registered_pos)
-			print("  Actually at:", actual_pos)
-			needs_rebuild = true
-	
-	for cryptid in enemy_cryptids_in_play:
-		var actual_pos = local_to_map(cryptid.position)
-		var found = false
-		var registered_pos = null
-		
-		for pos in grid_manager.occupied_positions.keys():
-			if grid_manager.occupied_positions[pos] == cryptid:
-				found = true
-				registered_pos = pos
-				break
-		
-		if !found:
-			print("ERROR: Enemy cryptid", cryptid.cryptid.name, "not registered in grid")
-			print("  Actual position:", actual_pos)
-			needs_rebuild = true
-		elif Vector2(registered_pos.x, registered_pos.y) != Vector2(actual_pos.x, actual_pos.y):
-			print("ERROR: Enemy cryptid", cryptid.cryptid.name, "at wrong position in grid")
-			print("  Registered at:", registered_pos)
-			print("  Actually at:", actual_pos)
-			needs_rebuild = true
-	
-	# 3. Third check: Use the grid manager's validate function to check grid consistency
-	if !grid_manager.validate_grid_state():
-		print("ERROR: Grid manager internal state inconsistent")
-		needs_rebuild = true
-	
-	# If any issues were found, rebuild the grid state
-	if needs_rebuild:
-		print("Grid state issues found - rebuilding grid state")
-		verify_and_fix_grid_state()
-		return false
-	else:
-		print("Grid state verified - no issues found")
-		print("=== END VERIFY GRID STATE ===\n")
-		return true
-
 func rebuild_grid_state():
 	print("Rebuilding grid state...")
 	
@@ -2988,7 +2310,6 @@ func ensure_cryptid_position_disabled(cryptid_node):
 			walkable_hexes.erase(map_pos)
 
 func debug_team_assignments():
-	print("\n===== DEBUGGING TEAM ASSIGNMENTS =====")
 	
 	print("Player team cryptids:")
 	for i in range(player_cryptids_in_play.size()):
@@ -3005,72 +2326,6 @@ func debug_team_assignments():
 		var cryptid = all_cryptids_in_play[i]
 		print(str(i) + ": " + cryptid.cryptid.name + " at position " + str(local_to_map(cryptid.position)))
 		
-	print("===== END TEAM ASSIGNMENTS DEBUG =====\n")
-
-
-func verify_and_fix_grid_state():
-	print("\n=== VERIFYING AND FIXING GRID STATE ===")
-	
-	if not grid_manager:
-		print("ERROR: Grid manager is null!")
-		print("=== END VERIFY AND FIX GRID STATE ===\n")
-		return
-	
-	# Print current grid state
-	grid_manager.debug_print_occupied_positions()
-	
-	# Create a new dictionary mapping positions to cryptids
-	var actual_positions = {}
-	
-	# Gather all cryptid positions from player_cryptids_in_play
-	for cryptid in player_cryptids_in_play:
-		if is_instance_valid(cryptid):
-			var pos = local_to_map(cryptid.position)
-			actual_positions[pos] = cryptid
-			print("Player cryptid", cryptid.cryptid.name, "at position", pos)
-	
-	# Gather all cryptid positions from enemy_cryptids_in_play
-	for cryptid in enemy_cryptids_in_play:
-		if is_instance_valid(cryptid):
-			var pos = local_to_map(cryptid.position)
-			actual_positions[pos] = cryptid
-			print("Enemy cryptid", cryptid.cryptid.name, "at position", pos)
-	
-	# Clear grid manager state
-	print("Clearing grid manager state...")
-	
-	# First, reset all positions in the movement grid
-	for point_id in a_star_hex_grid.get_point_ids():
-		a_star_hex_grid.set_point_disabled(point_id, false)
-	
-	# Clear the occupied positions dictionary
-	grid_manager.occupied_positions.clear()
-	
-	# Re-register all cryptids with their current positions
-	print("Re-registering all cryptids with grid manager...")
-	
-	for pos in actual_positions:
-		var cryptid = actual_positions[pos]
-		
-		if grid_manager.occupy_hex(pos, cryptid):
-			print("Successfully registered", 
-				  cryptid.cryptid.name if cryptid.get("cryptid") else "Unknown", 
-				  "at position", pos)
-		else:
-			print("ERROR: Failed to register", 
-				  cryptid.cryptid.name if cryptid.get("cryptid") else "Unknown", 
-				  "at position", pos)
-	
-	print("Grid state fixed")
-	
-	# Verify fix
-	print("Verifying fix...")
-	grid_manager.debug_print_occupied_positions()
-	
-	# Update walkable hexes based on grid state
-	rebuild_walkable_hexes()
-	
-	print("=== END VERIFY AND FIX GRID STATE ===\n")
 
 func rebuild_walkable_hexes():
 	print("Rebuilding walkable_hexes array...")
@@ -3188,754 +2443,79 @@ func clear_path_highlights():
 	
 	highlighted_path_hexes.clear()
 
+func clear_heal_preview_hexes():
+	# Clear heal preview tiles
+	for hex in heal_preview_hexes:
+		if hex in original_tile_states:
+			set_cell(hex, 0, original_tile_states[hex], 0)
+	heal_preview_hexes.clear()
+
+func clear_stun_preview_hexes():
+	# Clear stun preview tiles
+	for hex in stun_preview_hexes:
+		if hex in original_tile_states:
+			set_cell(hex, 0, original_tile_states[hex], 0)
+	stun_preview_hexes.clear()
+
+func clear_poison_preview_hexes():
+	# Clear poison preview tiles
+	for hex in poison_preview_hexes:
+		if hex in original_tile_states:
+			set_cell(hex, 0, original_tile_states[hex], 0)
+	poison_preview_hexes.clear()
+
+func clear_immobilize_preview_hexes():
+	# Clear immobilize preview tiles
+	for hex in immobilize_preview_hexes:
+		if hex in original_tile_states:
+			set_cell(hex, 0, original_tile_states[hex], 0)
+	immobilize_preview_hexes.clear()
+
+func clear_vulnerable_preview_hexes():
+	# Clear vulnerable preview tiles
+	for hex in vulnerable_preview_hexes:
+		if hex in original_tile_states:
+			set_cell(hex, 0, original_tile_states[hex], 0)
+	vulnerable_preview_hexes.clear()
+
 func push_action_selected(current_card):
-	# Check if we're in discard mode
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if hand_node and hand_node.in_discard_mode:
-		print("In discard mode, ignoring push action selection")
-		return
-	
-	print("\n---------- PUSH ACTION SELECTED DEBUG ----------")
-	card_dialog = current_card
-	
-	# Reset action states
-	move_action_bool = false
-	attack_action_bool = false
-	push_action_bool = false
-	pull_action_bool = false
-	
-	# Make sure we have the currently selected cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found")
-		return
-	
-	print("Selected cryptid:", selected_cryptid.cryptid.name)
-	
-	# Clear visual indicators
-	delete_all_lines()
-	clear_movement_highlights()
-	
-	# Get the VBoxContainer first
-	var vbox = card_dialog.get_node_or_null("VBoxContainer")
-	if not vbox:
-		print("ERROR: VBoxContainer not found")
-		return
-	
-	# Get the correct container nodes
-	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
-	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
-	
-	if not top_half_container or not bottom_half_container:
-		print("ERROR: Container nodes not found")
-		return
-	
-	# Check which half is currently highlighted
-	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
-	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
-	
-	print("Top half highlighted:", top_highlighted)
-	print("Bottom half highlighted:", bottom_highlighted)
-	
-	# Check for push action and get the actual values from the card
-	var found_push = false
-	
-	if card_dialog.get("card_resource") != null:
-		var card_resource = card_dialog.card_resource
-		
-		# Check top move actions
-		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
-			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
-				for action in card_resource.top_move.actions:
-					if 2 in action.action_types:  # Push action type (2)
-						print("Found push action in top half")
-						push_range = action.range  # How far we can target
-						push_amount = action.amount  # How far to push
-						push_action_bool = true
-						active_movement_card_part = "top"
-						found_push = true
-						print("Push range (targeting):", push_range)
-						print("Push amount (distance):", push_amount)
-						break
-		
-		# Check bottom move actions
-		if not found_push and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
-			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
-				for action in card_resource.bottom_move.actions:
-					if 2 in action.action_types:  # Push action type (2)
-						print("Found push action in bottom half")
-						push_range = action.range  # How far we can target
-						push_amount = action.amount  # How far to push
-						push_action_bool = true
-						active_movement_card_part = "bottom"
-						found_push = true
-						print("Push range (targeting):", push_range)
-						print("Push amount (distance):", push_amount)
-						break
-	
-	if push_action_bool:
-		print("Successfully activated push action")
-		print("Can target cryptids up to", push_range, "hexes away")
-		print("Will push them", push_amount, "hexes")
-		
-		# Show targetable area using tile highlighting
-		show_targetable_area(selected_cryptid.position, push_range, "push")
-		
-		# Store references for handle_push_action
-		if active_movement_card_part == "top":
-			card_dialog.top_half_container = top_half_container
-			disable_other_cards_exact("top")
-		elif active_movement_card_part == "bottom":
-			card_dialog.bottom_half_container = bottom_half_container
-			disable_other_cards_exact("bottom")
-	else:
-		print("ERROR: Failed to activate push action")
-	
-	print("---------- END PUSH ACTION SELECTED DEBUG ----------\n")
-
+	# Use the new generic system
+	card_action_selected("push", current_card)
+	return
 func pull_action_selected(current_card):
-	# Check if we're in discard mode
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if hand_node and hand_node.in_discard_mode:
-		print("In discard mode, ignoring pull action selection")
-		return
-	
-	print("\n---------- PULL ACTION SELECTED DEBUG ----------")
-	card_dialog = current_card
-	
-	# Reset action states
-	move_action_bool = false
-	attack_action_bool = false
-	push_action_bool = false
-	pull_action_bool = false
-	
-	# Make sure we have the currently selected cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found")
-		return
-	
-	print("Selected cryptid:", selected_cryptid.cryptid.name)
-	
-	# Clear visual indicators
-	delete_all_lines()
-	
-	# Get the VBoxContainer first
-	var vbox = card_dialog.get_node_or_null("VBoxContainer")
-	if not vbox:
-		print("ERROR: VBoxContainer not found")
-		return
-	
-	# Get the correct container nodes
-	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
-	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
-	
-	if not top_half_container or not bottom_half_container:
-		print("ERROR: Container nodes not found")
-		return
-	
-	# Check which half is currently highlighted
-	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
-	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
-	
-	print("Top half highlighted:", top_highlighted)
-	print("Bottom half highlighted:", bottom_highlighted)
-	
-	# Check for pull action
-	var found_pull = false
-	
-	if card_dialog.get("card_resource") != null:
-		var card_resource = card_dialog.card_resource
-		
-		# Check top move actions
-		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
-			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
-				for action in card_resource.top_move.actions:
-					if 3 in action.action_types:  # Pull action type (3)
-						print("Found pull action in top half")
-						pull_range = action.range
-						pull_amount = action.amount
-						pull_action_bool = true
-						active_movement_card_part = "top"
-						found_pull = true
-						break
-		
-		# Check bottom move actions
-		if not found_pull and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
-			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
-				for action in card_resource.bottom_move.actions:
-					if 3 in action.action_types:  # Pull action type (3)
-						print("Found pull action in bottom half")
-						pull_range = action.range
-						pull_amount = action.amount
-						pull_action_bool = true
-						active_movement_card_part = "bottom"
-						found_pull = true
-						break
-	
-	if pull_action_bool:
-		print("Successfully activated pull action with range:", pull_range, "and amount:", pull_amount)
-		
-		# Show targetable area
-		var current_pos = local_to_map(selected_cryptid.position)
-		show_targetable_area(selected_cryptid.position, pull_range, "pull")
-		
-		# Store references for handle_pull_action
-		if active_movement_card_part == "top":
-			card_dialog.top_half_container = top_half_container
-			disable_other_cards_exact("top")
-		elif active_movement_card_part == "bottom":
-			card_dialog.bottom_half_container = bottom_half_container
-			disable_other_cards_exact("bottom")
-	else:
-		print("ERROR: Failed to activate pull action")
-	
-	print("---------- END PULL ACTION SELECTED DEBUG ----------\n")
-
+	# Use the new generic system
+	card_action_selected("pull", current_card)
+	return
 func show_targetable_area(center_pos, max_range, action_type = "attack"):
-	var center_hex = local_to_map(center_pos)
+	# Simplified implementation - just show indicators at valid positions
+	var positions = []
+	for offset in get_cells_within_range(center_pos, max_range):
+		var hex_pos = center_pos + offset
+		if hex_pos in walkable_hexes:
+			positions.append(hex_pos)
 	
-	# Clear any existing indicators and highlights
-	delete_all_indicators()
+	for pos in positions:
+		var indicator_color = Color.YELLOW if action_type == "friendly" else Color.RED
+		create_hex_indicator(pos, indicator_color)
+
+func show_push_pull_range(center_pos, max_range, action_type):
+	# Clear any existing highlights first
 	clear_movement_highlights()
 	
-	# For heal, show friendly targets in range
-	if action_type == "heal":
-		is_showing_movement_range = true
-		
-		# Get the healer's team - now using arrays instead of parent
-		var healer_is_player = selected_cryptid in player_cryptids_in_play
-		
-		print("Showing heal targets for", selected_cryptid.cryptid.name, "is player team:", healer_is_player)
-		
-		# Show all positions within range first
-		for point_id in a_star_hex_attack_grid.get_point_ids():
-			var hex_pos = a_star_hex_attack_grid.get_point_position(point_id)
-			var hex_pos_i = Vector2i(int(hex_pos.x), int(hex_pos.y))
-			
-			# Calculate path using attack grid
-			var path = a_star_hex_attack_grid.get_id_path(
-				a_star_hex_attack_grid.get_closest_point(center_hex),
-				a_star_hex_attack_grid.get_closest_point(hex_pos_i)
-			)
-			
-			# Check if within range
-			if path.size() > 0 and path.size() - 1 <= max_range:
-				# Store original tile state
-				original_tile_states[hex_pos_i] = get_cell_atlas_coords(hex_pos_i)
-				
-				# Set base range indicator with a subtle green tint
-				set_cell(hex_pos_i, 0, move_range_tile_id, 2)
-		
-		# Now highlight friendly cryptids that are valid targets
-		for cryptid in all_cryptids_in_play:
-			if not is_instance_valid(cryptid):
-				continue
-				
-			var cryptid_pos = local_to_map(cryptid.position)
-			
-			# Check if this is a friendly cryptid using arrays
-			var is_friendly = is_friendly_target(selected_cryptid, cryptid)
-			
-			if is_friendly:
-				# Check if in range
-				var path = a_star_hex_attack_grid.get_id_path(
-					a_star_hex_attack_grid.get_closest_point(center_hex),
-					a_star_hex_attack_grid.get_closest_point(cryptid_pos)
-				)
-				
-				if path.size() > 0 and path.size() - 1 <= max_range:
-					# Use green highlight for valid heal targets
-					set_cell(cryptid_pos, 0, Vector2i(2, 0), 3)  # Alternative tile 3 for heal targets
-					print("Valid heal target:", cryptid.cryptid.name, "at:", cryptid_pos)
-					
-					# Add a green indicator above the cryptid
-					var indicator = ColorRect.new()
-					indicator.color = Color(0, 1, 0, 0.4)  # Semi-transparent green
-					indicator.size = Vector2(30, 30)
-					indicator.position = map_to_local(cryptid_pos) - Vector2(15, 15)
-					indicator.name = "heal_indicator"
-					indicator.z_index = 10
-					add_child(indicator)
+	# Get all hexes within range using the working method
+	var positions = get_hexes_within_range(center_pos, max_range)
 	
-	# For stun, show enemy targets in range
-	elif action_type == "stun":
-		is_showing_movement_range = true
+	# Highlight each possible target hex
+	for hex_pos in positions:
+		# Store original tile state for restoration
+		if not original_tile_states.has(hex_pos):
+			original_tile_states[hex_pos] = get_cell_atlas_coords(hex_pos)
 		
-		print("Showing stun targets for", selected_cryptid.cryptid.name)
-		
-		# Show all positions within range first
-		for point_id in a_star_hex_attack_grid.get_point_ids():
-			var hex_pos = a_star_hex_attack_grid.get_point_position(point_id)
-			var hex_pos_i = Vector2i(int(hex_pos.x), int(hex_pos.y))
-			
-			# Calculate path using attack grid
-			var path = a_star_hex_attack_grid.get_id_path(
-				a_star_hex_attack_grid.get_closest_point(center_hex),
-				a_star_hex_attack_grid.get_closest_point(hex_pos_i)
-			)
-			
-			# Check if within range
-			if path.size() > 0 and path.size() - 1 <= max_range:
-				# Store original tile state
-				original_tile_states[hex_pos_i] = get_cell_atlas_coords(hex_pos_i)
-				
-				# Set base range indicator with a yellow tint
-				set_cell(hex_pos_i, 0, move_range_tile_id, 2)
-		
-		# Now highlight enemy cryptids that are valid targets
-		for cryptid in all_cryptids_in_play:
-			if not is_instance_valid(cryptid):
-				continue
-				
-			var cryptid_pos = local_to_map(cryptid.position)
-			
-			# Check if this is an enemy cryptid
-			var is_enemy = not is_friendly_target(selected_cryptid, cryptid)
-			
-			if is_enemy:
-				# Check if in range
-				var path = a_star_hex_attack_grid.get_id_path(
-					a_star_hex_attack_grid.get_closest_point(center_hex),
-					a_star_hex_attack_grid.get_closest_point(cryptid_pos)
-				)
-				
-				if path.size() > 0 and path.size() - 1 <= max_range:
-					# Use yellow highlight for valid stun targets
-					set_cell(cryptid_pos, 0, Vector2i(2, 0), 4)  # Alternative tile 4 for stun targets
-					print("Valid stun target:", cryptid.cryptid.name, "at:", cryptid_pos)
-					
-					# Add a yellow indicator above the cryptid
-					var indicator = ColorRect.new()
-					indicator.color = Color(1, 1, 0, 0.4)  # Semi-transparent yellow
-					indicator.size = Vector2(30, 30)
-					indicator.position = map_to_local(cryptid_pos) - Vector2(15, 15)
-					indicator.name = "stun_indicator"
-					indicator.z_index = 10
-					add_child(indicator)
-	elif action_type == "poison":
-		is_showing_movement_range = true
-		
-		print("Showing poison targets for", selected_cryptid.cryptid.name)
-		
-		# Show all positions within range first
-		for point_id in a_star_hex_attack_grid.get_point_ids():
-			var hex_pos = a_star_hex_attack_grid.get_point_position(point_id)
-			var hex_pos_i = Vector2i(int(hex_pos.x), int(hex_pos.y))
-			
-			# Calculate path using attack grid
-			var path = a_star_hex_attack_grid.get_id_path(
-				a_star_hex_attack_grid.get_closest_point(center_hex),
-				a_star_hex_attack_grid.get_closest_point(hex_pos_i)
-			)
-			
-			# Check if within range
-			if path.size() > 0 and path.size() - 1 <= max_range:
-				# Store original tile state
-				original_tile_states[hex_pos_i] = get_cell_atlas_coords(hex_pos_i)
-				
-				# Set base range indicator with a purple tint
-				set_cell(hex_pos_i, 0, move_range_tile_id, 2)
-		
-		# Now highlight enemy cryptids that are valid targets
-		for cryptid in all_cryptids_in_play:
-			if not is_instance_valid(cryptid):
-				continue
-				
-			var cryptid_pos = local_to_map(cryptid.position)
-			
-			# Check if this is an enemy cryptid
-			var is_enemy = not is_friendly_target(selected_cryptid, cryptid)
-			
-			if is_enemy:
-				# Check if in range
-				var path = a_star_hex_attack_grid.get_id_path(
-					a_star_hex_attack_grid.get_closest_point(center_hex),
-					a_star_hex_attack_grid.get_closest_point(cryptid_pos)
-				)
-				
-				if path.size() > 0 and path.size() - 1 <= max_range:
-					# Use purple highlight for valid poison targets
-					set_cell(cryptid_pos, 0, Vector2i(2, 0), 6)  # Alternative tile 6 for poison targets
-					print("Valid poison target:", cryptid.cryptid.name, "at:", cryptid_pos)
-					
-					# Add a purple indicator above the cryptid
-					var indicator = ColorRect.new()
-					indicator.color = Color(0.5, 0, 0.5, 0.4)  # Semi-transparent purple
-					indicator.size = Vector2(30, 30)
-					indicator.position = map_to_local(cryptid_pos) - Vector2(15, 15)
-					indicator.name = "poison_indicator"
-					indicator.z_index = 10
-					add_child(indicator)
-	# For push/pull, use movement-style tile highlighting
-	elif action_type == "push" or action_type == "pull":
-		is_showing_movement_range = true
-		
-		# Store all hexes within range first
-		var hexes_in_range = []
-		
-		# Check all positions on the map
-		for point_id in a_star_hex_attack_grid.get_point_ids():
-			var hex_pos = a_star_hex_attack_grid.get_point_position(point_id)
-			
-			# Convert to Vector2i for comparison
-			var hex_pos_i = Vector2i(int(hex_pos.x), int(hex_pos.y))
-			
-			# Skip the center position
-			if hex_pos_i == center_hex:
-				continue
-			
-			# Calculate path using attack grid
-			var path = a_star_hex_attack_grid.get_id_path(
-				a_star_hex_attack_grid.get_closest_point(center_hex),
-				a_star_hex_attack_grid.get_closest_point(hex_pos_i)
-			)
-			
-			# Check if within range
-			if path.size() > 0 and path.size() - 1 <= max_range:
-				hexes_in_range.append(hex_pos_i)
-				
-				# Store original tile state
-				original_tile_states[hex_pos_i] = get_cell_atlas_coords(hex_pos_i)
-				
-				# Set base range indicator
-				set_cell(hex_pos_i, 0, move_range_tile_id, 2)
-		
-		# Now highlight cryptids that are valid targets
-		for cryptid in all_cryptids_in_play:
-			var cryptid_pos = local_to_map(cryptid.position)
-			
-			# Skip the caster
-			if cryptid == selected_cryptid:
-				continue
-			
-			# Check if this cryptid is in range
-			if cryptid_pos in hexes_in_range:
-				# Use a different tile to show this is a valid target
-				set_cell(cryptid_pos, 0, path_tile_id, 1)
-				print("Valid target found at:", cryptid_pos)
-	else:
-		# Original attack indicator code
-		var center_cube = axial_to_cube(center_hex)
-		
-		for x in range(-max_range, max_range + 1):
-			for y in range(max(-max_range, -x - max_range), min(max_range, -x + max_range) + 1):
-				var z = -x - y
-				var cube = Vector3i(center_cube.x + x, center_cube.y + y, center_cube.z + z)
-				var hex = cube_to_axial(cube)
-				
-				# Check if hex is valid
-				if get_cell_atlas_coords(hex) != Vector2i(-1, -1):
-					# Draw indicator
-					var indicator = ColorRect.new()
-					indicator.color = Color(1, 0, 0, 0.3)  # Red for attack
-					indicator.size = Vector2(10, 10)
-					indicator.position = map_to_local(hex) - Vector2(5, 5)
-					indicator.name = "attack_indicator"
-					add_child(indicator)
+		# Use alt tile 2 for push/pull range indicator (same as move range)
+		set_cell(hex_pos, 0, move_range_tile_id, 2)
 
-func calculate_push_direction(pusher_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
-	var diff = target_pos - pusher_pos
-	
-	# Debug output
-	print("Calculate push direction - pusher_pos:", pusher_pos, "target_pos:", target_pos, "diff:", diff)
-	
-	# Get the correct directions based on target's row
-	var hex_directions = []
-	if target_pos.y % 2 == 0:  # Even row
-		hex_directions = [
-			Vector2i(-1, -1),  # Northwest
-			Vector2i(0, -1),   # Northeast
-			Vector2i(1, 0),    # East
-			Vector2i(0, 1),    # Southeast
-			Vector2i(-1, 1),   # Southwest
-			Vector2i(-1, 0)    # West
-		]
-	else:  # Odd row
-		hex_directions = [
-			Vector2i(0, -1),   # Northwest
-			Vector2i(1, -1),   # Northeast
-			Vector2i(1, 0),    # East
-			Vector2i(1, 1),    # Southeast
-			Vector2i(0, 1),    # Southwest
-			Vector2i(-1, 0)    # West
-		]
-	
-	var best_direction = Vector2i(0, 0)
-	var best_dot = -999999.0
-	
-	for dir in hex_directions:
-		var dot = float(diff.x * dir.x + diff.y * dir.y)
-		
-		print("Testing direction", dir, "dot product:", dot)
-		
-		if dot > best_dot:
-			best_dot = dot
-			best_direction = dir
-	
-	print("Push direction from", pusher_pos, "to", target_pos, "is", best_direction)
-	return best_direction
 
-# Replace the calculate_pull_direction function in tile_map_controller.gd
-func calculate_pull_direction(puller_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
-	var diff = puller_pos - target_pos
-	
-	# Debug output
-	print("Calculate pull direction - puller_pos:", puller_pos, "target_pos:", target_pos, "diff:", diff)
-	
-	# Get the correct directions based on target's row
-	var hex_directions = []
-	if target_pos.y % 2 == 0:  # Even row
-		hex_directions = [
-			Vector2i(-1, -1),  # Northwest
-			Vector2i(0, -1),   # Northeast
-			Vector2i(1, 0),    # East
-			Vector2i(0, 1),    # Southeast
-			Vector2i(-1, 1),   # Southwest
-			Vector2i(-1, 0)    # West
-		]
-	else:  # Odd row
-		hex_directions = [
-			Vector2i(0, -1),   # Northwest
-			Vector2i(1, -1),   # Northeast
-			Vector2i(1, 0),    # East
-			Vector2i(1, 1),    # Southeast
-			Vector2i(0, 1),    # Southwest
-			Vector2i(-1, 0)    # West
-		]
-	
-	var best_direction = Vector2i(0, 0)
-	var best_dot = -999999.0
-	
-	for dir in hex_directions:
-		var dot = float(diff.x * dir.x + diff.y * dir.y)
-		
-		print("Testing direction", dir, "dot product:", dot)
-		
-		if dot > best_dot:
-			best_dot = dot
-			best_direction = dir
-	
-	print("Pull direction from", target_pos, "towards", puller_pos, "is", best_direction)
-	return best_direction
 
-func calculate_push_destination(start_pos: Vector2i, push_direction: Vector2i, amount: int) -> Vector2i:
-	var pusher_pos = local_to_map(selected_cryptid.position)
-	
-	print("\n=== CALCULATE PUSH DESTINATION (Vector + A*) ===")
-	print("Starting at:", start_pos)
-	print("Pusher at:", pusher_pos)
-	print("Push amount:", amount)
-	
-	# Calculate the push vector (from pusher through target)
-	var push_vector = start_pos - pusher_pos
-	print("Push vector:", push_vector)
-	
-	# Normalize and extend the vector to find destination
-	var push_distance = push_vector.length()
-	if push_distance == 0:
-		return start_pos
-		
-	# Calculate destination point along the push line
-	var normalized_vector = Vector2(push_vector) / push_distance
-	var destination_vector = Vector2(start_pos) + (normalized_vector * amount)
-	var destination = Vector2i(round(destination_vector.x), round(destination_vector.y))
-	
-	print("Ideal destination:", destination)
-	
-	# CRITICAL: Temporarily enable the target's current position in the grid
-	var target_point = a_star_hex_grid.get_closest_point(start_pos)
-	var was_disabled = a_star_hex_grid.is_point_disabled(target_point)
-	if was_disabled:
-		print("Temporarily enabling target's position for pathfinding")
-		a_star_hex_grid.set_point_disabled(target_point, false)
-	
-	# Use A* to find path from current position to destination
-	var path = a_star_hex_grid.get_id_path(
-		a_star_hex_grid.get_closest_point(start_pos),
-		a_star_hex_grid.get_closest_point(destination)
-	)
-	
-	# Restore the target position's disabled state
-	if was_disabled:
-		a_star_hex_grid.set_point_disabled(target_point, true)
-	
-	print("A* path found with", path.size(), "points")
-	
-	# If no path found, try to at least move in the right direction
-	if path.size() <= 1:
-		print("No direct path found, trying fallback")
-		# Find the furthest valid hex in the push direction
-		for i in range(amount, 0, -1):
-			var test_pos = start_pos + Vector2i(round(normalized_vector.x * i), round(normalized_vector.y * i))
-			if is_valid_push_position(test_pos):
-				return test_pos
-		return start_pos
-	
-	# Take steps along the path (up to 'amount' steps)
-	var step_index = min(amount, path.size() - 1)
-	var final_point_id = path[step_index]
-	var final_position = a_star_hex_grid.get_point_position(final_point_id)
-	var final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
-	
-	print("Moving", step_index, "steps along path to:", final_pos_i)
-	
-	return final_pos_i
-
-	
-func calculate_pull_destination(start_pos: Vector2i, pull_direction: Vector2i, amount: int) -> Vector2i:
-	var puller_pos = local_to_map(selected_cryptid.position)
-	
-	print("\n=== CALCULATE PULL DESTINATION (Using A*) ===")
-	print("Starting at:", start_pos)
-	print("Puller at:", puller_pos)
-	print("Pull amount:", amount)
-	
-	# Check if already at puller position
-	if start_pos == puller_pos:
-		print("Already at puller position")
-		return start_pos
-	
-	# Check hex distance
-	var hex_distance = cube_distance(axial_to_cube(start_pos), axial_to_cube(puller_pos))
-	print("Hex distance between target and puller:", hex_distance)
-	
-	if hex_distance <= 1:
-		print("Already adjacent to puller")
-		return start_pos
-	
-	# CRITICAL: Temporarily enable BOTH positions in the grid
-	var target_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	var target_was_disabled = a_star_hex_grid.is_point_disabled(target_point)
-	if target_was_disabled:
-		print("Temporarily enabling target's position")
-		a_star_hex_grid.set_point_disabled(target_point, false)
-	
-	var puller_point = a_star_hex_grid.get_closest_point(puller_pos, true)
-	var puller_was_disabled = a_star_hex_grid.is_point_disabled(puller_point)
-	if puller_was_disabled:
-		print("Temporarily enabling puller's position")
-		a_star_hex_grid.set_point_disabled(puller_point, false)
-	
-	# Use A* to find the path from target to puller
-	var path = a_star_hex_grid.get_id_path(target_point, puller_point)
-	
-	print("A* path found with", path.size(), "points")
-	
-	# Restore the disabled states
-	if target_was_disabled:
-		a_star_hex_grid.set_point_disabled(target_point, true)
-	if puller_was_disabled:
-		a_star_hex_grid.set_point_disabled(puller_point, true)
-	
-	# Check path validity
-	if path.size() == 0:
-		print("ERROR: No path found")
-		return start_pos
-	
-	if path.size() == 1:
-		print("Already at destination")
-		return start_pos
-	
-	# Calculate how many steps we can actually take
-	var max_steps = min(amount, path.size() - 1)
-	
-	# CRITICAL: Don't pull onto the puller's position
-	# Check if the final position would be the puller
-	var final_point_id = path[max_steps]
-	var final_position = a_star_hex_grid.get_point_position(final_point_id)
-	var final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
-	
-	if final_pos_i == puller_pos:
-		print("Would pull onto puller - stopping one hex short")
-		# Go one step less
-		if max_steps > 1:
-			final_point_id = path[max_steps - 1]
-			final_position = a_star_hex_grid.get_point_position(final_point_id)
-			final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
-			print("Stopping at:", final_pos_i)
-		else:
-			print("Can't pull - would land on puller")
-			return start_pos
-	
-	print("Moving", max_steps, "steps along path to:", final_pos_i)
-	
-	return final_pos_i
-	
-func calculate_single_step_pull(puller_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
-	print("\n=== CALCULATE SINGLE STEP PULL ===")
-	print("From position:", target_pos, "toward puller at:", puller_pos)
-	
-	# Get all valid ADJACENT neighbors only
-	var neighbors = get_hex_neighbors(target_pos)
-	print("Adjacent neighbors:", neighbors)
-	
-	# If we're already adjacent (hex distance 1), we can't pull closer
-	var current_hex_distance = cube_distance(axial_to_cube(target_pos), axial_to_cube(puller_pos))
-	if current_hex_distance <= 1:
-		print("  Already adjacent to puller, cannot pull closer")
-		return Vector2i(0, 0)
-	
-	var best_neighbor = target_pos
-	var min_deviation = 999999.0
-	
-	# Convert to world positions for accurate line calculation
-	var puller_world = map_to_local(puller_pos)
-	var target_world = map_to_local(target_pos)
-	
-	# Calculate the line direction in world space (from target to puller)
-	var line_direction = (puller_world - target_world).normalized()
-	
-	# ONLY check the adjacent neighbors
-	for neighbor in neighbors:
-		# Verify this is actually adjacent (should always be true, but let's be safe)
-		var step = neighbor - target_pos
-		if abs(step.x) > 1 or abs(step.y) > 1:
-			print("  ERROR: Non-adjacent neighbor in list!", neighbor, "step:", step)
-			continue
-		
-		if not is_valid_push_position(neighbor):
-			print("    Neighbor", neighbor, "is occupied")
-			continue
-		
-		# Don't pull onto the puller's position
-		if neighbor == puller_pos:
-			print("    Neighbor is puller position, skipping")
-			continue
-		
-		# Get world position of this neighbor
-		var neighbor_world = map_to_local(neighbor)
-		
-		# Project this neighbor onto the line from target to puller
-		var to_neighbor = neighbor_world - target_world
-		var line_length = to_neighbor.dot(line_direction)
-		var projected_point = target_world + line_direction * line_length
-		
-		# Calculate how far this neighbor deviates from the ideal line
-		var deviation = (neighbor_world - projected_point).length()
-		
-		print("  Neighbor", neighbor, "deviation from line:", deviation)
-		
-		# Choose the neighbor with minimum deviation from the straight line
-		if deviation < min_deviation:
-			min_deviation = deviation
-			best_neighbor = neighbor
-			print("    New best neighbor with deviation:", deviation)
-	
-	if best_neighbor == target_pos:
-		print("  No valid neighbor found")
-		return Vector2i(0, 0)
-	
-	var final_direction = best_neighbor - target_pos
-	print("  Final direction vector:", final_direction, "magnitude:", final_direction.length())
-	
-	# Final safety check
-	if abs(final_direction.x) > 1 or abs(final_direction.y) > 1:
-		print("  ERROR: Direction vector is not to adjacent hex!", final_direction)
-		return Vector2i(0, 0)
-	
-	return final_direction
-# Get all six neighbors of a hex position
 func get_hex_neighbors(pos: Vector2i) -> Array[Vector2i]:
 	var neighbors: Array[Vector2i] = []
 	var directions = []
@@ -3965,62 +2545,6 @@ func get_hex_neighbors(pos: Vector2i) -> Array[Vector2i]:
 	
 	return neighbors
 	
-	
-func calculate_single_step_push(pusher_pos: Vector2i, target_pos: Vector2i) -> Vector2i:
-	print("Calculating push step from", target_pos, "away from", pusher_pos)
-	
-	# Get the hex neighbors for the current position
-	var neighbors = get_hex_neighbors(target_pos)
-	
-	var best_neighbor = target_pos
-	var min_deviation = 999999.0
-	
-	# Convert to world positions for accurate line calculation
-	var pusher_world = map_to_local(pusher_pos)
-	var target_world = map_to_local(target_pos)
-	
-	# Calculate the line direction in world space
-	var line_direction = (target_world - pusher_world).normalized()
-	print("  World space line direction:", line_direction)
-	
-	for neighbor in neighbors:
-		if not is_valid_push_position(neighbor):
-			continue
-		
-		# Get world position of this neighbor
-		var neighbor_world = map_to_local(neighbor)
-		
-		# Project this neighbor onto the line from pusher through target
-		var to_neighbor = neighbor_world - pusher_world
-		var line_length = to_neighbor.dot(line_direction)
-		var projected_point = pusher_world + line_direction * line_length
-		
-		# Calculate how far this neighbor deviates from the ideal line
-		var deviation = (neighbor_world - projected_point).length()
-		
-		# Only consider neighbors that are further from the pusher
-		var pusher_dist = (neighbor_world - pusher_world).length()
-		var current_dist = (target_world - pusher_world).length()
-		
-		if pusher_dist <= current_dist:
-			print("  Neighbor", neighbor, "not further away")
-			continue
-		
-		print("  Neighbor", neighbor, "deviation from line:", deviation)
-		
-		# Choose the neighbor with minimum deviation from the straight line
-		if deviation < min_deviation:
-			min_deviation = deviation
-			best_neighbor = neighbor
-			print("    New best neighbor with deviation:", deviation)
-	
-	if best_neighbor == target_pos:
-		print("  No valid push direction found")
-		return Vector2i(0, 0)
-	
-	print("  Best neighbor:", best_neighbor)
-	return best_neighbor - target_pos
-
 func is_valid_push_position(pos: Vector2i) -> bool:
 	# Check if position is on the map
 	if get_cell_atlas_coords(pos) == Vector2i(-1, -1):
@@ -4034,139 +2558,6 @@ func is_valid_push_position(pos: Vector2i) -> bool:
 			return false
 	
 	return true
-
-func animate_push(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
-	print("Animating push from", start_pos, "to", end_pos)
-	
-	# If no movement needed, return
-	if start_pos == end_pos:
-		print("No movement needed for push")
-		return
-	
-	# Update grid state - enable old position
-	var old_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	a_star_hex_grid.set_point_disabled(old_point, false)
-	print("Enabled old position:", start_pos)
-	
-	# Update grid state - disable new position
-	var new_point = a_star_hex_grid.get_closest_point(end_pos, true)
-	a_star_hex_grid.set_point_disabled(new_point, true)
-	print("Disabled new position:", end_pos)
-	
-	# Update walkable hexes
-	if not start_pos in walkable_hexes:
-		walkable_hexes.append(start_pos)
-	walkable_hexes.erase(end_pos)
-	
-	# Convert positions to world coordinates
-	var start_world = map_to_local(start_pos)
-	var end_world = map_to_local(end_pos)
-	
-	# Create push effect
-	create_push_effect(selected_cryptid.position, target_cryptid.position)
-	
-	# Create a tween for smooth movement
-	var tween = create_tween()
-	tween.set_trans(Tween.TRANS_BACK)
-	tween.set_ease(Tween.EASE_OUT)
-	
-	# Move the target cryptid
-	tween.tween_property(target_cryptid, "position", end_world, 0.4)
-	
-	# Add a small bounce effect
-	tween.tween_property(target_cryptid, "scale", Vector2(0.9, 0.9), 0.1)
-	tween.tween_property(target_cryptid, "scale", Vector2(1.0, 1.0), 0.1)
-	
-	# IMPORTANT: Update grid manager if it exists
-	if grid_manager:
-		# Move the entity in the grid manager
-		if not grid_manager.move_entity(start_pos, end_pos, target_cryptid):
-			print("WARNING: Grid manager failed to update entity position")
-			# Try to fix it manually
-			grid_manager.occupied_positions.erase(start_pos)
-			grid_manager.occupied_positions[end_pos] = target_cryptid
-	
-	# Force verify the grid state after movement
-	await tween.finished
-	
-	# Double-check that the new position is disabled
-	var verify_point = a_star_hex_grid.get_closest_point(end_pos, true)
-	if not a_star_hex_grid.is_point_disabled(verify_point):
-		print("WARNING: End position not properly disabled, fixing...")
-		a_star_hex_grid.set_point_disabled(verify_point, true)
-	
-	# Update debug display
-	update_all_debug_indicators()
-	
-	# Verify the grid state
-	verify_grid_state()
-
-func animate_pull(target_cryptid, start_pos: Vector2i, end_pos: Vector2i):
-	print("Animating pull from", start_pos, "to", end_pos)
-	
-	# If no movement needed, return
-	if start_pos == end_pos:
-		print("No movement needed for pull")
-		return
-	
-	# Update grid state - enable old position
-	var old_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	a_star_hex_grid.set_point_disabled(old_point, false)
-	print("Enabled old position:", start_pos)
-	
-	# Update grid state - disable new position
-	var new_point = a_star_hex_grid.get_closest_point(end_pos, true)
-	a_star_hex_grid.set_point_disabled(new_point, true)
-	print("Disabled new position:", end_pos)
-	
-	# Update walkable hexes
-	if not start_pos in walkable_hexes:
-		walkable_hexes.append(start_pos)
-	walkable_hexes.erase(end_pos)
-	
-	# Convert positions to world coordinates
-	var start_world = map_to_local(start_pos)
-	var end_world = map_to_local(end_pos)
-	
-	# Create pull effect
-	create_pull_effect(selected_cryptid.position, target_cryptid.position)
-	
-	# Create a tween for smooth movement
-	var tween = create_tween()
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	
-	# Move the target cryptid
-	tween.tween_property(target_cryptid, "position", end_world, 0.4)
-	
-	# Add a small wobble effect
-	tween.tween_property(target_cryptid, "rotation", 0.1, 0.1)
-	tween.tween_property(target_cryptid, "rotation", -0.1, 0.1)
-	tween.tween_property(target_cryptid, "rotation", 0.0, 0.1)
-	
-	# IMPORTANT: Update grid manager if it exists
-	if grid_manager:
-		# Move the entity in the grid manager
-		if not grid_manager.move_entity(start_pos, end_pos, target_cryptid):
-			print("WARNING: Grid manager failed to update entity position")
-			# Try to fix it manually
-			grid_manager.occupied_positions.erase(start_pos)
-			grid_manager.occupied_positions[end_pos] = target_cryptid
-	
-	# Force verify the grid state after movement
-	await tween.finished
-	
-	# Double-check that the new position is disabled
-	var verify_point = a_star_hex_grid.get_closest_point(end_pos, true)
-	if not a_star_hex_grid.is_point_disabled(verify_point):
-		print("WARNING: End position not properly disabled, fixing...")
-		a_star_hex_grid.set_point_disabled(verify_point, true)
-	
-	# Update debug display
-	update_all_debug_indicators()
-	
-	# Verify the grid state
-	verify_grid_state()
 
 func create_push_effect(start_pos, end_pos):
 	# Create a visual line for the push
@@ -4297,374 +2688,20 @@ func update_ui_after_action():
 			action_menu.update_menu_visibility(selected_cryptid.cryptid)
 			action_menu.show()
 
-func show_push_pull_preview(target_cryptid, target_pos: Vector2i):
-	print("\n=== PUSH/PULL PREVIEW DEBUG ===")
-	print("Target position:", target_pos)
-	print("Selected cryptid position:", local_to_map(selected_cryptid.position))
-	
-	# Clear previous preview
-	for hex in push_pull_preview_hexes:
-		if hex in original_tile_states:
-			if is_showing_movement_range:
-				# Check if there's a cryptid at this position to determine tile
-				var has_cryptid = false
-				for cryptid in all_cryptids_in_play:
-					if local_to_map(cryptid.position) == hex:
-						has_cryptid = true
-						break
-				set_cell(hex, 0, path_tile_id if has_cryptid else move_range_tile_id, 1 if has_cryptid else 2)
-			else:
-				set_cell(hex, 0, original_tile_states[hex], 0)
-	push_pull_preview_hexes.clear()
-	
-	var current_pos = local_to_map(selected_cryptid.position)
-	
-	# Calculate the actual path that will be taken
-	var preview_positions = []
-	
-	if push_action_bool:
-		print("Calculating PUSH preview for amount:", push_amount)
-		preview_positions = calculate_push_preview_path(target_pos, push_amount)
-		
-		# Also calculate what the actual push would do for comparison
-		var test_direction = calculate_push_direction(current_pos, target_pos)
-		var test_destination = calculate_push_destination(target_pos, test_direction, push_amount)
-		print("Preview shows path:", preview_positions)
-		print("Actual push would go to:", test_destination)
-		
-	elif pull_action_bool:
-		print("Calculating PULL preview for amount:", pull_amount)
-		preview_positions = calculate_pull_preview_path(target_pos, pull_amount)
-		
-		# Also calculate what the actual pull would do for comparison
-		var test_direction = calculate_pull_direction(current_pos, target_pos)
-		var test_destination = calculate_pull_destination(target_pos, test_direction, pull_amount)
-		print("Preview shows path:", preview_positions)
-		print("Actual pull would go to:", test_destination)
-	
-	# Show the preview tiles
-	for i in range(preview_positions.size()):
-		var preview_pos = preview_positions[i]
-		push_pull_preview_hexes.append(preview_pos)
-		
-		# Use the pull path tile: Atlas (2, 0), Alternative 4
-		set_cell(preview_pos, 0, Vector2i(2, 0), 4)
-	
-	print("=== END PREVIEW DEBUG ===\n")
-	
-# Calculate the preview path for push
-func calculate_push_preview_path(start_pos: Vector2i, amount: int) -> Array[Vector2i]:
-	var pusher_pos = local_to_map(selected_cryptid.position)
-	
-	print("Preview push from", start_pos, "away from", pusher_pos, "for", amount, "steps")
-	
-	# Calculate the push vector (from pusher through target)
-	var push_vector = start_pos - pusher_pos
-	var push_distance = push_vector.length()
-	
-	if push_distance == 0:
-		return []
-		
-	# Calculate destination point along the push line
-	var normalized_vector = Vector2(push_vector) / push_distance
-	var destination_vector = Vector2(start_pos) + (normalized_vector * amount)
-	var destination = Vector2i(round(destination_vector.x), round(destination_vector.y))
-	
-	# Temporarily enable the target's current position
-	var target_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	var was_disabled = a_star_hex_grid.is_point_disabled(target_point)
-	if was_disabled:
-		a_star_hex_grid.set_point_disabled(target_point, false)
-	
-	# Use A* to find path
-	var path = a_star_hex_grid.get_id_path(
-		a_star_hex_grid.get_closest_point(start_pos),
-		a_star_hex_grid.get_closest_point(destination)
-	)
-	
-	# Restore the disabled state
-	if was_disabled:
-		a_star_hex_grid.set_point_disabled(target_point, true)
-	
-	if path.size() <= 1:
-		return []
-	
-	# Build the preview path - include ALL hexes along the path up to the destination
-	var preview_path: Array[Vector2i] = []
-	
-	# Determine how far we actually move (limited by amount)
-	var actual_steps = min(amount, path.size() - 1)
-	
-	# Add ALL hexes from start to the actual destination
-	for i in range(1, actual_steps + 1):
-		var point_pos = a_star_hex_grid.get_point_position(path[i])
-		preview_path.append(Vector2i(int(point_pos.x), int(point_pos.y)))
-	
-	print("Preview path (all hexes):", preview_path)
-	return preview_path
-
-# Calculate the preview path for pull
-func calculate_pull_preview_path(start_pos: Vector2i, amount: int) -> Array[Vector2i]:
-	var puller_pos = local_to_map(selected_cryptid.position)
-	
-	print("Preview pull from", start_pos, "toward", puller_pos, "for", amount, "steps")
-	
-	# CRITICAL: Temporarily enable BOTH positions
-	var target_point = a_star_hex_grid.get_closest_point(start_pos, true)
-	var target_was_disabled = a_star_hex_grid.is_point_disabled(target_point)
-	if target_was_disabled:
-		a_star_hex_grid.set_point_disabled(target_point, false)
-	
-	var puller_point = a_star_hex_grid.get_closest_point(puller_pos, true)
-	var puller_was_disabled = a_star_hex_grid.is_point_disabled(puller_point)
-	if puller_was_disabled:
-		a_star_hex_grid.set_point_disabled(puller_point, false)
-	
-	# Use A* to find the path
-	var path = a_star_hex_grid.get_id_path(target_point, puller_point)
-	
-	# Restore the disabled states
-	if target_was_disabled:
-		a_star_hex_grid.set_point_disabled(target_point, true)
-	if puller_was_disabled:
-		a_star_hex_grid.set_point_disabled(puller_point, true)
-	
-	if path.size() <= 1:
-		return []
-	
-	# Calculate how many steps we can actually take
-	var max_steps = min(amount, path.size() - 1)
-	
-	# Check if the final position would be the puller
-	var final_point_id = path[max_steps]
-	var final_position = a_star_hex_grid.get_point_position(final_point_id)
-	var final_pos_i = Vector2i(int(final_position.x), int(final_position.y))
-	
-	# Adjust if we would land on the puller
-	var actual_steps = max_steps
-	if final_pos_i == puller_pos:
-		print("Preview: Would pull onto puller - showing one hex short")
-		actual_steps = max_steps - 1
-		if actual_steps < 1:
-			print("Preview: Can't pull without landing on puller")
-			return []
-	
-	# Build the preview path
-	var preview_path: Array[Vector2i] = []
-	
-	for i in range(1, actual_steps + 1):
-		var point_pos = a_star_hex_grid.get_point_position(path[i])
-		preview_path.append(Vector2i(int(point_pos.x), int(point_pos.y)))
-	
-	print("Preview path:", preview_path)
-	return preview_path
-
 func heal_action_selected(current_card):
-	# Check if we're in discard mode
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if hand_node and hand_node.in_discard_mode:
-		print("In discard mode, ignoring heal action selection")
-		return
-	
-	print("\n---------- HEAL ACTION SELECTED DEBUG ----------")
-	card_dialog = current_card
-	
-	# Reset action states
-	move_action_bool = false
-	attack_action_bool = false
-	push_action_bool = false
-	pull_action_bool = false
-	heal_action_bool = false
-	
-	# Make sure we have the currently selected cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found")
-		return
-	
-	print("Selected cryptid:", selected_cryptid.cryptid.name)
-	
-	# Clear visual indicators
-	delete_all_lines()
-	clear_movement_highlights()
-	
-	# Get the VBoxContainer first
-	var vbox = card_dialog.get_node_or_null("VBoxContainer")
-	if not vbox:
-		print("ERROR: VBoxContainer not found")
-		return
-	
-	# Get the correct container nodes
-	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
-	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
-	
-	if not top_half_container or not bottom_half_container:
-		print("ERROR: Container nodes not found")
-		return
-	
-	# Check which half is currently highlighted
-	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
-	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
-	
-	print("Top half highlighted:", top_highlighted)
-	print("Bottom half highlighted:", bottom_highlighted)
-	
-	# Check for heal action and get the actual values from the card
-	var found_heal = false
-	
-	if card_dialog.get("card_resource") != null:
-		var card_resource = card_dialog.card_resource
-		
-		# Check top move actions
-		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
-			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
-				for action in card_resource.top_move.actions:
-					if 4 in action.action_types:  # Heal action type (4, since RANGED_ATTACK was removed)
-						print("Found heal action in top half")
-						heal_range = action.range
-						heal_amount = action.amount
-						heal_action_bool = true
-						active_movement_card_part = "top"
-						found_heal = true
-						print("Heal range:", heal_range)
-						print("Heal amount:", heal_amount)
-						break
-		
-		# Check bottom move actions
-		if not found_heal and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
-			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
-				for action in card_resource.bottom_move.actions:
-					if 4 in action.action_types:  # Heal action type (4)
-						print("Found heal action in bottom half")
-						heal_range = action.range
-						heal_amount = action.amount
-						heal_action_bool = true
-						active_movement_card_part = "bottom"
-						found_heal = true
-						print("Heal range:", heal_range)
-						print("Heal amount:", heal_amount)
-						break
-	
-	if heal_action_bool:
-		print("Successfully activated heal action")
-		print("Can heal targets up to", heal_range, "hexes away")
-		print("Will heal for", heal_amount, "health")
-		
-		# Debug: Print all cryptid positions
-		print("\n--- Current cryptid positions ---")
-		for cryptid in all_cryptids_in_play:
-			if is_instance_valid(cryptid):
-				var hex_pos = local_to_map(cryptid.position)
-				var team = cryptid.get_parent().name if cryptid.get_parent() else "Unknown"
-				print(cryptid.cryptid.name, "at", hex_pos, "on team", team)
-		print("--- End cryptid positions ---\n")
-		
-		# Show targetable area using tile highlighting
-		show_targetable_area(selected_cryptid.position, heal_range, "heal")
-		
-		# Store references for handle_heal_action
-		if active_movement_card_part == "top":
-			card_dialog.top_half_container = top_half_container
-			disable_other_cards_exact("top")
-		elif active_movement_card_part == "bottom":
-			card_dialog.bottom_half_container = bottom_half_container
-			disable_other_cards_exact("bottom")
-	else:
-		print("ERROR: Failed to activate heal action")
-	
-	print("---------- END HEAL ACTION SELECTED DEBUG ----------\n")
+	# Use the new generic system
+	card_action_selected("heal", current_card)
+	return
 
-func handle_heal_action(pos_clicked):
-	print("\n---------- HANDLE HEAL ACTION DEBUG ----------")
-	
-	# Get the healing cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found for heal")
-		return false
-	
-	print("Healer:", selected_cryptid.cryptid.name, "at position:", local_to_map(selected_cryptid.position))
-	
-	# Get the target cryptid at the clicked position - use simple function
-	var target_cryptid = get_cryptid_at_position_simple(pos_clicked)
-	print("Target position:", pos_clicked)
-	print("Target cryptid:", target_cryptid.cryptid.name if target_cryptid else "None")
-	
-	if target_cryptid == null:
-		print("No valid target at the selected position")
-		print("Looking for self-heal possibility...")
-		
-		# Check if the player clicked near their own cryptid (self-heal attempt)
-		var healer_pos = local_to_map(selected_cryptid.position)
-		var click_world_pos = map_to_local(pos_clicked)
-		var healer_world_pos = map_to_local(healer_pos)
-		var distance_to_self = click_world_pos.distance_to(healer_world_pos)
-		
-		print("Healer at:", healer_pos, "Click at:", pos_clicked, "Distance:", distance_to_self)
-		
-		if distance_to_self < 60:  # Within 60 pixels, likely trying to self-heal
-			print("Close to self - attempting self-heal")
-			target_cryptid = selected_cryptid
-		else:
-			# Reset action state
-			heal_action_bool = false
-			active_movement_card_part = ""
-			active_movement_card = null
-			delete_all_lines()
-			delete_all_indicators()
-			clear_movement_highlights()
-			return false
-	
-	# Check if target is friendly (same team or self)
-	if not is_friendly_target(selected_cryptid, target_cryptid):
-		print("Invalid target: Can only heal friendly cryptids")
-		return false
-	
-	# Calculate distance to target
-	var current_pos = local_to_map(selected_cryptid.position)
-	var target_pos = local_to_map(target_cryptid.position)
-	
-	# Use attack grid for pathfinding (since healing ignores obstacles for range)
-	var path = a_star_hex_attack_grid.get_id_path(
-		a_star_hex_attack_grid.get_closest_point(current_pos),
-		a_star_hex_attack_grid.get_closest_point(target_pos)
-	)
-	
-	if path.size() == 0:
-		print("ERROR: No valid path to target")
-		return false
-	
-	var distance = path.size() - 1
-	print("Distance to target:", distance, "Heal range:", heal_range)
-	
-	if distance <= heal_range:
-		print("Target is within range")
-		
-		# Animate the heal
-		animate_heal(selected_cryptid, target_cryptid)
-		
-		# Apply the healing
-		apply_healing(target_cryptid, heal_amount)
-		
-		# Clean up action state
-		heal_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		clear_movement_highlights()
-		
-		# NEW: Heal complete, notify card to move to next action
-		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
-			print("Heal complete, moving to next action")
-			card_dialog.next_action()
-		
-		return true
-	else:
-		print("Target out of range")
-		return false
-	
-	print("---------- END HANDLE HEAL ACTION DEBUG ----------\n")
+func immobilize_action_selected(current_card):
+	# Use the new generic system
+	card_action_selected("immobilize", current_card)
+	return
+
+func vulnerable_action_selected(current_card):
+	# Use the new generic system
+	card_action_selected("vulnerable", current_card)
+	return
 
 func is_friendly_target(caster, target) -> bool:
 	# Self-healing is allowed
@@ -4710,111 +2747,6 @@ func apply_healing(target_cryptid, heal_amount):
 	else:
 		print("ERROR: Could not find health bar on target cryptid!")
 
-func animate_heal(caster, target):
-	print("Starting heal animation from", caster, "to", target)
-	
-	# Create healing visual effect
-	create_heal_effect(caster.position, target.position)
-	
-	# If movement is already in progress, don't start another one
-	if movement_in_progress:
-		print("Movement already in progress, skipping caster animation")
-		return
-	
-	# Set flag to indicate movement is in progress
-	movement_in_progress = true
-	
-	# Simple scale animation for the caster
-	var tween = create_tween()
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	
-	# Pulse the caster
-	tween.tween_property(caster, "scale", Vector2(1.2, 1.2), 0.2)
-	tween.tween_property(caster, "scale", Vector2(1.0, 1.0), 0.2)
-	
-	# Pulse the target with a glow effect
-	var original_modulate = target.modulate
-	tween.tween_property(target, "modulate", Color(0.5, 1, 0.5, 1), 0.3)
-	tween.tween_property(target, "modulate", original_modulate, 0.3)
-	
-	# Connect finished signal
-	tween.finished.connect(Callable(self, "_on_heal_tween_finished"))
-	
-	# Disable input during animation
-	set_process_input(false)
-
-# Add heal tween finished callback:
-func _on_heal_tween_finished():
-	print("Heal animation finished")
-	movement_in_progress = false
-	set_process_input(true)
-
-# Add heal visual effect:
-func create_heal_effect(start_pos, end_pos):
-	print("Creating heal visual effects")
-	
-	# Create a line for the heal - green color
-	var heal_line = Line2D.new()
-	heal_line.width = 6
-	heal_line.default_color = Color(0, 1, 0, 0.8)  # Green for healing
-	heal_line.add_point(start_pos)
-	heal_line.add_point(end_pos)
-	heal_line.name = "heal_effect"
-	heal_line.z_index = 10
-	add_child(heal_line)
-	
-	# Create healing sparkles at target
-	var heal_particles = ColorRect.new()
-	heal_particles.color = Color(0, 1, 0, 0.6)
-	heal_particles.size = Vector2(40, 40)
-	heal_particles.position = end_pos - Vector2(20, 20)
-	heal_particles.name = "heal_effect"
-	heal_particles.z_index = 10
-	add_child(heal_particles)
-	
-	# Animate the heal effects
-	var effect_tween = create_tween()
-	effect_tween.set_parallel(true)
-	
-	# Pulse the line
-	effect_tween.tween_property(heal_line, "width", 12, 0.2)
-	effect_tween.tween_property(heal_line, "width", 3, 0.3)
-	
-	# Expand and fade the particles
-	effect_tween.tween_property(heal_particles, "scale", Vector2(2.0, 2.0), 0.5)
-	effect_tween.tween_property(heal_particles, "modulate", Color(0, 1, 0, 0), 0.5)
-	
-	# Clean up after animation
-	effect_tween.tween_callback(Callable(self, "clean_up_heal_effects"))
-
-# Add cleanup function for heal effects:
-func clean_up_heal_effects():
-	for child in get_children():
-		if child.name == "heal_effect":
-			child.queue_free()
-
-# Add heal preview function:
-func show_heal_preview(target_cryptid, target_pos: Vector2i):
-	# Clear previous preview
-	for hex in push_pull_preview_hexes:
-		if hex in original_tile_states:
-			if is_showing_movement_range:
-				# Check if there's a cryptid at this position
-				var has_cryptid = false
-				for cryptid in all_cryptids_in_play:
-					if local_to_map(cryptid.position) == hex:
-						has_cryptid = true
-						break
-				set_cell(hex, 0, path_tile_id if has_cryptid else move_range_tile_id, 1 if has_cryptid else 2)
-			else:
-				set_cell(hex, 0, original_tile_states[hex], 0)
-	push_pull_preview_hexes.clear()
-	
-	# Show green preview tile at target position
-	push_pull_preview_hexes.append(target_pos)
-	set_cell(target_pos, 0, Vector2i(2, 0), 3)  # Use alternative tile 3 for heal preview
-
 func get_cryptid_at_position_simple(hex_pos) -> Node:
 	print("Searching for cryptid at position:", hex_pos)
 	
@@ -4852,786 +2784,34 @@ func get_cryptid_at_position_simple(hex_pos) -> Node:
 	return null
 
 func stun_action_selected(current_card):
-	# Check if we're in discard mode
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if hand_node and hand_node.in_discard_mode:
-		print("In discard mode, ignoring stun action selection")
-		return
+	# Use the new generic system
+	card_action_selected("stun", current_card)
+	return
 	
-	print("\n---------- STUN ACTION SELECTED DEBUG ----------")
-	card_dialog = current_card
-	
-	# Reset action states
-	move_action_bool = false
-	attack_action_bool = false
-	push_action_bool = false
-	pull_action_bool = false
-	heal_action_bool = false
-	stun_action_bool = false
-	
-	# Make sure we have the currently selected cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found")
-		return
-	
-	print("Selected cryptid:", selected_cryptid.cryptid.name)
-	
-	# Clear visual indicators
-	delete_all_lines()
-	clear_movement_highlights()
-	
-	# Get the VBoxContainer first
-	var vbox = card_dialog.get_node_or_null("VBoxContainer")
-	if not vbox:
-		print("ERROR: VBoxContainer not found")
-		return
-	
-	# Get the correct container nodes
-	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
-	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
-	
-	if not top_half_container or not bottom_half_container:
-		print("ERROR: Container nodes not found")
-		return
-	
-	# Check which half is currently highlighted
-	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
-	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
-	
-	print("Top half highlighted:", top_highlighted)
-	print("Bottom half highlighted:", bottom_highlighted)
-	
-	# Check for stun action and get the actual values from the card
-	var found_stun = false
-	
-	if card_dialog.get("card_resource") != null:
-		var card_resource = card_dialog.card_resource
-		
-		# Check top move actions
-		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
-			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
-				for action in card_resource.top_move.actions:
-					if 5 in action.action_types:  # Stun action type (5)
-						print("Found stun action in top half")
-						stun_range = action.range
-						stun_amount = action.amount
-						stun_action_bool = true
-						active_movement_card_part = "top"
-						found_stun = true
-						print("Stun range:", stun_range)
-						print("Stun amount:", stun_amount)
-						break
-		
-		# Check bottom move actions
-		if not found_stun and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
-			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
-				for action in card_resource.bottom_move.actions:
-					if 5 in action.action_types:  # Stun action type (5)
-						print("Found stun action in bottom half")
-						stun_range = action.range
-						stun_amount = action.amount
-						stun_action_bool = true
-						active_movement_card_part = "bottom"
-						found_stun = true
-						print("Stun range:", stun_range)
-						print("Stun amount:", stun_amount)
-						break
-	
-	if stun_action_bool:
-		print("Successfully activated stun action")
-		print("Can stun targets up to", stun_range, "hexes away")
-		
-		# Show targetable area using tile highlighting
-		show_targetable_area(selected_cryptid.position, stun_range, "stun")
-		
-		# Store references for handle_stun_action
-		if active_movement_card_part == "top":
-			card_dialog.top_half_container = top_half_container
-			disable_other_cards_exact("top")
-		elif active_movement_card_part == "bottom":
-			card_dialog.bottom_half_container = bottom_half_container
-			disable_other_cards_exact("bottom")
-	else:
-		print("ERROR: Failed to activate stun action")
-	
-	print("---------- END STUN ACTION SELECTED DEBUG ----------\n")
-
-func handle_stun_action(pos_clicked):
-	print("\n---------- HANDLE STUN ACTION DEBUG ----------")
-	
-	# Get the stunning cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found for stun")
-		return false
-	
-	print("Stunner:", selected_cryptid.cryptid.name, "at position:", local_to_map(selected_cryptid.position))
-	
-	# Get the target cryptid at the clicked position
-	var target_cryptid = get_cryptid_at_position_simple(pos_clicked)
-	print("Target position:", pos_clicked)
-	print("Target cryptid:", target_cryptid.cryptid.name if target_cryptid else "None")
-	
-	if target_cryptid == null:
-		print("No valid target at the selected position")
-		# Reset action state
-		stun_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		clear_movement_highlights()
-		return false
-	
-	# Check if target is an enemy (can't stun allies)
-	var is_enemy = not is_friendly_target(selected_cryptid, target_cryptid)
-	if not is_enemy:
-		print("Invalid target: Can only stun enemy cryptids")
-		return false
-	
-	# Calculate distance to target
-	var current_pos = local_to_map(selected_cryptid.position)
-	var target_pos = local_to_map(target_cryptid.position)
-	
-	# Use attack grid for pathfinding
-	var path = a_star_hex_attack_grid.get_id_path(
-		a_star_hex_attack_grid.get_closest_point(current_pos),
-		a_star_hex_attack_grid.get_closest_point(target_pos)
-	)
-	
-	if path.size() == 0:
-		print("ERROR: No valid path to target")
-		return false
-	
-	var distance = path.size() - 1
-	print("Distance to target:", distance, "Stun range:", stun_range)
-	
-	if distance <= stun_range:
-		print("Target is within range")
-		
-		# Apply the stun
-		if target_cryptid.has_node("StatusEffectManager"):
-			var status_manager = target_cryptid.get_node("StatusEffectManager")
-			status_manager.add_status_effect(StatusEffect.EffectType.STUN, stun_amount)
-			print("Applied stun to", target_cryptid.cryptid.name)
-		else:
-			print("ERROR: Target has no StatusEffectManager")
-			return false
-		
-		# Animate the stun
-		animate_stun(selected_cryptid, target_cryptid)
-		
-		# Clean up action state
-		stun_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		clear_movement_highlights()
-		
-		# NEW: Stun complete, notify card to move to next action
-		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
-			print("Stun complete, moving to next action")
-			card_dialog.next_action()
-		
-		return true
-	else:
-		print("Target out of range")
-		return false
-	
-	print("---------- END HANDLE STUN ACTION DEBUG ----------\n")
-
-
-func animate_stun(caster, target):
-	print("Starting stun animation from", caster, "to", target)
-	
-	# Create stun visual effect
-	create_stun_effect(caster.position, target.position)
-	
-	# If movement is already in progress, don't start another one
-	if movement_in_progress:
-		print("Movement already in progress, skipping caster animation")
-		return
-	
-	# Set flag to indicate movement is in progress
-	movement_in_progress = true
-	
-	# Simple scale animation for the caster
-	var tween = create_tween()
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	
-	# Quick cast animation
-	tween.tween_property(caster, "scale", Vector2(1.15, 1.15), 0.15)
-	tween.tween_property(caster, "scale", Vector2(1.0, 1.0), 0.15)
-	
-	# Stun the target with a spin effect
-	tween.tween_property(target, "rotation", TAU, 0.5)
-	tween.tween_property(target, "rotation", 0.0, 0.0)
-	
-	# Flash yellow on the target
-	var original_modulate = target.modulate
-	tween.tween_property(target, "modulate", Color.YELLOW, 0.2)
-	tween.tween_property(target, "modulate", original_modulate, 0.2)
-	
-	# Connect finished signal
-	tween.finished.connect(Callable(self, "_on_stun_tween_finished"))
-	
-	# Disable input during animation
-	set_process_input(false)
-
-# Add stun tween finished callback:
-func _on_stun_tween_finished():
-	print("Stun animation finished")
-	movement_in_progress = false
-	set_process_input(true)
-
-# Add stun visual effect:
-func create_stun_effect(start_pos, end_pos):
-	print("Creating stun visual effects")
-	
-	# Try to find which cryptid is being stunned based on position
-	var stunned_cryptid = null
-	for cryptid in all_cryptids_in_play:
-		if is_instance_valid(cryptid):
-			var cryptid_pos = cryptid.position
-			if cryptid_pos.distance_to(end_pos) < 10:  # Within 10 pixels
-				stunned_cryptid = cryptid
-				break
-	
-	if not stunned_cryptid:
-		print("ERROR: Could not find cryptid at stun target position")
-		return
-	
-	# Create array to track this stun's effects
-	var effect_nodes = []
-	
-	# Create a line for the stun - yellow color (this stays on the map)
-	var stun_line = Line2D.new()
-	stun_line.width = 6
-	stun_line.default_color = Color(1, 1, 0, 0.8)  # Yellow for stun
-	stun_line.add_point(start_pos)
-	stun_line.add_point(end_pos)
-	stun_line.name = "stun_effect_line"
-	stun_line.z_index = 10
-	add_child(stun_line)  # Line stays on the map
-	effect_nodes.append(stun_line)
-	
-	# Create a container for the rotating stars AS A CHILD OF THE CRYPTID
-	var star_container = Node2D.new()
-	star_container.name = "stun_effect_stars"
-	star_container.position = Vector2(0, -30)  # Position above the cryptid (local coordinates)
-	star_container.z_index = 10
-	stunned_cryptid.add_child(star_container)  # ADD TO CRYPTID, NOT MAP
-	effect_nodes.append(star_container)
-	
-	# Create stun stars
-	for i in range(3):
-		var star = ColorRect.new()
-		star.color = Color(1, 1, 0, 0.8)  # Yellow
-		star.size = Vector2(20, 20)
-		var angle = (TAU / 3) * i
-		var offset = Vector2(cos(angle), sin(angle)) * 30
-		star.position = offset - Vector2(10, 10)
-		star.name = "stun_star_" + str(i)
-		star_container.add_child(star)
-	
-	# Rotate the entire star container
-	var star_tween = create_tween()
-	star_tween.set_loops()
-	star_tween.tween_property(star_container, "rotation", TAU, 2.0).as_relative()
-	
-	# Store the tween reference
-	star_container.set_meta("rotation_tween", star_tween)
-	
-	# Store the effect nodes for this cryptid
-	active_stun_effects[stunned_cryptid] = effect_nodes
-	print("Stored stun effects for cryptid:", stunned_cryptid.cryptid.name)
-	
-	# Animate the initial stun effect (just the line pulse, not cleanup)
-	var effect_tween = create_tween()
-	effect_tween.set_parallel(true)
-	
-	# Pulse the line
-	effect_tween.tween_property(stun_line, "width", 12, 0.2)
-	effect_tween.tween_property(stun_line, "width", 3, 0.3)
-	
-	# Fade out ONLY the line after a moment, keep the stars
-	effect_tween.tween_property(stun_line, "modulate:a", 0.0, 0.5).set_delay(0.5)
-
-# Update the clean_up_stun_effects function to handle the new structure
-func clean_up_stun_effects():
-	# Clean up line effects on the map
-	for child in get_children():
-		if child.name == "stun_effect_line":
-			child.queue_free()
-	
-	# Clean up star effects on cryptids
-	for cryptid in active_stun_effects:
-		if is_instance_valid(cryptid):
-			# Find and remove the star container from the cryptid
-			for child in cryptid.get_children():
-				if child.name == "stun_effect_stars":
-					# Stop the rotation tween if it exists
-					if child.has_meta("rotation_tween"):
-						var tween = child.get_meta("rotation_tween")
-						if tween and is_instance_valid(tween):
-							tween.kill()
-					child.queue_free()
-	
-	# Clear the tracking dictionary
-	active_stun_effects.clear()
-
-func show_stun_preview(target_cryptid, target_pos: Vector2i):
-	# Clear previous preview
-	for hex in push_pull_preview_hexes:
-		if hex in original_tile_states:
-			if is_showing_movement_range:
-				# Check if there's a cryptid at this position
-				var has_cryptid = false
-				for cryptid in all_cryptids_in_play:
-					if local_to_map(cryptid.position) == hex:
-						has_cryptid = true
-						break
-				# Restore appropriate tile based on whether it has a cryptid
-				if has_cryptid and not is_friendly_target(selected_cryptid, get_cryptid_at_position_simple(hex)):
-					set_cell(hex, 0, Vector2i(2, 0), 4)  # Stun target tile
-				else:
-					set_cell(hex, 0, move_range_tile_id, 2)  # Range tile
-			else:
-				set_cell(hex, 0, original_tile_states[hex], 0)
-	push_pull_preview_hexes.clear()
-	
-	# Show yellow preview tile at target position
-	push_pull_preview_hexes.append(target_pos)
-	set_cell(target_pos, 0, Vector2i(2, 0), 5)  # Use alternative tile 5 for stun preview hover
-
-# Also add a function to remove stun effect when the status is removed
-func remove_stun_effect_from_cryptid(cryptid):
-	if cryptid in active_stun_effects:
-		var effect_nodes = active_stun_effects[cryptid]
-		for node in effect_nodes:
-			if is_instance_valid(node):
-				# Stop any tweens
-				if node.has_meta("rotation_tween"):
-					var tween = node.get_meta("rotation_tween")
-					if tween and is_instance_valid(tween):
-						tween.kill()
-				node.queue_free()
-		active_stun_effects.erase(cryptid)
-
-func clean_up_cryptid_status_visuals(cryptid_node):
-	print("Cleaning up all status visuals for cryptid:", cryptid_node.cryptid.name)
-	
-	# First try the specific stun cleanup
-	clean_up_cryptid_stun_effects(cryptid_node)
-	
-	# Get the world position of the cryptid
-	var cryptid_world_pos = cryptid_node.position
-	
-	# Clean up any effects that might be near this cryptid
-	for child in get_children():
-		if child.name in ["stun_effect", "stun_effect_line", "stun_effect_stars", "heal_effect", "attack_effect", "push_effect", "pull_effect"]:
-			# Check if this effect is near the cryptid (within 100 pixels)
-			if child.position.distance_to(cryptid_world_pos) < 100:
-				if child.has_meta("rotation_tween"):
-					var tween = child.get_meta("rotation_tween")
-					if tween and tween.is_valid():
-						tween.kill()
-				child.queue_free()
-				print("Removed", child.name, "near cryptid")
-
-func debug_find_all_stun_effects():
-	print("\n=== SEARCHING FOR ALL STUN EFFECTS ===")
-	var total_found = 0
-	
-	# Check tracked effects
-	print("Checking tracked stun effects...")
-	print("Active stun effects tracked:", active_stun_effects.size())
-	for key in active_stun_effects:
-		var effect_nodes = active_stun_effects[key]
-		print("  Key:", key, "has", effect_nodes.size(), "effect nodes")
-		for node in effect_nodes:
-			if is_instance_valid(node):
-				print("    - Valid node:", node.name)
-				total_found += 1
-			else:
-				print("    - Invalid node (already freed)")
-	
-	# Check tile map children
-	print("Checking tile map children...")
-	for child in get_children():
-		if "stun" in child.name.to_lower():
-			print("  Found:", child.name, "at", child.position)
-			total_found += 1
-	
-	# Check all cryptids
-	print("Checking all cryptids...")
-	for cryptid in all_cryptids_in_play:
-		if is_instance_valid(cryptid):
-			print("  Checking cryptid:", cryptid.cryptid.name)
-			for child in cryptid.get_children():
-				if "stun" in child.name.to_lower():
-					print("    Found:", child.name)
-					total_found += 1
-	
-	# Check line container
-	if line_container:
-		print("Checking line container...")
-		for child in line_container.get_children():
-			if "stun" in child.name.to_lower():
-				print("  Found:", child.name)
-				total_found += 1
-	
-	print("Total stun effects found:", total_found)
-	print("=== END STUN EFFECT SEARCH ===\n")
-	
-	return total_found
-
-func clean_up_cryptid_stun_effects(cryptid_node):
-	print("Cleaning up stun effects for specific cryptid:", cryptid_node.cryptid.name)
-	
-	# Check if we have effects tracked for this cryptid
-	if cryptid_node in active_stun_effects:
-		var effect_nodes = active_stun_effects[cryptid_node]
-		for node in effect_nodes:
-			if is_instance_valid(node):
-				# Kill any tweens
-				if node.has_meta("rotation_tween"):
-					var tween = node.get_meta("rotation_tween")
-					if tween and tween.is_valid():
-						tween.kill()
-				node.queue_free()
-		
-		# Remove from tracking
-		active_stun_effects.erase(cryptid_node)
-		print("Removed tracked stun effects for cryptid")
-	
-	# Also check by position
-	var cryptid_pos = cryptid_node.position
-	for pos in active_stun_effects:
-		if pos is Vector2 and pos.distance_to(cryptid_pos) < 50:
-			var effect_nodes = active_stun_effects[pos]
-			for node in effect_nodes:
-				if is_instance_valid(node):
-					if node.has_meta("rotation_tween"):
-						var tween = node.get_meta("rotation_tween")
-						if tween and tween.is_valid():
-							tween.kill()
-					node.queue_free()
-			active_stun_effects.erase(pos)
-			print("Removed stun effects by position")
-
-
 func poison_action_selected(current_card):
-	# Check if we're in discard mode
-	var hand_node = get_node("/root/VitaChrome/UIRoot/Hand")
-	if hand_node and hand_node.in_discard_mode:
-		print("In discard mode, ignoring poison action selection")
-		return
-	
-	print("\n---------- POISON ACTION SELECTED DEBUG ----------")
-	card_dialog = current_card
-	
-	# Reset action states
-	move_action_bool = false
-	attack_action_bool = false
-	push_action_bool = false
-	pull_action_bool = false
-	heal_action_bool = false
-	stun_action_bool = false
-	poison_action_bool = false
-	
-	# Make sure we have the currently selected cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found")
-		return
-	
-	print("Selected cryptid:", selected_cryptid.cryptid.name)
-	
-	# Clear visual indicators
-	delete_all_lines()
-	clear_movement_highlights()
-	
-	# Get the VBoxContainer first
-	var vbox = card_dialog.get_node_or_null("VBoxContainer")
-	if not vbox:
-		print("ERROR: VBoxContainer not found")
-		return
-	
-	# Get the correct container nodes
-	var top_half_container = vbox.get_node_or_null("TopHalfContainer")
-	var bottom_half_container = vbox.get_node_or_null("BottomHalfContainer")
-	
-	if not top_half_container or not bottom_half_container:
-		print("ERROR: Container nodes not found")
-		return
-	
-	# Check which half is currently highlighted
-	var top_highlighted = is_yellow_highlighted(top_half_container.modulate)
-	var bottom_highlighted = is_yellow_highlighted(bottom_half_container.modulate)
-	
-	print("Top half highlighted:", top_highlighted)
-	print("Bottom half highlighted:", bottom_highlighted)
-	
-	# Check for poison action and get the actual values from the card
-	var found_poison = false
-	
-	if card_dialog.get("card_resource") != null:
-		var card_resource = card_dialog.card_resource
-		
-		# Check top move actions
-		if top_highlighted and not selected_cryptid.cryptid.top_card_played:
-			if card_resource.get("top_move") != null and card_resource.top_move.get("actions") != null:
-				for action in card_resource.top_move.actions:
-					if 7 in action.action_types:  # Poison action type (7)
-						print("Found poison action in top half")
-						poison_range = action.range
-						poison_amount = action.amount
-						poison_action_bool = true
-						active_movement_card_part = "top"
-						found_poison = true
-						print("Poison range:", poison_range)
-						print("Poison amount:", poison_amount)
-						break
-		
-		# Check bottom move actions
-		if not found_poison and bottom_highlighted and not selected_cryptid.cryptid.bottom_card_played:
-			if card_resource.get("bottom_move") != null and card_resource.bottom_move.get("actions") != null:
-				for action in card_resource.bottom_move.actions:
-					if 7 in action.action_types:  # Poison action type (7)
-						print("Found poison action in bottom half")
-						poison_range = action.range
-						poison_amount = action.amount
-						poison_action_bool = true
-						active_movement_card_part = "bottom"
-						found_poison = true
-						print("Poison range:", poison_range)
-						print("Poison amount:", poison_amount)
-						break
-	
-	if poison_action_bool:
-		print("Successfully activated poison action")
-		print("Can poison targets up to", poison_range, "hexes away")
-		print("Will apply", poison_amount, "poison stacks")
-		
-		# Show targetable area using tile highlighting
-		show_targetable_area(selected_cryptid.position, poison_range, "poison")
-		
-		# Store references for handle_poison_action
-		if active_movement_card_part == "top":
-			card_dialog.top_half_container = top_half_container
-			disable_other_cards_exact("top")
-		elif active_movement_card_part == "bottom":
-			card_dialog.bottom_half_container = bottom_half_container
-			disable_other_cards_exact("bottom")
-	else:
-		print("ERROR: Failed to activate poison action")
-	
-	print("---------- END POISON ACTION SELECTED DEBUG ----------\n")
+	# Use the new generic system
+	card_action_selected("poison", current_card)
+	return
 
-func handle_poison_action(pos_clicked):
-	print("\n---------- HANDLE POISON ACTION DEBUG ----------")
-	
-	# Get the poisoning cryptid
-	selected_cryptid = currently_selected_cryptid()
-	if selected_cryptid == null:
-		print("ERROR: No selected cryptid found for poison")
-		return false
-	
-	print("Poisoner:", selected_cryptid.cryptid.name, "at position:", local_to_map(selected_cryptid.position))
-	
-	# Get the target cryptid at the clicked position
-	var target_cryptid = get_cryptid_at_position_simple(pos_clicked)
-	print("Target position:", pos_clicked)
-	print("Target cryptid:", target_cryptid.cryptid.name if target_cryptid else "None")
-	
-	if target_cryptid == null:
-		print("No valid target at the selected position")
-		# Reset action state
-		poison_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		clear_movement_highlights()
-		return false
-	
-	# Check if target is an enemy (can't poison allies)
-	var is_enemy = not is_friendly_target(selected_cryptid, target_cryptid)
-	if not is_enemy:
-		print("Invalid target: Can only poison enemy cryptids")
-		return false
-	
-	# Calculate distance to target
-	var current_pos = local_to_map(selected_cryptid.position)
-	var target_pos = local_to_map(target_cryptid.position)
-	
-	# Use attack grid for pathfinding
-	var path = a_star_hex_attack_grid.get_id_path(
-		a_star_hex_attack_grid.get_closest_point(current_pos),
-		a_star_hex_attack_grid.get_closest_point(target_pos)
-	)
-	
-	if path.size() == 0:
-		print("ERROR: No valid path to target")
-		return false
-	
-	var distance = path.size() - 1
-	print("Distance to target:", distance, "Poison range:", poison_range)
-	
-	if distance <= poison_range:
-		print("Target is within range")
-		
-		# Apply the poison
-		if target_cryptid.has_node("StatusEffectManager"):
-			var status_manager = target_cryptid.get_node("StatusEffectManager")
-			status_manager.add_status_effect(StatusEffect.EffectType.POISON, poison_amount)
-			print("Applied", poison_amount, "poison stacks to", target_cryptid.cryptid.name)
-			
-			# REFRESH THE STATUS DISPLAY IMMEDIATELY
-			if target_cryptid.has_node("StatusEffectDisplay"):
-				var display = target_cryptid.get_node("StatusEffectDisplay")
-				display.refresh_display()
-				print("Refreshed status display for", target_cryptid.cryptid.name)
-		else:
-			print("ERROR: Target has no StatusEffectManager")
-			return false
-		
-		# Animate the poison
-		animate_poison(selected_cryptid, target_cryptid)
-		
-		# Clean up action state
-		poison_action_bool = false
-		active_movement_card_part = ""
-		active_movement_card = null
-		delete_all_lines()
-		delete_all_indicators()
-		clear_movement_highlights()
-		
-		# Notify card to move to next action
-		if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
-			print("Poison complete, moving to next action")
-			card_dialog.next_action()
-		
-		return true
-	else:
-		print("Target out of range")
-		return false
-	
-	print("---------- END HANDLE POISON ACTION DEBUG ----------\n")
-
-func animate_poison(caster, target):
-	print("Starting poison animation from", caster, "to", target)
-	
-	# Create poison visual effect
-	create_poison_effect(caster.position, target.position)
-	
-	# If movement is already in progress, don't start another one
-	if movement_in_progress:
-		print("Movement already in progress, skipping caster animation")
-		return
-	
-	# Set flag to indicate movement is in progress
-	movement_in_progress = true
-	
-	# Simple scale animation for the caster
-	var tween = create_tween()
-	tween.set_trans(Tween.TRANS_QUAD)
-	tween.set_ease(Tween.EASE_IN_OUT)
-	
-	# Quick cast animation
-	tween.tween_property(caster, "scale", Vector2(1.1, 1.1), 0.15)
-	tween.tween_property(caster, "scale", Vector2(1.0, 1.0), 0.15)
-	
-	# Apply poison effect to target
-	var original_modulate = target.modulate
-	tween.tween_property(target, "modulate", Color(0.5, 0.2, 0.5, 1), 0.3)  # Purple tint
-	tween.tween_property(target, "modulate", original_modulate, 0.3)
-	
-	# Connect finished signal
-	tween.finished.connect(Callable(self, "_on_poison_tween_finished"))
-	
-	# Disable input during animation
-	set_process_input(false)
-
-func _on_poison_tween_finished():
-	print("Poison animation finished")
+func _on_attack_animation_finished():
+	# This replaces the old _on_attack_tween_finished
+	print("Attack animation finished")
 	movement_in_progress = false
 	set_process_input(true)
 
-func create_poison_effect(start_pos, end_pos):
-	print("Creating poison visual effects")
-	
-	# Create a line for the poison - purple color
-	var poison_line = Line2D.new()
-	poison_line.width = 6
-	poison_line.default_color = Color(0.5, 0, 0.5, 0.8)  # Purple for poison
-	poison_line.add_point(start_pos)
-	poison_line.add_point(end_pos)
-	poison_line.name = "poison_effect"
-	poison_line.z_index = 10
-	add_child(poison_line)
-	
-	# Create poison bubbles at target
-	for i in range(3):
-		var bubble = ColorRect.new()
-		bubble.color = Color(0.5, 0, 0.5, 0.6)  # Purple
-		bubble.size = Vector2(20, 20)
-		var offset = Vector2(randf_range(-20, 20), randf_range(-20, 20))
-		bubble.position = end_pos + offset - Vector2(10, 10)
-		bubble.name = "poison_effect"
-		bubble.z_index = 10
-		add_child(bubble)
-		
-		# Animate the bubble floating up
-		var bubble_tween = create_tween()
-		bubble_tween.set_parallel(true)
-		bubble_tween.tween_property(bubble, "position:y", bubble.position.y - 30, 1.0)
-		bubble_tween.tween_property(bubble, "modulate:a", 0.0, 1.0)
-		bubble_tween.tween_property(bubble, "scale", Vector2(0.5, 0.5), 1.0)
-	
-	# Animate the poison effects
-	var effect_tween = create_tween()
-	effect_tween.set_parallel(true)
-	
-	# Pulse the line
-	effect_tween.tween_property(poison_line, "width", 12, 0.2)
-	effect_tween.tween_property(poison_line, "width", 3, 0.3)
-	
-	# Fade out the line
-	effect_tween.tween_property(poison_line, "modulate:a", 0.0, 0.5).set_delay(0.5)
-	
-	# Clean up after animation
-	effect_tween.tween_callback(Callable(self, "clean_up_poison_effects"))
+	# Reset states
+	attack_action_bool = false
+	delete_all_lines()
+	delete_all_indicators()
 
-func clean_up_poison_effects():
-	for child in get_children():
-		if child.name == "poison_effect":
-			child.queue_free()
-
-func show_poison_preview(target_cryptid, target_pos: Vector2i):
-	# Clear previous preview
-	for hex in push_pull_preview_hexes:
-		if hex in original_tile_states:
-			if is_showing_movement_range:
-				# Check if there's a cryptid at this position
-				var has_cryptid = false
-				for cryptid in all_cryptids_in_play:
-					if local_to_map(cryptid.position) == hex:
-						has_cryptid = true
-						break
-				# Restore appropriate tile based on whether it has a cryptid
-				if has_cryptid and not is_friendly_target(selected_cryptid, get_cryptid_at_position_simple(hex)):
-					set_cell(hex, 0, Vector2i(2, 0), 6)  # Poison target tile
-				else:
-					set_cell(hex, 0, move_range_tile_id, 2)  # Range tile
-			else:
-				set_cell(hex, 0, original_tile_states[hex], 0)
-	push_pull_preview_hexes.clear()
+func _on_movement_animation_finished():
+	print("Movement animation completed")
+	movement_in_progress = false
+	set_process_input(true)
 	
-	# Show purple preview tile at target position
-	push_pull_preview_hexes.append(target_pos)
-	set_cell(target_pos, 0, Vector2i(2, 0), 7)  # Use alternative tile 7 for poison preview hover
+	# Update movement indicator if needed
+	if move_action_bool and move_leftover > 0 and is_instance_valid(selected_cryptid):
+		update_movement_indicator(selected_cryptid, move_leftover)
+	else:
+		remove_movement_indicator()
+

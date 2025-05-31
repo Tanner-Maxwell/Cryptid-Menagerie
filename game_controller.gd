@@ -165,7 +165,6 @@ func advance_to_next_cryptid():
 				print("In discard mode, not advancing to next cryptid yet")
 				return
 	
-	tile_map_layer.verify_grid_state()
 	# After that, we manually advance to the next cryptid
 	var next_cryptid = find_next_cryptid()
 	
@@ -524,8 +523,6 @@ func end_current_turn():
 		print("Finishing active movement before ending turn")
 		tile_map_layer.finish_movement()
 	
-	# Verify the grid state to ensure all hexes are correctly enabled/disabled
-	tile_map_layer.verify_grid_state()
 	
 	# Get the current cryptid
 	var current_cryptid = hand.selected_cryptid

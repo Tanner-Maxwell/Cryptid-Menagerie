@@ -235,6 +235,14 @@ func execute_current_action():
 				print("Setting up POISON action with range:", current_action.range, "amount:", current_action.amount)
 				tile_map_layer.poison_range = current_action.range
 				tile_map_layer.poison_amount = current_action.amount
+			ActionType.APPLY_VULNERABLE:
+				print("Setting up VULNERABLE action with range:", current_action.range, "amount:", current_action.amount)
+				tile_map_layer.vulnerable_range = current_action.range
+				tile_map_layer.vulnerable_amount = current_action.amount
+			ActionType.IMMOBILIZE:
+				print("Setting up IMMOBILIZE action with range:", current_action.range, "amount:", current_action.amount)
+				tile_map_layer.immobilize_range = current_action.range
+				tile_map_layer.immobilize_amount = current_action.amount
 	# Perform the action based on its type
 	perform_action(current_action.action_types)
 
@@ -532,7 +540,9 @@ func stun_action():
 	tile_map_layer.stun_action_selected(self)
 
 func apply_vulnerable_action():
-	pass
+	print("Vulnerable action activated in card_dialog")
+	# Use the generic system like other actions
+	tile_map_layer.card_action_selected("vulnerable", self)
 
 func poison_action():
 	print("Poison action activated in card_dialog")
@@ -552,7 +562,9 @@ func paralyze_action():
 	pass
 
 func immobilize_action():
-	pass
+	print("Immobilize action activated in card_dialog")
+	# Use the generic system like other actions
+	tile_map_layer.card_action_selected("immobilize", self)
 
 func _on_mouse_entered():
 	self.z_index += 2

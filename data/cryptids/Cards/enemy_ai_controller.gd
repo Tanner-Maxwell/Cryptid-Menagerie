@@ -156,12 +156,39 @@ func take_enemy_turn(enemy_cryptid):
 	
 	# Second phase: See if we can move to get closer
 	if !top_action_used or !bottom_action_used:
-		print("AI: Looking for move opportunities")
-		var move_result = find_move_to_attack(enemy_cryptid)
+		# Check if cryptid is immobilized before attempting to move
+		var is_immobilized = false
+		if enemy_cryptid.has_node("StatusEffectManager"):
+			var status_manager = enemy_cryptid.get_node("StatusEffectManager")
+			is_immobilized = status_manager.has_status_effect(StatusEffect.EffectType.IMMOBILIZE)
+			print("AI: Checking immobilize status - has StatusEffectManager:", true, "is_immobilized:", is_immobilized)
+			
+			# Debug: Print all active effects
+			var active_effects = status_manager.get_all_effects()
+			print("AI: Active status effects on", enemy_cryptid.cryptid.name, ":", active_effects.size())
+			for effect in active_effects:
+				print("  - Effect:", effect.effect_name, "Type:", effect.effect_type, "Stacks:", effect.stack_count)
+			
+			if is_immobilized:
+				print("AI: Cryptid is IMMOBILIZED - cannot move but can still attack")
+				# Show immobilize message
+				var game_instructions = get_node("/root/VitaChrome/UIRoot/GameInstructions")
+				if game_instructions:
+					game_instructions.text = enemy_cryptid.cryptid.name + " is IMMOBILIZED and cannot move!"
+				
+				# Wait a moment for the player to see the message
+				await get_tree().create_timer(1.5).timeout
+		else:
+			print("AI: No StatusEffectManager found on enemy cryptid")
 		
-		if move_result:
-			print("AI: Found move to get closer to player")
-			perform_move(enemy_cryptid, move_result.move_target)
+		# Only attempt movement if not immobilized
+		if !is_immobilized:
+			print("AI: Looking for move opportunities")
+			var move_result = find_move_to_attack(enemy_cryptid)
+			
+			if move_result:
+				print("AI: Found move to get closer to player")
+				perform_move(enemy_cryptid, move_result.move_target)
 			
 			# Update which action we used and ensure cryptid state is updated
 			if move_result.move_target.is_top:
@@ -222,47 +249,56 @@ func take_enemy_turn(enemy_cryptid):
 	
 	# Third phase: If we've attacked but not moved, consider retreat
 	if (top_action_used or bottom_action_used) and (!top_action_used or !bottom_action_used):
-		print("AI: Considering retreat after attack")
-		var retreat_target = find_retreat_position(enemy_cryptid)
-		if retreat_target:
-			# Reset any ongoing movement state before retreat
-			tile_map_layer.move_action_bool = false
-			tile_map_layer.attack_action_bool = false
-			tile_map_layer.active_movement_card = null
-			tile_map_layer.active_movement_card_part = ""
-			tile_map_layer.move_leftover = 0
-			
-			# Check if we have the right action type available
-			if (retreat_target.is_top and !top_action_used) or (!retreat_target.is_top and !bottom_action_used):
-				print("AI: Retreating after attack")
+		# Check if cryptid is immobilized before attempting retreat
+		var is_immobilized = false
+		if enemy_cryptid.has_node("StatusEffectManager"):
+			var status_manager = enemy_cryptid.get_node("StatusEffectManager")
+			is_immobilized = status_manager.has_status_effect(StatusEffect.EffectType.IMMOBILIZE)
+		
+		if is_immobilized:
+			print("AI: Cannot retreat - cryptid is IMMOBILIZED")
+		else:
+			print("AI: Considering retreat after attack")
+			var retreat_target = find_retreat_position(enemy_cryptid)
+			if retreat_target:
+				# Reset any ongoing movement state before retreat
+				tile_map_layer.move_action_bool = false
+				tile_map_layer.attack_action_bool = false
+				tile_map_layer.active_movement_card = null
+				tile_map_layer.active_movement_card_part = ""
+				tile_map_layer.move_leftover = 0
 				
-				# Validate the target position is not disabled
-				var target_point = tile_map_layer.a_star_hex_grid.get_closest_point(retreat_target.position, true)
-				if tile_map_layer.a_star_hex_grid.is_point_disabled(target_point):
-					print("AI: WARNING - Retreat target is disabled, enabling for movement attempt")
-					tile_map_layer.set_point_disabled(target_point, false)
+				# Check if we have the right action type available
+				if (retreat_target.is_top and !top_action_used) or (!retreat_target.is_top and !bottom_action_used):
+					print("AI: Retreating after attack")
 					
-					# Force update debug display
-					tile_map_layer.update_all_debug_indicators()
-				
-				# Delay to ensure everything is reset
-				await get_tree().create_timer(0.5).timeout
-			
-			# Perform the retreat
-			perform_move(enemy_cryptid, retreat_target)
-			
-			# Update which action we used and ensure cryptid state is updated
-			if retreat_target.is_top:
-				top_action_used = true
-				enemy_cryptid.cryptid.top_card_played = true
-				print("AI: Used top move action for retreat")
-			else:
-				bottom_action_used = true
-				enemy_cryptid.cryptid.bottom_card_played = true
-				print("AI: Used bottom move action for retreat")
-				
-			# Wait for animations to complete
-			await get_tree().create_timer(1.0).timeout
+					# Validate the target position is not disabled
+					var target_point = tile_map_layer.a_star_hex_grid.get_closest_point(retreat_target.position, true)
+					if tile_map_layer.a_star_hex_grid.is_point_disabled(target_point):
+						print("AI: WARNING - Retreat target is disabled, enabling for movement attempt")
+						tile_map_layer.set_point_disabled(target_point, false)
+						
+						# Force update debug display
+						tile_map_layer.update_all_debug_indicators()
+					
+					# Delay to ensure everything is reset
+					await get_tree().create_timer(0.5).timeout
+					
+					# Perform the retreat
+					perform_move(enemy_cryptid, retreat_target)
+					
+					# Update which action we used and ensure cryptid state is updated
+					if retreat_target.is_top:
+						top_action_used = true
+						enemy_cryptid.cryptid.top_card_played = true
+						print("AI: Used top move action for retreat")
+					else:
+						bottom_action_used = true
+						enemy_cryptid.cryptid.bottom_card_played = true
+						print("AI: Used bottom move action for retreat")
+						
+					# Wait for animations to complete
+					await get_tree().create_timer(1.0).timeout
 					
 	
 	# Double-check that our local tracking vars match the cryptid state
@@ -337,8 +373,6 @@ func take_enemy_turn(enemy_cryptid):
 # Show the end turn button and wait for player to press it
 func show_end_turn_button_for_enemy():
 	print("AI: Showing end turn button for enemy")
-	
-	tile_map_layer.verify_grid_state()
 	# Get the action menu
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu:
@@ -1073,10 +1107,29 @@ func perform_attack(enemy_cryptid, attack_info):
 	# Set the tile map's card_dialog reference to our instance
 	tile_map_layer.card_dialog = card_dialog_instance
 	
-	# Start the attack action
+	# Get the damage amount from the attack action
+	var damage_amount = 0
+	var move_data = card.top_move if is_top else card.bottom_move
+	if move_data and move_data.get("actions") != null:
+		for action in move_data.actions:
+			if 1 in action.action_types:  # Attack action type
+				damage_amount = action.amount
+				break
+	
+	print("AI: Attack damage amount:", damage_amount)
+	
+	# Set up the active action context manually for AI
+	tile_map_layer.active_action.type = "attack"
+	tile_map_layer.active_action.range = attack_range
+	tile_map_layer.active_action.amount = damage_amount
+	tile_map_layer.active_action.card = card_dialog_instance
+	tile_map_layer.active_action.card_part = "top" if is_top else "bottom"
+	tile_map_layer.active_action.in_progress = true
+	
+	# Set the attack action state
 	tile_map_layer.attack_action_bool = true
 	tile_map_layer.attack_range = attack_range
-	tile_map_layer.attack_action_selected(card_dialog_instance)
+	tile_map_layer.damage = damage_amount
 	
 	# Wait a moment to make sure action is set up
 	await get_tree().create_timer(0.3).timeout
@@ -1086,9 +1139,12 @@ func perform_attack(enemy_cryptid, attack_info):
 		print("AI: ERROR - Selected cryptid changed! Restoring correct cryptid.")
 		tile_map_layer.selected_cryptid = enemy_cryptid
 	
-	# Perform the attack
+	# Perform the attack using the generic system
 	print("AI: Initiating attack action to position:", target_pos)
-	var attack_successful = tile_map_layer.handle_attack_action(target_pos)
+	tile_map_layer.handle_card_action(target_pos)
+	
+	# Since handle_card_action doesn't return success, we'll assume it worked
+	var attack_successful = true
 	
 	# Important: Check if the attack was actually performed before marking as used
 	if attack_successful:

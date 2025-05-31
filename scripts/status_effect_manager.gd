@@ -125,8 +125,8 @@ func _create_default_effect(effect_type: StatusEffect.EffectType) -> StatusEffec
 			
 		StatusEffect.EffectType.IMMOBILIZE:
 			effect.effect_name = "Immobilize"
-			effect.description = "Cannot move"
-			effect.trigger_time = StatusEffect.TriggerTime.ON_MOVE
+			effect.description = "Cannot move, expires at end of turn"
+			effect.trigger_time = StatusEffect.TriggerTime.TURN_END
 			effect.max_stacks = 1
 	
 	return effect
@@ -171,6 +171,11 @@ func process_turn_end_effects() -> void:
 					print("Poison damage:", damage)
 					_apply_effect_damage(damage)
 					remove_stacks(effect_type, 1)  # Remove only 1 poison stack
+					status_effect_triggered.emit(effect)
+					
+				StatusEffect.EffectType.IMMOBILIZE:
+					print("Immobilize effect expires at end of turn")
+					remove_status_effect(effect_type)  # Remove immobilize completely
 					status_effect_triggered.emit(effect)
 
 # Process effects when taking damage
@@ -217,6 +222,12 @@ func _apply_effect_damage(damage: int) -> void:
 # Check if the cryptid can take actions this turn
 func can_take_actions() -> bool:
 	if has_status_effect(StatusEffect.EffectType.STUN):
+		return false
+	return true
+
+# Check if the cryptid can move this turn
+func can_move() -> bool:
+	if has_status_effect(StatusEffect.EffectType.IMMOBILIZE):
 		return false
 	return true
 
@@ -271,6 +282,12 @@ func _cleanup_visual_effects(effect_type: StatusEffect.EffectType) -> void:
 		StatusEffect.EffectType.BURN:
 			_cleanup_cryptid_visual_effects("burn_effect")
 			
+		StatusEffect.EffectType.IMMOBILIZE:
+			_cleanup_cryptid_visual_effects("immobilize_effect")
+			
+		StatusEffect.EffectType.VULNERABLE:
+			_cleanup_cryptid_visual_effects("vulnerable_effect")
+			
 		# Add other effect types as needed
 
 # Helper to clean up effects that might be children of the cryptid node
@@ -280,3 +297,231 @@ func _cleanup_cryptid_visual_effects(effect_name: String) -> void:
 			if child.name == effect_name:
 				child.queue_free()
 				print("Cleaned up", effect_name, "from cryptid")
+
+# ========== STATUS EFFECT ACTION EXECUTION ==========
+
+func execute_heal_action(source_cryptid, target_cryptid, heal_amount: int, visual_effects_manager):
+	if not target_cryptid:
+		print("No target for heal action")
+		return
+		
+	# Heal the target using health bar system
+	var health_bar = target_cryptid.get_node_or_null("HealthBar")
+	if health_bar:
+		var current_health = health_bar.value
+		var max_health = health_bar.max_value
+		var new_health = min(current_health + heal_amount, max_health)
+		
+		# Update health bar
+		health_bar.value = new_health
+		
+		# Update cryptid's health values
+		target_cryptid.set_health_values(new_health, max_health)
+		target_cryptid.update_health_bar()
+		
+		# Store health metadata
+		target_cryptid.cryptid.set_meta("current_health", new_health)
+		
+		var actual_heal = new_health - current_health
+		
+		# Show heal effect
+		if visual_effects_manager:
+			await visual_effects_manager.animate_heal(source_cryptid, target_cryptid)
+			_show_heal_value_display(target_cryptid.position, actual_heal)
+		
+		print("Healed", target_cryptid.cryptid.name, "for", actual_heal)
+		print("Health now: " + str(new_health) + "/" + str(max_health))
+	else:
+		print("ERROR: Could not find health bar on target cryptid!")
+
+func execute_stun_action(source_cryptid, target_cryptid, stun_amount: int, visual_effects_manager):
+	if not target_cryptid:
+		print("No target for stun action")
+		return
+	
+	# Apply stun
+	var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager")
+	if status_mgr:
+		status_mgr.add_status_effect(StatusEffect.EffectType.STUN, stun_amount)
+		print("Applied stun for", stun_amount, "turns to", target_cryptid.cryptid.name)
+	
+	# Show effect
+	if visual_effects_manager:
+		await visual_effects_manager.animate_stun(source_cryptid, target_cryptid)
+
+func execute_poison_action(source_cryptid, target_cryptid, poison_amount: int, visual_effects_manager):
+	if not target_cryptid:
+		print("No target for poison action")
+		return
+	
+	# Apply poison
+	var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager")
+	if status_mgr:
+		status_mgr.add_status_effect(StatusEffect.EffectType.POISON, poison_amount)
+		print("Applied poison for", poison_amount, "stacks to", target_cryptid.cryptid.name)
+	
+	# Show effect
+	if visual_effects_manager:
+		await visual_effects_manager.animate_poison(source_cryptid, target_cryptid)
+
+func execute_immobilize_action(source_cryptid, target_cryptid, immobilize_amount: int, visual_effects_manager):
+	if not target_cryptid:
+		print("No target for immobilize action")
+		return
+	
+	# Apply immobilize
+	var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager")
+	if status_mgr:
+		status_mgr.add_status_effect(StatusEffect.EffectType.IMMOBILIZE, immobilize_amount)
+		print("Applied immobilize for", immobilize_amount, "turns to", target_cryptid.cryptid.name)
+	
+	# Show effect
+	if visual_effects_manager:
+		await visual_effects_manager.animate_immobilize(source_cryptid, target_cryptid)
+
+func execute_vulnerable_action(source_cryptid, target_cryptid, vulnerable_amount: int, visual_effects_manager):
+	if not target_cryptid:
+		print("No target for vulnerable action")
+		return
+	
+	# Apply vulnerable
+	var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager")
+	if status_mgr:
+		status_mgr.add_status_effect(StatusEffect.EffectType.VULNERABLE, vulnerable_amount)
+		print("Applied vulnerable for", vulnerable_amount, "stacks to", target_cryptid.cryptid.name)
+	
+	# Show effect
+	if visual_effects_manager:
+		await visual_effects_manager.animate_vulnerable(source_cryptid, target_cryptid)
+
+# ========== VISUAL EFFECT CREATION ==========
+
+func create_stun_effect(source_cryptid, target_cryptid, visual_effects_manager):
+	# Create visual stun effect
+	if visual_effects_manager and source_cryptid:
+		visual_effects_manager.animate_stun(source_cryptid, target_cryptid)
+
+func create_heal_effect(source_cryptid, target_cryptid, visual_effects_manager):
+	# Create visual heal effect
+	if visual_effects_manager and source_cryptid:
+		visual_effects_manager.animate_heal(source_cryptid, target_cryptid)
+
+func create_poison_effect(source_cryptid, target_cryptid, visual_effects_manager):
+	# Create visual poison effect
+	if visual_effects_manager and source_cryptid:
+		visual_effects_manager.animate_poison(source_cryptid, target_cryptid)
+
+func create_immobilize_effect(source_cryptid, target_cryptid, visual_effects_manager):
+	# Create visual immobilize effect
+	if visual_effects_manager and source_cryptid:
+		visual_effects_manager.animate_immobilize(source_cryptid, target_cryptid)
+
+func create_vulnerable_effect(source_cryptid, target_cryptid, visual_effects_manager):
+	# Create visual vulnerable effect
+	if visual_effects_manager and source_cryptid:
+		visual_effects_manager.animate_vulnerable(source_cryptid, target_cryptid)
+
+# ========== PREVIEW FUNCTIONS ==========
+
+func show_heal_preview(target_cryptid, target_pos: Vector2i, tile_map_controller):
+	# Show heal preview on target
+	if target_cryptid and tile_map_controller:
+		# Clear previous preview
+		tile_map_controller.clear_heal_preview_hexes()
+		
+		# Store original tile state for restoration
+		if not tile_map_controller.original_tile_states.has(target_pos):
+			tile_map_controller.original_tile_states[target_pos] = tile_map_controller.get_cell_atlas_coords(target_pos)
+		
+		# Add to preview tracking and show with heal preview tile
+		tile_map_controller.heal_preview_hexes.append(target_pos)
+		tile_map_controller.set_cell(target_pos, 0, tile_map_controller.heal_preview_tile_id, 1)
+		print("DEBUG: Added heal preview tile at", target_pos)
+
+func show_stun_preview(target_cryptid, target_pos: Vector2i, tile_map_controller):
+	# Show stun preview on target
+	if target_cryptid and tile_map_controller:
+		# Clear previous preview
+		tile_map_controller.clear_stun_preview_hexes()
+		
+		# Store original tile state for restoration  
+		if not tile_map_controller.original_tile_states.has(target_pos):
+			tile_map_controller.original_tile_states[target_pos] = tile_map_controller.get_cell_atlas_coords(target_pos)
+		
+		# Add to preview tracking and show with stun preview tile
+		tile_map_controller.stun_preview_hexes.append(target_pos)
+		tile_map_controller.set_cell(target_pos, 0, tile_map_controller.stun_preview_tile_id, 1)
+		print("DEBUG: Added stun preview tile at", target_pos)
+
+func show_immobilize_preview(target_cryptid, target_pos: Vector2i, tile_map_controller):
+	# Show immobilize preview on target
+	if target_cryptid and tile_map_controller:
+		# Clear previous preview
+		tile_map_controller.clear_immobilize_preview_hexes()
+		
+		# Store original tile state for restoration  
+		if not tile_map_controller.original_tile_states.has(target_pos):
+			tile_map_controller.original_tile_states[target_pos] = tile_map_controller.get_cell_atlas_coords(target_pos)
+		
+		# Add to preview tracking and show with immobilize preview tile
+		tile_map_controller.immobilize_preview_hexes.append(target_pos)
+		tile_map_controller.set_cell(target_pos, 0, tile_map_controller.immobilize_preview_tile_id, 1)
+		print("DEBUG: Added immobilize preview tile at", target_pos)
+
+func show_vulnerable_preview(target_cryptid, target_pos: Vector2i, tile_map_controller):
+	# Show vulnerable preview on target
+	if target_cryptid and tile_map_controller:
+		# Clear previous preview
+		tile_map_controller.clear_vulnerable_preview_hexes()
+		
+		# Store original tile state for restoration  
+		if not tile_map_controller.original_tile_states.has(target_pos):
+			tile_map_controller.original_tile_states[target_pos] = tile_map_controller.get_cell_atlas_coords(target_pos)
+		
+		# Add to preview tracking and show with vulnerable preview tile
+		tile_map_controller.vulnerable_preview_hexes.append(target_pos)
+		tile_map_controller.set_cell(target_pos, 0, tile_map_controller.vulnerable_preview_tile_id, 1)
+		print("DEBUG: Added vulnerable preview tile at", target_pos)
+
+# ========== CLEANUP FUNCTIONS ==========
+
+func clean_up_heal_effects(tile_map_controller):
+	if tile_map_controller:
+		tile_map_controller.clear_heal_preview_hexes()
+
+func clean_up_stun_effects(tile_map_controller):
+	if tile_map_controller:
+		tile_map_controller.clear_stun_preview_hexes()
+		
+func clean_up_poison_effects(tile_map_controller):
+	if tile_map_controller:
+		tile_map_controller.clear_poison_preview_hexes()
+
+func clean_up_immobilize_effects(tile_map_controller):
+	if tile_map_controller:
+		tile_map_controller.clear_immobilize_preview_hexes()
+
+func clean_up_vulnerable_effects(tile_map_controller):
+	if tile_map_controller:
+		tile_map_controller.clear_vulnerable_preview_hexes()
+
+func remove_stun_effect_from_cryptid(target_cryptid):
+	# Remove visual stun effect from cryptid
+	_cleanup_cryptid_visual_effects("stun_effect")
+
+func clean_up_cryptid_status_visuals(target_cryptid):
+	# Clean up all status effect visuals on a cryptid
+	if target_cryptid:
+		_cleanup_cryptid_visual_effects("stun_effect")
+		_cleanup_cryptid_visual_effects("poison_effect")
+		_cleanup_cryptid_visual_effects("burn_effect")
+		_cleanup_cryptid_visual_effects("heal_effect")
+		_cleanup_cryptid_visual_effects("immobilize_effect")
+		_cleanup_cryptid_visual_effects("vulnerable_effect")
+
+# ========== HELPER FUNCTIONS ==========
+
+func _show_heal_value_display(position: Vector2, heal_amount: int):
+	# Show floating heal number - this would need to be implemented
+	# For now, just print the heal
+	print("Heal value display: +", heal_amount, " at position ", position)
