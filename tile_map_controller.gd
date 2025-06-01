@@ -2,8 +2,11 @@ extends TileMapLayer
 
 const MAIN_ATLAS_ID = 0
 const HexGridManager = preload("res://Cryptid-Menagerie/hex_grid_manager.gd")
+const PickupManager = preload("res://Cryptid-Menagerie/scripts/pickup_manager.gd")
+const Pickup = preload("res://Cryptid-Menagerie/scripts/pickup.gd")
 
 var grid_manager = null
+var pickup_manager = null
 @onready var a_star_hex_grid = AStar2D.new()
 @onready var a_star_hex_attack_grid = AStar2D.new()
 @onready var line_container = $LineContainer
@@ -46,6 +49,7 @@ var active_movement_card_part = ""
 var move_action_bool = false
 var attack_action_bool = false
 var move_leftover = 0
+var temporary_move_bonus = 0  # Temporary movement bonus from pickups
 var attack_range = 2
 var path
 var vector_path = []
@@ -77,6 +81,10 @@ var poison_preview_tile_id = Vector2i(5, 0)  # Purple tile for poison preview
 var immobilize_preview_tile_id = Vector2i(6, 0)  # Blue tile for immobilize preview
 var vulnerable_preview_hexes = []
 var vulnerable_preview_tile_id = Vector2i(7, 0)  # Yellow tile for vulnerable preview
+var burn_preview_hexes = []
+var burn_preview_tile_id = Vector2i(8, 0)  # Orange tile for burn preview
+var shield_preview_hexes = []
+var shield_preview_tile_id = Vector2i(9, 0)  # Blue tile for shield preview
 
 var heal_action_bool = false
 var heal_range = 2
@@ -97,8 +105,21 @@ var vulnerable_amount = 1  # Number of vulnerable stacks to apply
 var poison_range = 2
 var poison_amount = 1  # Number of poison stacks to apply
 
+var burn_action_bool = false
+var burn_range = 2
+var burn_amount = 1  # Number of burn stacks to apply
+
+var shield_action_bool = false
+var shield_range = 2
+var shield_amount = 1  # Number of shield stacks to apply
+
+var pickup_spawn_action_bool = false
+var pickup_spawn_range = 2
+var pickup_spawn_amount = 1  # Number of pickups to spawn
+var pickup_spawn_type = -1  # ActionType enum value for which pickup to spawn
+
 var active_action = {
-	"type": "",  # "move", "attack", "push", "pull", "heal", "stun", "poison", "immobilize", "vulnerable"
+	"type": "",  # "move", "attack", "push", "pull", "heal", "stun", "poison", "immobilize", "vulnerable", "burn", "shield"
 	"range": 0,
 	"amount": 0,
 	"card": null,
@@ -169,6 +190,27 @@ const ACTION_CONFIGS = {
 		"target_type": "enemy",
 		"show_preview": true,
 		"friendly_only": false
+	},
+	"burn": {
+		"range_key": "burn_range",
+		"amount_key": "burn_amount",
+		"target_type": "enemy",
+		"show_preview": true,
+		"friendly_only": false
+	},
+	"shield": {
+		"range_key": "shield_range",
+		"amount_key": "shield_amount",
+		"target_type": "friendly",
+		"show_preview": true,
+		"friendly_only": true
+	},
+	"spawn_pickup": {
+		"range_key": "pickup_spawn_range",
+		"amount_key": "pickup_spawn_amount",
+		"target_type": "any_position",
+		"show_preview": true,
+		"friendly_only": false
 	}
 }
 
@@ -210,6 +252,12 @@ func _ready():
 	grid_manager.hex_map = self
 	grid_manager.movement_grid = a_star_hex_grid
 	grid_manager.attack_grid = a_star_hex_attack_grid
+	
+	# Initialize pickup manager after grid_manager is ready
+	pickup_manager = PickupManager.new()
+	pickup_manager.name = "PickupManager"
+	add_child(pickup_manager)
+	pickup_manager.initialize(self)
 
 	# Initialize the walkable_hexes array with all grid positions
 	walkable_hexes.clear()
@@ -678,6 +726,9 @@ func animate_movement(cryptid_node, path_ids):
 	# Animate through each point in the path
 	for i in range(1, world_positions.size()):
 		tween.tween_property(cryptid_node, "position", world_positions[i], movement_speed)
+		# Check for pickups at this hex position
+		var hex_pos = Vector2i(a_star_hex_grid.get_point_position(path_ids[i]))
+		tween.tween_callback(func(): _check_pickup_at_position(hex_pos, cryptid_node))
 	
 	# Add a small bounce at the end for visual feedback
 	tween.tween_property(cryptid_node, "scale", Vector2(1.1, 1.1), 0.1)
@@ -795,6 +846,16 @@ func card_action_selected(card_type: String, current_card):
 				"poison": action_type_id = 7
 				"vulnerable": action_type_id = 6  # APPLY_VULNERABLE
 				"immobilize": action_type_id = 9  # IMMOBILIZE
+				"burn": action_type_id = 10  # BURN
+				"shield": action_type_id = 11  # SHIELD
+				"spawn_pickup": 
+					# Handle pickup spawning actions - check which spawn action type is in the card
+					for spawn_type in range(13, 22):  # 13-21 are spawn pickup actions
+						if spawn_type in action.action_types:
+							action_type_id = spawn_type
+							pickup_spawn_type = spawn_type
+							print("Found spawn action type:", spawn_type, "in card actions")
+							break
 			if action_type_id in action.action_types:
 				active_action.range = action.range
 				active_action.amount = action.amount
@@ -854,13 +915,27 @@ func card_action_selected(card_type: String, current_card):
 			vulnerable_action_bool = true
 			vulnerable_range = active_action.range
 			vulnerable_amount = active_action.amount
+		"burn":
+			burn_action_bool = true
+			burn_range = active_action.range
+			burn_amount = active_action.amount
+		"shield":
+			shield_action_bool = true
+			shield_range = active_action.range
+			shield_amount = active_action.amount
+		"spawn_pickup":
+			print("Setting up spawn_pickup action - type:", pickup_spawn_type, "range:", active_action.range, "amount:", active_action.amount)
+			pickup_spawn_action_bool = true
+			pickup_spawn_range = active_action.range
+			pickup_spawn_amount = active_action.amount
 	active_movement_card = v_box_container
 	active_movement_card_part = active_action.card_part
+	active_action.in_progress = true  # Important: Set this so handle_card_action works
 	if active_half == top_half_container:
 		disable_other_cards_exact("top")
 	else:
 		disable_other_cards_exact("bottom")
-	print("card_action_selected complete - active_action.type:", active_action.type, "vulnerable_action_bool:", vulnerable_action_bool)
+	print("card_action_selected complete - active_action.type:", active_action.type, "vulnerable_action_bool:", vulnerable_action_bool, "in_progress:", active_action.in_progress)
 func reset_action_state():
 	active_action.type = ""
 	active_action.range = 0
@@ -878,8 +953,26 @@ func reset_action_state():
 	poison_action_bool = false
 	immobilize_action_bool = false
 	vulnerable_action_bool = false
+	burn_action_bool = false
+	shield_action_bool = false
+	pickup_spawn_action_bool = false
+	pickup_spawn_type = -1
+	temporary_move_bonus = 0  # Reset temporary movement bonus
 	# Clear all tile highlights and indicators
 	clear_movement_highlights()
+	# Clear push/pull preview
+	for hex in push_pull_preview_hexes:
+		if hex in original_tile_states:
+			set_cell(hex, 0, original_tile_states[hex], 0)
+	push_pull_preview_hexes.clear()
+	# Clear other status effect previews
+	clear_heal_preview_hexes()
+	clear_stun_preview_hexes()
+	clear_poison_preview_hexes()
+	clear_immobilize_preview_hexes()
+	clear_vulnerable_preview_hexes()
+	clear_burn_preview_hexes()
+	clear_shield_preview_hexes()
 	active_movement_card_part = ""
 	active_movement_card = null
 
@@ -891,16 +984,21 @@ func handle_card_action(pos_clicked: Vector2i):
 	var selected_cryptid_hex_pos = local_to_map(selected_cryptid.position)
 	
 	# Execute action based on type
+	print("Executing action type:", active_action.type)
 	match active_action.type:
 		"move":
 			# Movement has its own pathfinding and range checking
 			handle_move_action(pos_clicked)
-		"attack", "heal", "stun", "poison", "push", "pull", "immobilize", "vulnerable":
+		"attack", "heal", "stun", "poison", "push", "pull", "immobilize", "vulnerable", "burn", "shield", "spawn_pickup":
 			# For targeted actions, check if target is in range
 			var distance = calculate_distance(selected_cryptid_hex_pos, target_hex_pos)
 			print("Range check - Distance:", distance, "Max range:", active_action.range)
 			if distance > active_action.range:
 				print("Target out of range")
+				# Show feedback to player
+				var game_instructions = get_node_or_null("/root/VitaChrome/UIRoot/GameInstructions")
+				if game_instructions:
+					game_instructions.text = "Target out of range! Select a closer target or right-click to cancel."
 				return
 			
 			# Find target at position if needed
@@ -999,8 +1097,140 @@ func handle_card_action(pos_clicked: Vector2i):
 					execute_push_action(target_cryptid, target_hex_pos)
 				"pull":
 					execute_pull_action(target_cryptid, target_hex_pos)
+				"burn":
+					# Check if there's a target
+					if not target_cryptid:
+						print("No cryptid at target position")
+						return
+					
+					# Validate target is enemy
+					if not is_enemy_target(selected_cryptid, target_cryptid):
+						print("Invalid target - must target enemy")
+						return
+					
+					# Use status effect manager for burn action
+					var status_mgr_burn = target_cryptid.get_node_or_null("StatusEffectManager")
+					if status_mgr_burn:
+						await status_mgr_burn.execute_burn_action(selected_cryptid, target_cryptid, active_action.amount, visual_effects)
+						# Complete action
+						use_card_part(active_action.card, active_action.card_part)
+						delete_all_indicators()
+						reset_action_state()
+						enable_all_cards()
+						# Move to next action if available
+						if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+							card_dialog.next_action()
+				"shield":
+					# Check if there's a target
+					if not target_cryptid:
+						print("No cryptid at target position")
+						return
+					
+					# Validate target is friendly
+					var is_friendly = (selected_cryptid in player_cryptids_in_play and target_cryptid in player_cryptids_in_play) or \
+									  (selected_cryptid in enemy_cryptids_in_play and target_cryptid in enemy_cryptids_in_play)
+					if not is_friendly:
+						print("Invalid target - must target friendly cryptid")
+						return
+					
+					# Use status effect manager for shield action
+					var status_mgr_shield = target_cryptid.get_node_or_null("StatusEffectManager")
+					if status_mgr_shield:
+						await status_mgr_shield.execute_shield_action(selected_cryptid, target_cryptid, active_action.amount, visual_effects)
+						# Complete action
+						use_card_part(active_action.card, active_action.card_part)
+						delete_all_indicators()
+						reset_action_state()
+						enable_all_cards()
+						# Move to next action if available
+						if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+							card_dialog.next_action()
+				"spawn_pickup":
+					# Execute pickup spawn action
+					execute_spawn_pickup_action(target_hex_pos)
+
+func execute_spawn_pickup_action(target_hex_pos: Vector2i):
+	print("Execute spawn pickup action - spawn type:", pickup_spawn_type, "at position:", target_hex_pos)
+	
+	# Debug: print what action types mean
+	print("ActionType mapping:")
+	print("13 = SPAWN_FIRE_TRAP")
+	print("14 = SPAWN_HEAL_ORB")
+	print("15 = SPAWN_IMMOBILIZE_TRAP")
+	print("16 = SPAWN_DAMAGE_TRAP")
+	print("17 = SPAWN_MOVEMENT_BOOST")
+	print("18 = SPAWN_SHIELD_ORB")
+	print("19 = SPAWN_POISON_CLOUD")
+	print("20 = SPAWN_WALL")
+	print("21 = SPAWN_STUN_TRAP")
+	print("Current pickup_spawn_type is:", pickup_spawn_type)
+	
+	# Convert ActionType enum to PickupType enum
+	var pickup_type = -1
+	match pickup_spawn_type:
+		12:  # SPAWN_FIRE_TRAP -> FIRE_TRAP (0)
+			pickup_type = Pickup.PickupType.FIRE_TRAP
+		13:  # SPAWN_HEAL_ORB -> HEAL_ORB (1)
+			pickup_type = Pickup.PickupType.HEAL_ORB
+		14:  # SPAWN_IMMOBILIZE_TRAP -> IMMOBILIZE_TRAP (2)
+			pickup_type = Pickup.PickupType.IMMOBILIZE_TRAP
+		15:  # SPAWN_DAMAGE_TRAP -> DAMAGE_TRAP (3)
+			pickup_type = Pickup.PickupType.DAMAGE_TRAP
+		16:  # SPAWN_MOVEMENT_BOOST -> MOVEMENT_BOOST (4)
+			pickup_type = Pickup.PickupType.MOVEMENT_BOOST
+		17:  # SPAWN_SHIELD_ORB -> SHIELD_ORB (5)
+			pickup_type = Pickup.PickupType.SHIELD_ORB
+		18:  # SPAWN_POISON_CLOUD -> POISON_CLOUD (6)
+			pickup_type = Pickup.PickupType.POISON_CLOUD
+		19:  # SPAWN_WALL -> WALL (7)
+			pickup_type = Pickup.PickupType.WALL
+		20:  # SPAWN_STUN_TRAP -> STUN_TRAP (8)
+			pickup_type = Pickup.PickupType.STUN_TRAP
+		_:
+			print("Unknown pickup spawn type:", pickup_spawn_type)
+			return
+	
+	# Check if pickup_manager exists
+	if not pickup_manager:
+		print("ERROR: pickup_manager is null!")
+		return
+		
+	print("Attempting to spawn pickup type:", pickup_type, "amount:", active_action.amount)
+	
+	# Spawn pickups around the target position
+	var spawned = pickup_manager.spawn_pickup(pickup_type, target_hex_pos, active_action.amount)
+	print("Spawned", spawned.size(), "pickups of type", pickup_type, "around", target_hex_pos)
+	
+	# Complete action
+	use_card_part(active_action.card, active_action.card_part)
+	delete_all_indicators()
+	reset_action_state()
+	enable_all_cards()
+	
+	# Move to next action if available
+	if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+		card_dialog.next_action()
 
 func execute_attack_action(target_cryptid, target_hex_pos: Vector2i):
+	# Check if there's a wall at the position
+	if pickup_manager and pickup_manager.has_pickup_at_position(target_hex_pos):
+		var pickup = pickup_manager.get_pickup_at_position(target_hex_pos)
+		if pickup and pickup.pickup_type == Pickup.PickupType.WALL:
+			print("Attacking wall at position:", target_hex_pos)
+			# Damage the wall
+			pickup_manager.damage_pickup(target_hex_pos, active_action.amount)
+			
+			# Complete action
+			use_card_part(active_action.card, active_action.card_part)
+			delete_all_indicators()
+			reset_action_state()
+			enable_all_cards()
+			
+			# Move to next action if available
+			if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+				card_dialog.next_action()
+			return
+	
 	if not target_cryptid:
 		print("No target at position")
 		return
@@ -1315,6 +1545,23 @@ func update_cryptid_position(cryptid, new_hex_pos: Vector2i):
 	
 	# Update cryptid position
 	cryptid.position = map_to_local(new_hex_pos)
+	
+	# Check for pickups at the new position
+	_check_pickup_at_position(new_hex_pos, cryptid)
+
+func _check_pickup_at_position(hex_pos: Vector2i, cryptid: Node):
+	if pickup_manager and pickup_manager.has_pickup_at_position(hex_pos):
+		var pickup = pickup_manager.get_pickup_at_position(hex_pos)
+		if pickup and pickup.pickup_type == Pickup.PickupType.MOVEMENT_BOOST:
+			# Handle movement boost specially
+			print("Movement boost pickup triggered!")
+			temporary_move_bonus += 1
+			move_leftover += 1
+			# Update movement indicator if active
+			if move_action_bool and is_instance_valid(selected_cryptid):
+				update_movement_indicator(selected_cryptid, move_leftover)
+		
+		pickup_manager.trigger_pickup(hex_pos, cryptid)
 
 func damage_value_display(position: Vector2, amount: int):
 	# Display damage number (visual effect not implemented yet)
@@ -1511,12 +1758,12 @@ func _input(event):
 	if event is InputEventMouse:
 		if event.button_mask == MOUSE_BUTTON_RIGHT and event.is_pressed():
 			handle_right_click()
-		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool):
+		if event is InputEventMouseMotion and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool or burn_action_bool or shield_action_bool or pickup_spawn_action_bool):
 			if event is InputEventMouseMotion:
 				handle_mouse_motion()
-		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool):
+		if event.button_mask == MOUSE_BUTTON_LEFT and event.is_pressed() and (move_action_bool or attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool or burn_action_bool or shield_action_bool or pickup_spawn_action_bool):
 	# IMPORTANT: When we're in attack/push/pull/heal/stun/poison mode, handle clicks directly here
-			if attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool:
+			if attack_action_bool or push_action_bool or pull_action_bool or heal_action_bool or stun_action_bool or poison_action_bool or immobilize_action_bool or vulnerable_action_bool or burn_action_bool or shield_action_bool or pickup_spawn_action_bool:
 				# This ensures cryptids don't handle the click separately
 				get_viewport().set_input_as_handled()
 			handle_left_click(event)
@@ -1690,10 +1937,17 @@ func get_cryptid_at_position(hex_pos, for_attack = false):
 func apply_damage(target_cryptid, damage_amount):
 	# Simplified damage application using health bar system
 	if target_cryptid and target_cryptid.cryptid:
+		# Process status effects that modify damage
+		var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager")
+		var final_damage = damage_amount
+		
+		if status_mgr:
+			final_damage = status_mgr.process_damage_taken_effects(damage_amount)
+		
 		var health_bar = target_cryptid.get_node_or_null("HealthBar")
 		if health_bar:
 			var current_health = health_bar.value
-			var new_health = max(current_health - damage_amount, 0)
+			var new_health = max(current_health - final_damage, 0)
 			
 			# Update health bar
 			health_bar.value = new_health
@@ -1705,7 +1959,8 @@ func apply_damage(target_cryptid, damage_amount):
 			# Store health metadata
 			target_cryptid.cryptid.set_meta("current_health", new_health)
 			
-			damage_value_display(target_cryptid.position, damage_amount)
+			if final_damage > 0:
+				damage_value_display(target_cryptid.position, final_damage)
 			if new_health <= 0:
 				handle_cryptid_defeat(target_cryptid)
 func has_bench_cryptids():
@@ -1756,6 +2011,8 @@ func reset_action_modes():
 	poison_action_bool = false
 	immobilize_action_bool = false
 	vulnerable_action_bool = false
+	burn_action_bool = false
+	shield_action_bool = false
 	active_movement_card_part = ""
 	active_movement_card = null
 	move_leftover = 0
@@ -2477,6 +2734,20 @@ func clear_vulnerable_preview_hexes():
 		if hex in original_tile_states:
 			set_cell(hex, 0, original_tile_states[hex], 0)
 	vulnerable_preview_hexes.clear()
+
+func clear_burn_preview_hexes():
+	# Clear burn preview tiles
+	for hex in burn_preview_hexes:
+		if hex in original_tile_states:
+			set_cell(hex, 0, original_tile_states[hex], 0)
+	burn_preview_hexes.clear()
+
+func clear_shield_preview_hexes():
+	# Clear shield preview tiles
+	for hex in shield_preview_hexes:
+		if hex in original_tile_states:
+			set_cell(hex, 0, original_tile_states[hex], 0)
+	shield_preview_hexes.clear()
 
 func push_action_selected(current_card):
 	# Use the new generic system

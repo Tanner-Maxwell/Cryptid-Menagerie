@@ -93,7 +93,7 @@ func _create_default_effect(effect_type: StatusEffect.EffectType) -> StatusEffec
 			
 		StatusEffect.EffectType.VULNERABLE:
 			effect.effect_name = "Vulnerable"
-			effect.description = "Take additional damage"
+			effect.description = "Take +1 damage per stack"
 			effect.trigger_time = StatusEffect.TriggerTime.ON_DAMAGE_TAKEN
 			
 		StatusEffect.EffectType.POISON:
@@ -103,12 +103,12 @@ func _create_default_effect(effect_type: StatusEffect.EffectType) -> StatusEffec
 			
 		StatusEffect.EffectType.SHIELDED:
 			effect.effect_name = "Shielded"
-			effect.description = "Block incoming damage"
+			effect.description = "Blocks attack damage"
 			effect.trigger_time = StatusEffect.TriggerTime.ON_DAMAGE_TAKEN
 			
 		StatusEffect.EffectType.BURN:
 			effect.effect_name = "Burn"
-			effect.description = "Take damage at start of turn"
+			effect.description = "Take 3 damage at start of turn"
 			effect.trigger_time = StatusEffect.TriggerTime.TURN_START
 			
 		StatusEffect.EffectType.DAZED:
@@ -146,7 +146,7 @@ func process_turn_start_effects() -> void:
 					status_effect_triggered.emit(effect)
 					
 				StatusEffect.EffectType.BURN:
-					var damage = effect.stack_count * 2  # 2 damage per burn stack
+					var damage = 3  # 3 damage regardless of stack count
 					print("Burn damage:", damage)
 					_apply_effect_damage(damage)
 					remove_stacks(effect_type, 1)  # Remove 1 burn stack
@@ -182,42 +182,71 @@ func process_turn_end_effects() -> void:
 func process_damage_taken_effects(incoming_damage: int) -> int:
 	var modified_damage = incoming_damage
 	
-	for effect_type in active_effects:
-		var effect = active_effects[effect_type]
-		if effect.trigger_time == StatusEffect.TriggerTime.ON_DAMAGE_TAKEN:
-			match effect_type:
-				StatusEffect.EffectType.VULNERABLE:
-					var extra_damage = effect.stack_count
-					modified_damage += extra_damage
-					print("Vulnerable - taking", extra_damage, "extra damage")
-					remove_status_effect(effect_type)  # Remove all vulnerable
-					status_effect_triggered.emit(effect)
-					
-				StatusEffect.EffectType.SHIELDED:
-					var blocked = min(effect.stack_count, modified_damage)
-					modified_damage -= blocked
-					remove_stacks(effect_type, blocked)
-					print("Shield blocked", blocked, "damage")
-					status_effect_triggered.emit(effect)
+	# First check for vulnerable and shield interactions
+	var vulnerable_stacks = 0
+	var shield_stacks = 0
+	
+	if has_status_effect(StatusEffect.EffectType.VULNERABLE):
+		vulnerable_stacks = active_effects[StatusEffect.EffectType.VULNERABLE].stack_count
+	
+	if has_status_effect(StatusEffect.EffectType.SHIELDED):
+		shield_stacks = active_effects[StatusEffect.EffectType.SHIELDED].stack_count
+	
+	# Handle shield/vulnerable cancellation
+	if vulnerable_stacks > 0 and shield_stacks > 0:
+		var cancel_amount = min(vulnerable_stacks, shield_stacks)
+		remove_stacks(StatusEffect.EffectType.VULNERABLE, cancel_amount)
+		remove_stacks(StatusEffect.EffectType.SHIELDED, cancel_amount)
+		print("Shield and Vulnerable cancelled", cancel_amount, "stacks each")
+		
+		# Update remaining stacks
+		vulnerable_stacks = get_status_effect(StatusEffect.EffectType.VULNERABLE).stack_count if has_status_effect(StatusEffect.EffectType.VULNERABLE) else 0
+		shield_stacks = get_status_effect(StatusEffect.EffectType.SHIELDED).stack_count if has_status_effect(StatusEffect.EffectType.SHIELDED) else 0
+	
+	# Apply remaining vulnerable effect
+	if vulnerable_stacks > 0:
+		var extra_damage = vulnerable_stacks
+		modified_damage += extra_damage
+		print("Vulnerable - taking", extra_damage, "extra damage")
+		var vulnerable_effect = active_effects[StatusEffect.EffectType.VULNERABLE]
+		remove_stacks(StatusEffect.EffectType.VULNERABLE, 1)  # Remove 1 stack when damage is taken
+		status_effect_triggered.emit(vulnerable_effect)
+	
+	# Apply remaining shield effect
+	if shield_stacks > 0 and modified_damage > 0:
+		var blocked = min(shield_stacks, modified_damage)
+		modified_damage = max(0, modified_damage - blocked)
+		var shield_effect = active_effects[StatusEffect.EffectType.SHIELDED]
+		remove_stacks(StatusEffect.EffectType.SHIELDED, 1)  # Remove 1 stack regardless of damage blocked
+		print("Shield blocked", blocked, "damage, 1 stack removed")
+		status_effect_triggered.emit(shield_effect)
 	
 	return modified_damage
 
 
 func _apply_effect_damage(damage: int) -> void:
 	if cryptid_node and damage > 0:
-		# Get the tile map controller to use its damage application
-		var tile_map = get_tree().get_nodes_in_group("map")[0]
-		if tile_map and tile_map.has_method("apply_damage"):
-			tile_map.apply_damage(cryptid_node, damage)
-		else:
-			# Fallback if we can't find the tile map
-			var health_bar = cryptid_node.get_node("HealthBar")
-			if health_bar:
-				var new_health = max(0, health_bar.value - damage)
-				health_bar.value = new_health
-				cryptid_node.set_health_values(new_health, health_bar.max_value)
-				cryptid_node.update_health_bar()
-				print("Applied", damage, "damage from status effect")
+		# Apply damage directly without triggering vulnerable/shield
+		var health_bar = cryptid_node.get_node("HealthBar")
+		if health_bar:
+			var new_health = max(0, health_bar.value - damage)
+			health_bar.value = new_health
+			cryptid_node.set_health_values(new_health, health_bar.max_value)
+			cryptid_node.update_health_bar()
+			
+			# Store health metadata
+			cryptid_node.cryptid.set_meta("current_health", new_health)
+			
+			# Show damage number
+			var tile_map = get_tree().get_nodes_in_group("map")[0]
+			if tile_map and tile_map.has_method("damage_value_display"):
+				tile_map.damage_value_display(cryptid_node.position, damage)
+			
+			print("Applied", damage, "damage from status effect")
+			
+			# Check if cryptid was defeated
+			if new_health <= 0 and tile_map and tile_map.has_method("handle_cryptid_defeat"):
+				tile_map.handle_cryptid_defeat(cryptid_node)
 
 # Check if the cryptid can take actions this turn
 func can_take_actions() -> bool:
@@ -394,6 +423,36 @@ func execute_vulnerable_action(source_cryptid, target_cryptid, vulnerable_amount
 	if visual_effects_manager:
 		await visual_effects_manager.animate_vulnerable(source_cryptid, target_cryptid)
 
+func execute_burn_action(source_cryptid, target_cryptid, burn_amount: int, visual_effects_manager):
+	if not target_cryptid:
+		print("No target for burn action")
+		return
+	
+	# Apply burn
+	var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager")
+	if status_mgr:
+		status_mgr.add_status_effect(StatusEffect.EffectType.BURN, burn_amount)
+		print("Applied burn for", burn_amount, "stacks to", target_cryptid.cryptid.name)
+	
+	# Show effect
+	if visual_effects_manager:
+		await visual_effects_manager.animate_burn(source_cryptid, target_cryptid)
+
+func execute_shield_action(source_cryptid, target_cryptid, shield_amount: int, visual_effects_manager):
+	if not target_cryptid:
+		print("No target for shield action")
+		return
+	
+	# Apply shield
+	var status_mgr = target_cryptid.get_node_or_null("StatusEffectManager")
+	if status_mgr:
+		status_mgr.add_status_effect(StatusEffect.EffectType.SHIELDED, shield_amount)
+		print("Applied shield for", shield_amount, "stacks to", target_cryptid.cryptid.name)
+	
+	# Show effect
+	if visual_effects_manager:
+		await visual_effects_manager.animate_shield(source_cryptid, target_cryptid)
+
 # ========== VISUAL EFFECT CREATION ==========
 
 func create_stun_effect(source_cryptid, target_cryptid, visual_effects_manager):
@@ -420,6 +479,16 @@ func create_vulnerable_effect(source_cryptid, target_cryptid, visual_effects_man
 	# Create visual vulnerable effect
 	if visual_effects_manager and source_cryptid:
 		visual_effects_manager.animate_vulnerable(source_cryptid, target_cryptid)
+
+func create_burn_effect(source_cryptid, target_cryptid, visual_effects_manager):
+	# Create visual burn effect
+	if visual_effects_manager and source_cryptid:
+		visual_effects_manager.animate_burn(source_cryptid, target_cryptid)
+
+func create_shield_effect(source_cryptid, target_cryptid, visual_effects_manager):
+	# Create visual shield effect
+	if visual_effects_manager and source_cryptid:
+		visual_effects_manager.animate_shield(source_cryptid, target_cryptid)
 
 # ========== PREVIEW FUNCTIONS ==========
 
@@ -483,6 +552,36 @@ func show_vulnerable_preview(target_cryptid, target_pos: Vector2i, tile_map_cont
 		tile_map_controller.set_cell(target_pos, 0, tile_map_controller.vulnerable_preview_tile_id, 1)
 		print("DEBUG: Added vulnerable preview tile at", target_pos)
 
+func show_burn_preview(target_cryptid, target_pos: Vector2i, tile_map_controller):
+	# Show burn preview on target
+	if target_cryptid and tile_map_controller:
+		# Clear previous preview
+		tile_map_controller.clear_burn_preview_hexes()
+		
+		# Store original tile state for restoration  
+		if not tile_map_controller.original_tile_states.has(target_pos):
+			tile_map_controller.original_tile_states[target_pos] = tile_map_controller.get_cell_atlas_coords(target_pos)
+		
+		# Add to preview tracking and show with burn preview tile
+		tile_map_controller.burn_preview_hexes.append(target_pos)
+		tile_map_controller.set_cell(target_pos, 0, tile_map_controller.burn_preview_tile_id, 1)
+		print("DEBUG: Added burn preview tile at", target_pos)
+
+func show_shield_preview(target_cryptid, target_pos: Vector2i, tile_map_controller):
+	# Show shield preview on target
+	if target_cryptid and tile_map_controller:
+		# Clear previous preview
+		tile_map_controller.clear_shield_preview_hexes()
+		
+		# Store original tile state for restoration  
+		if not tile_map_controller.original_tile_states.has(target_pos):
+			tile_map_controller.original_tile_states[target_pos] = tile_map_controller.get_cell_atlas_coords(target_pos)
+		
+		# Add to preview tracking and show with shield preview tile
+		tile_map_controller.shield_preview_hexes.append(target_pos)
+		tile_map_controller.set_cell(target_pos, 0, tile_map_controller.shield_preview_tile_id, 1)
+		print("DEBUG: Added shield preview tile at", target_pos)
+
 # ========== CLEANUP FUNCTIONS ==========
 
 func clean_up_heal_effects(tile_map_controller):
@@ -505,6 +604,14 @@ func clean_up_vulnerable_effects(tile_map_controller):
 	if tile_map_controller:
 		tile_map_controller.clear_vulnerable_preview_hexes()
 
+func clean_up_burn_effects(tile_map_controller):
+	if tile_map_controller:
+		tile_map_controller.clear_burn_preview_hexes()
+
+func clean_up_shield_effects(tile_map_controller):
+	if tile_map_controller:
+		tile_map_controller.clear_shield_preview_hexes()
+
 func remove_stun_effect_from_cryptid(target_cryptid):
 	# Remove visual stun effect from cryptid
 	_cleanup_cryptid_visual_effects("stun_effect")
@@ -518,6 +625,7 @@ func clean_up_cryptid_status_visuals(target_cryptid):
 		_cleanup_cryptid_visual_effects("heal_effect")
 		_cleanup_cryptid_visual_effects("immobilize_effect")
 		_cleanup_cryptid_visual_effects("vulnerable_effect")
+		_cleanup_cryptid_visual_effects("shield_effect")
 
 # ========== HELPER FUNCTIONS ==========
 

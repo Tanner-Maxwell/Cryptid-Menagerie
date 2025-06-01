@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="Card" load_steps=10 format=3 uid="uid://gxyolg17pewx"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_shield"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_shield"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="3_shield"]
+
+[sub_resource type="Resource" id="Resource_shield3"]
+script = ExtResource("2_shield")
+action_types = Array[int]([4])
+range = 4
+amount = 5
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_shield4"]
+script = ExtResource("2_shield")
+action_types = Array[int]([11])
+range = 2
+amount = 2
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_shield_bottom"]
+script = ExtResource("3_shield")
+actions = Array[ExtResource("2_shield")]([SubResource("Resource_shield3"), SubResource("Resource_shield4")])
+name_prefix = "Guardian"
+name_suffix = "Blessing"
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_shield1"]
+script = ExtResource("2_shield")
+action_types = Array[int]([11])
+range = 3
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_shield2"]
+script = ExtResource("2_shield")
+action_types = Array[int]([0])
+range = 2
+amount = 2
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_shield_top"]
+script = ExtResource("3_shield")
+actions = Array[ExtResource("2_shield")]([SubResource("Resource_shield1"), SubResource("Resource_shield2")])
+name_prefix = "Protective"
+name_suffix = "Barrier"
+card_side = 0
+elemental_type = Array[int]([])
+
+[resource]
+script = ExtResource("1_shield")
+top_move = SubResource("Resource_shield_top")
+bottom_move = SubResource("Resource_shield_bottom")

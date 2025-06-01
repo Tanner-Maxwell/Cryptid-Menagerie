@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="Cryptid" load_steps=21 format=3 uid="uid://br56bhx3ppp4w"]
+[gd_resource type="Resource" script_class="Cryptid" load_steps=28 format=3 uid="uid://br56bhx3ppp4w"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_g85ft"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_cpnsb"]
@@ -10,6 +10,13 @@
 [ext_resource type="Resource" uid="uid://42h0pe04i41q" path="res://Cryptid-Menagerie/data/cards/heal_card.tres" id="4_s0acb"]
 [ext_resource type="PackedScene" uid="uid://bejk4igyv1d0e" path="res://Cryptid-Menagerie/assets/grove_starter_sprite.tscn" id="5_a4chy"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/scripts/cryptid.gd" id="6_n31ss"]
+[ext_resource type="Resource" uid="uid://gxyolg17pewx" path="res://Cryptid-Menagerie/data/cryptids/Cards/shield_test.tres" id="8_no2nh"]
+[ext_resource type="Resource" uid="uid://bmj28c27nisf3" path="res://Cryptid-Menagerie/data/cryptids/Cards/mixed_status_test.tres" id="9_luij4"]
+[ext_resource type="Resource" uid="uid://cjdtdwe3w3uor" path="res://Cryptid-Menagerie/BasicCard.tres" id="10_h6xqf"]
+[ext_resource type="Resource" uid="uid://cc30vw13gftps" path="res://Cryptid-Menagerie/data/cards/spawn_fire_trap_test.tres" id="11_o5nn0"]
+[ext_resource type="Resource" uid="uid://nci4ky2i1g1e" path="res://Cryptid-Menagerie/data/cards/spawn_heal_orb_test.tres" id="12_egspu"]
+[ext_resource type="Resource" uid="uid://rfwq3npoe3gv" path="res://Cryptid-Menagerie/data/cards/spawn_wall_test.tres" id="13_fup8w"]
+[ext_resource type="Resource" path="res://Cryptid-Menagerie/data/cards/spawn_immobilize_trap_test.tres" id="14_4a2x8"]
 
 [sub_resource type="Resource" id="Resource_5288u"]
 script = ExtResource("2_cpnsb")
@@ -90,7 +97,7 @@ script = ExtResource("6_n31ss")
 name = "Wendigo"
 scene = ExtResource("5_a4chy")
 icon = ExtResource("4_m54fr")
-deck = Array[ExtResource("1_g85ft")]([ExtResource("2_ow8vn"), ExtResource("3_hhgyi"), SubResource("Resource_wkj7f"), ExtResource("4_ip1yb"), ExtResource("4_s0acb"), SubResource("Resource_5o1h4")])
+deck = Array[ExtResource("1_g85ft")]([ExtResource("2_ow8vn"), ExtResource("3_hhgyi"), SubResource("Resource_wkj7f"), ExtResource("4_ip1yb"), ExtResource("4_s0acb"), SubResource("Resource_5o1h4"), ExtResource("8_no2nh"), ExtResource("9_luij4"), ExtResource("10_h6xqf"), ExtResource("11_o5nn0"), ExtResource("12_egspu"), ExtResource("13_fup8w"), ExtResource("14_4a2x8")])
 discard = Array[ExtResource("1_g85ft")]([])
 completed_turn = false
 currently_selected = false

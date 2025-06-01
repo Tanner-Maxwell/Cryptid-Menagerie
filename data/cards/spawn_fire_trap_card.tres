@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="Card" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" load_steps=4 format=3 uid="uid://spawn_fire_trap_test"]
+
+[sub_resource type="Resource" id="Resource_1"]
+script = ExtResource("res://Cryptid-Menagerie/data/cryptids/Moves/action.gd")
+action_types = Array[int]([13])
+range = 3
+amount = 2
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_2"]
+script = ExtResource("res://Cryptid-Menagerie/data/cryptids/Moves/move.gd")
+name_prefix = "Flame"
+actions = Array[ExtResource("res://Cryptid-Menagerie/data/cryptids/Moves/action.gd")]([SubResource("Resource_1")])
+
+[sub_resource type="Resource" id="Resource_3"]
+script = ExtResource("res://Cryptid-Menagerie/data/cryptids/Moves/move.gd")
+name_suffix = "Trap"
+actions = Array[ExtResource("res://Cryptid-Menagerie/data/cryptids/Moves/action.gd")]([SubResource("Resource_1")])
+
+[resource]
+script = ExtResource("res://Cryptid-Menagerie/data/cryptids/Moves/card.gd")
+top_move = SubResource("Resource_2")
+bottom_move = SubResource("Resource_3")

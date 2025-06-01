@@ -39,7 +39,19 @@ enum ActionType {
 	APPLY_VULNERABLE,
 	POISON,
 	PARALYZE,
-	IMMOBILIZE
+	IMMOBILIZE,
+	BURN,
+	SHIELD,
+	# Pickup spawning actions
+	SPAWN_FIRE_TRAP,
+	SPAWN_HEAL_ORB,
+	SPAWN_IMMOBILIZE_TRAP,
+	SPAWN_DAMAGE_TRAP,
+	SPAWN_MOVEMENT_BOOST,
+	SPAWN_SHIELD_ORB,
+	SPAWN_POISON_CLOUD,
+	SPAWN_WALL,
+	SPAWN_STUN_TRAP
 }
 
 signal moving
@@ -243,6 +255,21 @@ func execute_current_action():
 				print("Setting up IMMOBILIZE action with range:", current_action.range, "amount:", current_action.amount)
 				tile_map_layer.immobilize_range = current_action.range
 				tile_map_layer.immobilize_amount = current_action.amount
+			ActionType.BURN:
+				print("Setting up BURN action with range:", current_action.range, "amount:", current_action.amount)
+				tile_map_layer.burn_range = current_action.range
+				tile_map_layer.burn_amount = current_action.amount
+			ActionType.SHIELD:
+				print("Setting up SHIELD action with range:", current_action.range, "amount:", current_action.amount)
+				tile_map_layer.shield_range = current_action.range
+				tile_map_layer.shield_amount = current_action.amount
+			# Pickup spawning actions (12-20 in Action.gd enum)
+			12, 13, 14, 15, 16, 17, 18, 19, 20:
+				print("Setting up PICKUP SPAWN action with range:", current_action.range, "amount:", current_action.amount)
+				print("Action type value:", action_type)
+				tile_map_layer.pickup_spawn_range = current_action.range
+				tile_map_layer.pickup_spawn_amount = current_action.amount
+				tile_map_layer.pickup_spawn_type = action_type
 	# Perform the action based on its type
 	perform_action(current_action.action_types)
 
@@ -409,6 +436,28 @@ func get_action_name(action_types: Array) -> String:
 			return "Paralyze"
 		ActionType.IMMOBILIZE:
 			return "Immobilize"
+		ActionType.BURN:
+			return "Burn"
+		ActionType.SHIELD:
+			return "Shield"
+		12:  # SPAWN_FIRE_TRAP
+			return "Spawn Fire Trap"
+		13:  # SPAWN_HEAL_ORB
+			return "Spawn Heal Orb"
+		14:  # SPAWN_IMMOBILIZE_TRAP
+			return "Spawn Immobilize Trap"
+		15:  # SPAWN_DAMAGE_TRAP
+			return "Spawn Damage Trap"
+		16:  # SPAWN_MOVEMENT_BOOST
+			return "Spawn Movement Boost"
+		17:  # SPAWN_SHIELD_ORB
+			return "Spawn Shield Orb"
+		18:  # SPAWN_POISON_CLOUD
+			return "Spawn Poison Cloud"
+		19:  # SPAWN_WALL
+			return "Spawn Wall"
+		20:  # SPAWN_STUN_TRAP
+			return "Spawn Stun Trap"
 		_:
 			return "Unknown"
 
@@ -487,6 +536,13 @@ func perform_action(actions: Array[Action.ActionType]):
 				paralyze_action()
 			ActionType.IMMOBILIZE:
 				immobilize_action()
+			ActionType.BURN:
+				burn_action()
+			ActionType.SHIELD:
+				shield_action()
+			# Pickup spawning actions (12-20 in Action.gd enum)
+			12, 13, 14, 15, 16, 17, 18, 19, 20:
+				spawn_pickup_action()
 			_:
 				print("Unknown action type")
 				# If unknown action, skip to next
@@ -565,6 +621,21 @@ func immobilize_action():
 	print("Immobilize action activated in card_dialog")
 	# Use the generic system like other actions
 	tile_map_layer.card_action_selected("immobilize", self)
+
+func burn_action():
+	print("Burn action activated in card_dialog")
+	# Use the generic system like other actions
+	tile_map_layer.card_action_selected("burn", self)
+
+func shield_action():
+	print("Shield action activated in card_dialog")
+	# Use the generic system like other actions
+	tile_map_layer.card_action_selected("shield", self)
+
+func spawn_pickup_action():
+	print("Spawn pickup action activated in card_dialog")
+	# Use the generic system like other actions
+	tile_map_layer.card_action_selected("spawn_pickup", self)
 
 func _on_mouse_entered():
 	self.z_index += 2

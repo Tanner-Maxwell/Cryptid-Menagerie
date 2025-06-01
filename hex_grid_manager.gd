@@ -16,6 +16,10 @@ func _init(tilemap = null, movement_astar = null, attack_astar = null):
 func is_occupied(hex_pos) -> bool:
 	return occupied_positions.has(hex_pos)
 	
+func is_hex_occupied(hex_pos) -> bool:
+	# Alias for is_occupied to match the expected method name
+	return is_occupied(hex_pos)
+	
 func get_occupant(hex_pos):
 	if occupied_positions.has(hex_pos):
 		return occupied_positions[hex_pos]
@@ -37,7 +41,8 @@ func occupy_hex(hex_pos, entity) -> bool:
 	var point = movement_grid.get_closest_point(hex_pos, true)
 	if point != -1:  # Ensure point is valid
 		movement_grid.set_point_disabled(point, true)
-		print("GRID: Successfully occupied hex", hex_pos)
+		print("GRID: Successfully occupied hex", hex_pos, "by entity:", entity)
+		print("GRID: Point", point, "is now disabled in movement grid")
 		return true
 	else:
 		print("GRID: Could not find point for position", hex_pos)

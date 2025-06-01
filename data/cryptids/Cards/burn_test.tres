@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="Card" load_steps=10 format=3 uid="uid://burn_test_card"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_burn"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_burn"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="3_burn"]
+
+[sub_resource type="Resource" id="Resource_burn1"]
+script = ExtResource("2_burn")
+action_types = Array[int]([10])
+range = 3
+amount = 2
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_burn2"]
+script = ExtResource("2_burn")
+action_types = Array[int]([1])
+range = 2
+amount = 4
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_burn_top"]
+script = ExtResource("3_burn")
+actions = Array[ExtResource("2_burn")]([SubResource("Resource_burn1"), SubResource("Resource_burn2")])
+name_prefix = "Scorching"
+name_suffix = "Strike"
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_burn3"]
+script = ExtResource("2_burn")
+action_types = Array[int]([0])
+range = 3
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_burn4"]
+script = ExtResource("2_burn")
+action_types = Array[int]([10])
+range = 4
+amount = 1
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_burn_bottom"]
+script = ExtResource("3_burn")
+actions = Array[ExtResource("2_burn")]([SubResource("Resource_burn3"), SubResource("Resource_burn4")])
+name_prefix = "Ember"
+name_suffix = "Dance"
+card_side = 0
+elemental_type = Array[int]([])
+
+[resource]
+script = ExtResource("1_burn")
+top_move = SubResource("Resource_burn_top")
+bottom_move = SubResource("Resource_burn_bottom")

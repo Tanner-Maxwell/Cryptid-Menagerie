@@ -1,13 +1,13 @@
-[gd_resource type="Resource" script_class="Cryptid" load_steps=26 format=3 uid="uid://dowpy6tkxy8fl"]
+[gd_resource type="Resource" script_class="Cryptid" load_steps=27 format=3 uid="uid://dowpy6tkxy8fl"]
 
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_la18h"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_iinpm"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="3_mo728"]
 [ext_resource type="Resource" uid="uid://42h0pe04i41q" path="res://Cryptid-Menagerie/data/cards/heal_card.tres" id="4_r3nly"]
-[ext_resource type="Resource" path="res://Cryptid-Menagerie/data/cryptids/Cards/immobilize_test.tres" id="7_immob"]
 [ext_resource type="Texture2D" uid="uid://b6cxl2wsfbapp" path="res://Cryptid-Menagerie/assets/icon.svg" id="4_sf5nu"]
 [ext_resource type="PackedScene" uid="uid://bejk4igyv1d0e" path="res://Cryptid-Menagerie/assets/grove_starter_sprite.tscn" id="5_x2d0t"]
 [ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/scripts/cryptid.gd" id="6_f8bfb"]
+[ext_resource type="Resource" uid="uid://bonx3vr74x0gp" path="res://Cryptid-Menagerie/data/cryptids/Cards/immobilize_test.tres" id="7_immob"]
 
 [sub_resource type="Resource" id="Resource_5288u"]
 script = ExtResource("2_iinpm")

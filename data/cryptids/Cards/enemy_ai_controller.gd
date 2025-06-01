@@ -189,16 +189,16 @@ func take_enemy_turn(enemy_cryptid):
 			if move_result:
 				print("AI: Found move to get closer to player")
 				perform_move(enemy_cryptid, move_result.move_target)
-			
-			# Update which action we used and ensure cryptid state is updated
-			if move_result.move_target.is_top:
-				top_action_used = true
-				enemy_cryptid.cryptid.top_card_played = true
-				print("AI: Used top move action")
-			else:
-				bottom_action_used = true
-				enemy_cryptid.cryptid.bottom_card_played = true
-				print("AI: Used bottom move action")
+				
+				# Update which action we used and ensure cryptid state is updated
+				if move_result.move_target.is_top:
+					top_action_used = true
+					enemy_cryptid.cryptid.top_card_played = true
+					print("AI: Used top move action")
+				else:
+					bottom_action_used = true
+					enemy_cryptid.cryptid.bottom_card_played = true
+					print("AI: Used bottom move action")
 				
 			# Wait for movement animation to complete with proper polling
 			print("AI: Waiting for movement animation to complete...")

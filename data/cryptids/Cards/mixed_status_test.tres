@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="Card" load_steps=10 format=3 uid="uid://bmj28c27nisf3"]
+
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/card.gd" id="1_mixed"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/action.gd" id="2_mixed"]
+[ext_resource type="Script" path="res://Cryptid-Menagerie/data/cryptids/Moves/move.gd" id="3_mixed"]
+
+[sub_resource type="Resource" id="Resource_mixed3"]
+script = ExtResource("2_mixed")
+action_types = Array[int]([11])
+range = 2
+amount = 4
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_mixed4"]
+script = ExtResource("2_mixed")
+action_types = Array[int]([1])
+range = 3
+amount = 6
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_mixed_bottom"]
+script = ExtResource("3_mixed")
+actions = Array[ExtResource("2_mixed")]([SubResource("Resource_mixed3"), SubResource("Resource_mixed4")])
+name_prefix = "Shield"
+name_suffix = "Bash"
+card_side = 0
+elemental_type = Array[int]([])
+
+[sub_resource type="Resource" id="Resource_mixed1"]
+script = ExtResource("2_mixed")
+action_types = Array[int]([6])
+range = 4
+amount = 3
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_mixed2"]
+script = ExtResource("2_mixed")
+action_types = Array[int]([10])
+range = 3
+amount = 1
+area_of_effect = Array[Vector2i]([Vector2i(0, 0)])
+disabled = false
+
+[sub_resource type="Resource" id="Resource_mixed_top"]
+script = ExtResource("3_mixed")
+actions = Array[ExtResource("2_mixed")]([SubResource("Resource_mixed1"), SubResource("Resource_mixed2")])
+name_prefix = "Weakening"
+name_suffix = "Flames"
+card_side = 0
+elemental_type = Array[int]([])
+
+[resource]
+script = ExtResource("1_mixed")
+top_move = SubResource("Resource_mixed_top")
+bottom_move = SubResource("Resource_mixed_bottom")

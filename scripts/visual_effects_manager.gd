@@ -21,6 +21,8 @@ const POISON_COLOR = Color(0.5, 0, 0.5, 0.8)
 const PUSH_COLOR = Color(1, 0.5, 0, 0.8)
 const PULL_COLOR = Color(0, 0.5, 1, 0.8)
 const VULNERABLE_COLOR = Color(1, 0.8, 0, 0.8)
+const BURN_COLOR = Color(1, 0.3, 0, 0.8)
+const SHIELD_COLOR = Color(0, 0.7, 1, 0.8)
 
 # Initialize with tile map reference
 func initialize(map: TileMapLayer):
@@ -514,3 +516,117 @@ func show_target_range(center_pos: Vector2, range: int):
 func clear_all_highlights():
 	# Clear any range indicators
 	pass
+
+# ==== BURN EFFECTS ====
+func animate_burn(caster: Node, target: Node):
+	print("Starting burn animation")
+	
+	create_burn_effect(caster.position, target.position)
+	
+	# Animate caster
+	var tween = create_tween()
+	tween.tween_property(caster, "scale", Vector2(1.1, 1.1), 0.15)
+	tween.tween_property(caster, "scale", Vector2(1.0, 1.0), 0.15)
+	
+	# Apply burn tint to target
+	var original_modulate = target.modulate
+	tween.tween_property(target, "modulate", Color(1, 0.5, 0.2, 1), 0.3)
+	tween.tween_property(target, "modulate", original_modulate, 0.3)
+	
+	tween.finished.connect(func(): effect_animation_finished.emit("burn"))
+
+func create_burn_effect(start_pos: Vector2, end_pos: Vector2):
+	# Create burn line
+	var burn_line = Line2D.new()
+	burn_line.width = 8
+	burn_line.default_color = BURN_COLOR
+	burn_line.add_point(start_pos)
+	burn_line.add_point(end_pos)
+	burn_line.name = "burn_effect"
+	add_child(burn_line)
+	
+	# Create fire particles
+	for i in range(5):
+		var particle = ColorRect.new()
+		particle.color = BURN_COLOR
+		particle.size = Vector2(15, 15)
+		particle.position = end_pos + Vector2(randf_range(-20, 20), randf_range(-20, 20))
+		particle.name = "burn_effect"
+		add_child(particle)
+		
+		# Animate particles upward like fire
+		var particle_tween = create_tween()
+		particle_tween.set_parallel(true)
+		particle_tween.tween_property(particle, "position:y", particle.position.y - 30, 0.6)
+		particle_tween.tween_property(particle, "scale", Vector2(0.5, 0.5), 0.6)
+		particle_tween.tween_property(particle, "modulate", Color(1, 0.3, 0, 0), 0.6)
+	
+	# Clean up after animation
+	await get_tree().create_timer(1.0).timeout
+	for child in get_children():
+		if child.name == "burn_effect":
+			child.queue_free()
+
+# ==== SHIELD EFFECTS ====
+func animate_shield(caster: Node, target: Node):
+	print("Starting shield animation")
+	
+	create_shield_effect(caster.position, target.position)
+	
+	# Animate caster
+	var tween = create_tween()
+	tween.tween_property(caster, "scale", Vector2(1.1, 1.1), 0.15)
+	tween.tween_property(caster, "scale", Vector2(1.0, 1.0), 0.15)
+	
+	# Apply shield shimmer to target
+	var original_modulate = target.modulate
+	tween.tween_property(target, "modulate", Color(0.5, 0.8, 1, 1), 0.3)
+	tween.tween_property(target, "modulate", original_modulate, 0.3)
+	
+	tween.finished.connect(func(): effect_animation_finished.emit("shield"))
+
+func create_shield_effect(start_pos: Vector2, end_pos: Vector2):
+	# Create shield line
+	var shield_line = Line2D.new()
+	shield_line.width = 8
+	shield_line.default_color = SHIELD_COLOR
+	shield_line.add_point(start_pos)
+	shield_line.add_point(end_pos)
+	shield_line.name = "shield_effect"
+	add_child(shield_line)
+	
+	# Create shield bubble effect
+	var shield_bubble = ColorRect.new()
+	shield_bubble.color = Color(SHIELD_COLOR.r, SHIELD_COLOR.g, SHIELD_COLOR.b, 0.3)
+	shield_bubble.size = Vector2(60, 60)
+	shield_bubble.position = end_pos - Vector2(30, 30)
+	shield_bubble.name = "shield_effect"
+	add_child(shield_bubble)
+	
+	# Animate shield bubble
+	var bubble_tween = create_tween()
+	bubble_tween.set_parallel(true)
+	bubble_tween.tween_property(shield_bubble, "scale", Vector2(1.3, 1.3), 0.5)
+	bubble_tween.tween_property(shield_bubble, "modulate:a", 0.0, 0.5)
+	
+	# Create shield particles
+	for i in range(4):
+		var particle = ColorRect.new()
+		particle.color = SHIELD_COLOR
+		particle.size = Vector2(10, 10)
+		var angle = i * TAU / 4.0
+		particle.position = end_pos + Vector2(cos(angle), sin(angle)) * 25
+		particle.name = "shield_effect"
+		add_child(particle)
+		
+		# Animate particles rotating around target
+		var particle_tween = create_tween()
+		particle_tween.set_loops(2)
+		particle_tween.tween_property(particle, "position", end_pos + Vector2(cos(angle + TAU), sin(angle + TAU)) * 25, 0.5)
+		particle_tween.finished.connect(func(): particle.queue_free())
+	
+	# Clean up after animation
+	await get_tree().create_timer(1.0).timeout
+	for child in get_children():
+		if child.name == "shield_effect":
+			child.queue_free()
