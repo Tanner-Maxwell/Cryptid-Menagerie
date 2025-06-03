@@ -614,10 +614,60 @@ func handle_move_action(pos_clicked):
 	var current_pos = local_to_map(selected_cryptid.position)
 	print("Current position:", current_pos)
 	
-	# Calculate movement path and distance
+	# First check if destination is occupied before pathfinding
+	var dest_point = a_star_hex_grid.get_closest_point(pos_clicked, true)
+	var is_destination_occupied = a_star_hex_grid.is_point_disabled(dest_point)
+	
+	if is_destination_occupied:
+		print("Destination is occupied - checking for push/swap")
+		
+		# Get the occupant at the destination
+		var target_cryptid = get_cryptid_at_position(pos_clicked)
+		if not target_cryptid:
+			print("ERROR: Position marked as occupied but no cryptid found")
+			return false
+		
+		# For push/swap, we just need to be adjacent (distance of 1)
+		var direct_distance = calculate_distance(current_pos, pos_clicked)
+		print("Direct distance to target:", direct_distance)
+		
+		if direct_distance != 1:
+			print("Target is not adjacent - cannot push/swap")
+			return false
+		
+		if move_leftover < 1:
+			print("Not enough movement points for push/swap")
+			return false
+		
+		# Check if it's an enemy (push) or ally (swap)
+		if is_enemy_target(selected_cryptid, target_cryptid):
+			print("Enemy at destination - executing push")
+			await execute_push_movement(selected_cryptid, target_cryptid, current_pos, pos_clicked)
+		else:
+			print("Ally at destination - executing swap")
+			await execute_swap_movement(selected_cryptid, target_cryptid, current_pos, pos_clicked)
+		
+		# Handle card usage after push/swap
+		handle_card_usage(move_leftover - 1)  # Push/swap costs 1 movement
+		update_action_menu()
+		
+		# Check if we still have movement left
+		if move_leftover - 1 > 0:
+			await get_tree().create_timer(0.5).timeout
+			var new_pos = local_to_map(selected_cryptid.position)
+			highlight_possible_movement_hexes(selected_cryptid.position, move_leftover - 1)
+		else:
+			move_action_bool = false
+			if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
+				print("Movement complete, moving to next action")
+				card_dialog.next_action()
+		
+		return true
+	
+	# If not occupied, calculate normal movement path
 	var path = a_star_hex_grid.get_id_path(
 		a_star_hex_grid.get_closest_point(current_pos, true),
-		a_star_hex_grid.get_closest_point(pos_clicked, true)
+		dest_point
 	)
 	
 	if path.size() == 0:
@@ -638,11 +688,6 @@ func handle_move_action(pos_clicked):
 		print("Not enough movement points")
 		return false
 	
-	# Check if destination is already occupied
-	if a_star_hex_grid.is_point_disabled(a_star_hex_grid.get_closest_point(pos_clicked, true)):
-		print("Destination already occupied")
-		return false
-	
 	# At this point, the move is valid - let's execute it
 	
 	# 1. First, enable the current position (we're leaving it)
@@ -651,7 +696,7 @@ func handle_move_action(pos_clicked):
 	print("Enabled current position:", current_pos)
 	
 	# 2. Disable the destination (we're going there)
-	var dest_point = a_star_hex_grid.get_closest_point(pos_clicked, true)
+	dest_point = a_star_hex_grid.get_closest_point(pos_clicked, true)
 	a_star_hex_grid.set_point_disabled(dest_point, true)
 	print("Disabled destination position:", pos_clicked)
 	
@@ -1672,6 +1717,159 @@ func show_push_pull_preview(start_pos: Vector2i, direction: Vector2i, distance: 
 			break
 	
 	print("DEBUG: Total preview tiles created:", preview_count, "Final position:", final_position)
+
+func execute_push_movement(pusher_cryptid, target_cryptid, pusher_pos: Vector2i, target_pos: Vector2i):
+	print("=== EXECUTE PUSH MOVEMENT ===")
+	print("Pusher at:", pusher_pos, "Target at:", target_pos)
+	
+	# Calculate push direction from pusher to target
+	# For hex grids with offset rows, we need to find which neighbor direction this is
+	var neighbors = get_hex_neighbors(pusher_pos)
+	var neighbor_index = -1
+	for i in range(neighbors.size()):
+		if neighbors[i] == target_pos:
+			neighbor_index = i
+			break
+	
+	if neighbor_index == -1:
+		print("ERROR: Target is not a neighbor of pusher!")
+		return
+	
+	# Now get the same directional neighbor from the target's position
+	var target_neighbors = get_hex_neighbors(target_pos)
+	var push_destination = target_neighbors[neighbor_index]
+	
+	print("Push direction index:", neighbor_index)
+	print("Push destination:", push_destination)
+	
+	# Check if the push destination is valid (within walkable hexes)
+	print("Checking if push destination", push_destination, "is in walkable hexes")
+	print("Total walkable hexes:", walkable_hexes.size())
+	
+	# Debug: check surrounding hexes
+	var found_in_walkable = false
+	for hex in walkable_hexes:
+		var dist = calculate_distance(target_pos, hex)
+		if dist <= 2:
+			print("  Nearby walkable hex:", hex, "distance:", dist)
+		# Check if this is our push destination (handle both Vector2 and Vector2i)
+		if Vector2i(hex) == push_destination:
+			found_in_walkable = true
+	
+	if not found_in_walkable:
+		print("Push destination is out of bounds - not in walkable hexes")
+		# Just do a bump animation
+		var original_pos = pusher_cryptid.position
+		var bump_tween = create_tween()
+		bump_tween.tween_property(pusher_cryptid, "position", map_to_local(target_pos), 0.1)
+		bump_tween.tween_property(pusher_cryptid, "position", original_pos, 0.1)
+		await bump_tween.finished
+		return
+	
+	var dest_point = a_star_hex_grid.get_closest_point(push_destination, true)
+	if dest_point == -1:
+		print("Push destination has no valid grid point")
+		# Just do a bump animation
+		var original_pos = pusher_cryptid.position
+		var bump_tween = create_tween()
+		bump_tween.tween_property(pusher_cryptid, "position", map_to_local(target_pos), 0.1)
+		bump_tween.tween_property(pusher_cryptid, "position", original_pos, 0.1)
+		await bump_tween.finished
+		return
+	
+	# Check if push destination is occupied
+	if a_star_hex_grid.is_point_disabled(dest_point):
+		print("Push destination is occupied")
+		# Just do a bump animation
+		var original_pos = pusher_cryptid.position
+		var bump_tween = create_tween()
+		bump_tween.tween_property(pusher_cryptid, "position", map_to_local(target_pos), 0.1)
+		bump_tween.tween_property(pusher_cryptid, "position", original_pos, 0.1)
+		await bump_tween.finished
+		return
+	
+	# Valid push - execute it
+	print("Pushing", target_cryptid.cryptid.name, "from", target_pos, "to", push_destination)
+	
+	# First, update grid state for the push
+	var pusher_point = a_star_hex_grid.get_closest_point(pusher_pos, true)
+	var target_point = a_star_hex_grid.get_closest_point(target_pos, true)
+	
+	# Free the pusher's current position
+	a_star_hex_grid.set_point_disabled(pusher_point, false)
+	if grid_manager:
+		grid_manager.occupied_positions.erase(pusher_pos)
+	
+	# Animate the push
+	await visual_effects.animate_push(pusher_cryptid, target_cryptid, target_pos, push_destination)
+	
+	# Update target's position
+	update_cryptid_position(target_cryptid, push_destination)
+	
+	# Move pusher to target's old position
+	var path_points = [pusher_point, target_point]
+	await animate_movement(pusher_cryptid, path_points)
+	
+	# Update pusher's position
+	a_star_hex_grid.set_point_disabled(target_point, true)
+	if grid_manager:
+		grid_manager.occupied_positions[target_pos] = pusher_cryptid
+	
+	print("Push complete")
+
+func execute_swap_movement(cryptid1, cryptid2, pos1: Vector2i, pos2: Vector2i):
+	print("=== EXECUTE SWAP MOVEMENT ===")
+	print("Swapping", cryptid1.cryptid.name, "at", pos1, "with", cryptid2.cryptid.name, "at", pos2)
+	
+	# Get world positions
+	var world_pos1 = map_to_local(pos1)
+	var world_pos2 = map_to_local(pos2)
+	
+	# Temporarily free both positions in the grid
+	var point1 = a_star_hex_grid.get_closest_point(pos1, true)
+	var point2 = a_star_hex_grid.get_closest_point(pos2, true)
+	
+	a_star_hex_grid.set_point_disabled(point1, false)
+	a_star_hex_grid.set_point_disabled(point2, false)
+	
+	# Animate both cryptids swapping positions
+	var swap_tween = create_tween()
+	swap_tween.set_parallel(true)
+	
+	# Move cryptid1 to pos2 with an arc
+	swap_tween.tween_method(
+		func(t): 
+			var arc_height = 30.0
+			var linear_pos = world_pos1.lerp(world_pos2, t)
+			var height_offset = sin(t * PI) * arc_height
+			cryptid1.position = linear_pos + Vector2(0, -height_offset),
+		0.0, 1.0, 0.5
+	)
+	
+	# Move cryptid2 to pos1 with an opposite arc
+	swap_tween.tween_method(
+		func(t): 
+			var arc_height = 30.0
+			var linear_pos = world_pos2.lerp(world_pos1, t)
+			var height_offset = sin(t * PI) * arc_height
+			cryptid2.position = linear_pos + Vector2(0, -height_offset),
+		0.0, 1.0, 0.5
+	)
+	
+	await swap_tween.finished
+	
+	# Update grid positions
+	a_star_hex_grid.set_point_disabled(point1, true)
+	a_star_hex_grid.set_point_disabled(point2, true)
+	
+	# Update hex grid manager tracking
+	if grid_manager:
+		grid_manager.occupied_positions.erase(pos1)
+		grid_manager.occupied_positions.erase(pos2)
+		grid_manager.occupied_positions[pos1] = cryptid2
+		grid_manager.occupied_positions[pos2] = cryptid1
+	
+	print("Swap complete")
 
 func get_hex_direction(from_pos: Vector2i, to_pos: Vector2i) -> Vector2i:
 	# Calculate hex direction using simple unit steps
@@ -2791,24 +2989,26 @@ func get_hex_neighbors(pos: Vector2i) -> Array[Vector2i]:
 	var neighbors: Array[Vector2i] = []
 	var directions = []
 	
-	# Looking at your grid: odd rows appear shifted RIGHT compared to even rows
-	if pos.y % 2 == 0:  # Even row
+	# Flat-top hexes with odd-q vertical offset
+	# pos.x is column (q), pos.y is row (r)
+	# Odd columns are shifted DOWN
+	if pos.x % 2 == 0:  # Even column
 		directions = [
-			Vector2i(-1, -1),  # Northwest
-			Vector2i(0, -1),   # Northeast
-			Vector2i(1, 0),    # East
-			Vector2i(0, 1),    # Southeast
-			Vector2i(-1, 1),   # Southwest
-			Vector2i(-1, 0)    # West
+			Vector2i(0, -1),   # North
+			Vector2i(1, -1),   # Northeast  
+			Vector2i(1, 0),    # Southeast
+			Vector2i(0, 1),    # South
+			Vector2i(-1, 0),   # Southwest
+			Vector2i(-1, -1)   # Northwest
 		]
-	else:  # Odd row (shifted right)
+	else:  # Odd column (shifted down)
 		directions = [
-			Vector2i(0, -1),   # Northwest
-			Vector2i(1, -1),   # Northeast
-			Vector2i(1, 0),    # East
+			Vector2i(0, -1),   # North
+			Vector2i(1, 0),    # Northeast
 			Vector2i(1, 1),    # Southeast
-			Vector2i(0, 1),    # Southwest
-			Vector2i(-1, 0)    # West
+			Vector2i(0, 1),    # South
+			Vector2i(-1, 1),   # Southwest
+			Vector2i(-1, 0)    # Northwest
 		]
 	
 	for dir in directions:

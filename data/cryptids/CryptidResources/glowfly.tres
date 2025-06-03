@@ -16,7 +16,7 @@
 [ext_resource type="Resource" uid="uid://cc30vw13gftps" path="res://Cryptid-Menagerie/data/cards/spawn_fire_trap_test.tres" id="11_o5nn0"]
 [ext_resource type="Resource" uid="uid://nci4ky2i1g1e" path="res://Cryptid-Menagerie/data/cards/spawn_heal_orb_test.tres" id="12_egspu"]
 [ext_resource type="Resource" uid="uid://rfwq3npoe3gv" path="res://Cryptid-Menagerie/data/cards/spawn_wall_test.tres" id="13_fup8w"]
-[ext_resource type="Resource" path="res://Cryptid-Menagerie/data/cards/spawn_immobilize_trap_test.tres" id="14_4a2x8"]
+[ext_resource type="Resource" uid="uid://cw5i2br4x3u2u" path="res://Cryptid-Menagerie/data/cards/spawn_immobilize_trap_test.tres" id="14_4a2x8"]
 
 [sub_resource type="Resource" id="Resource_5288u"]
 script = ExtResource("2_cpnsb")
@@ -109,5 +109,5 @@ strength = 10
 knowledge = 10
 willpower = 10
 dexterity = 10
-vigor = 20
+vigor = 30
 level = 1
