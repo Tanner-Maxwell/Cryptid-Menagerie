@@ -621,41 +621,111 @@ func handle_move_action(pos_clicked):
 	if is_destination_occupied:
 		print("Destination is occupied - checking for push/swap")
 		
+		# Store original movement for calculating cost
+		var original_movement = move_leftover
+		
 		# Get the occupant at the destination
 		var target_cryptid = get_cryptid_at_position(pos_clicked)
 		if not target_cryptid:
 			print("ERROR: Position marked as occupied but no cryptid found")
 			return false
 		
-		# For push/swap, we just need to be adjacent (distance of 1)
+		# For push/swap, we need to check if we can reach an adjacent position
 		var direct_distance = calculate_distance(current_pos, pos_clicked)
 		print("Direct distance to target:", direct_distance)
 		
-		if direct_distance != 1:
-			print("Target is not adjacent - cannot push/swap")
-			return false
+		var movement_to_adjacent = 0  # Track cost to move adjacent
 		
-		if move_leftover < 1:
-			print("Not enough movement points for push/swap")
-			return false
+		if direct_distance == 1:
+			# Already adjacent, just need 1 movement for push/swap
+			if move_leftover < 1:
+				print("Not enough movement points for push/swap")
+				return false
+		else:
+			# Need to move adjacent first, then push/swap
+			# Calculate path to get adjacent
+			var neighbors = get_hex_neighbors(pos_clicked)
+			var best_neighbor = null
+			var best_path_length = 999
+			
+			for neighbor in neighbors:
+				if neighbor == current_pos:
+					continue  # Already at this position
+				if is_hex_occupied(neighbor):
+					continue  # Can't move to occupied hex
+				
+				# Temporarily enable the neighbor for pathfinding
+				var neighbor_point = a_star_hex_grid.get_closest_point(neighbor, true)
+				var was_disabled = false
+				if neighbor_point != -1 and a_star_hex_grid.is_point_disabled(neighbor_point):
+					was_disabled = true
+					a_star_hex_grid.set_point_disabled(neighbor_point, false)
+				
+				# Get path to this neighbor
+				var path = a_star_hex_grid.get_id_path(
+					a_star_hex_grid.get_closest_point(current_pos, true),
+					a_star_hex_grid.get_closest_point(neighbor, true)
+				)
+				
+				# Re-disable if needed
+				if was_disabled:
+					a_star_hex_grid.set_point_disabled(neighbor_point, true)
+				
+				if path.size() > 0 and path.size() - 1 < best_path_length:
+					best_path_length = path.size() - 1
+					best_neighbor = neighbor
+			
+			if best_neighbor == null:
+				print("Cannot reach any position adjacent to target")
+				return false
+			
+			var total_cost = best_path_length + 1  # Path cost + 1 for push/swap
+			if total_cost > move_leftover:
+				print("Not enough movement points. Need", total_cost, "but have", move_leftover)
+				return false
+			
+			# Move to the adjacent position first
+			print("Moving to adjacent position", best_neighbor, "first")
+			
+			# Enable current position
+			var current_point = a_star_hex_grid.get_closest_point(current_pos, true)
+			a_star_hex_grid.set_point_disabled(current_point, false)
+			
+			# Disable the destination
+			dest_point = a_star_hex_grid.get_closest_point(best_neighbor, true)
+			a_star_hex_grid.set_point_disabled(dest_point, true)
+			
+			# Get the path and animate movement
+			var move_path = a_star_hex_grid.get_id_path(current_point, dest_point)
+			await animate_movement(selected_cryptid, move_path)
+			
+			# Update move_leftover for the movement
+			move_leftover -= best_path_length
+			movement_to_adjacent = best_path_length
+			print("After moving adjacent, movement left:", move_leftover)
 		
 		# Check if it's an enemy (push) or ally (swap)
+		# Get current position (may have changed if we moved adjacent)
+		var push_from_pos = local_to_map(selected_cryptid.position)
+		
 		if is_enemy_target(selected_cryptid, target_cryptid):
 			print("Enemy at destination - executing push")
-			await execute_push_movement(selected_cryptid, target_cryptid, current_pos, pos_clicked)
+			await execute_push_movement(selected_cryptid, target_cryptid, push_from_pos, pos_clicked)
 		else:
 			print("Ally at destination - executing swap")
-			await execute_swap_movement(selected_cryptid, target_cryptid, current_pos, pos_clicked)
+			await execute_swap_movement(selected_cryptid, target_cryptid, push_from_pos, pos_clicked)
 		
 		# Handle card usage after push/swap
-		handle_card_usage(move_leftover - 1)  # Push/swap costs 1 movement
+		# Push/swap costs 1 movement (on top of any movement to get adjacent)
+		# move_leftover was already reduced by movement_to_adjacent
+		handle_card_usage(move_leftover - 1)
 		update_action_menu()
 		
-		# Check if we still have movement left
-		if move_leftover - 1 > 0:
+		# Check if we still have movement left (move_leftover was updated by handle_card_usage)
+		if move_leftover > 0:
 			await get_tree().create_timer(0.5).timeout
 			var new_pos = local_to_map(selected_cryptid.position)
-			highlight_possible_movement_hexes(selected_cryptid.position, move_leftover - 1)
+			highlight_possible_movement_hexes(selected_cryptid.position, move_leftover)
 		else:
 			move_action_bool = false
 			if is_instance_valid(card_dialog) and card_dialog.has_method("next_action"):
@@ -794,10 +864,17 @@ func _on_movement_tween_finished():
 
 # Handle card usage for movement
 func handle_card_usage(remaining_movement):
-	# Simplified card usage handler
-	use_card_part(active_action.card, active_action.card_part)
-	reset_action_state()
-	enable_all_cards()
+	# Only use the card and reset if no movement left
+	if remaining_movement <= 0:
+		# No movement left, complete the action
+		use_card_part(active_action.card, active_action.card_part)
+		reset_action_state()
+		enable_all_cards()
+		move_leftover = 0
+	else:
+		# Still have movement left, keep the action active
+		move_leftover = remaining_movement
+		print("Movement remaining after action:", move_leftover)
 func update_action_menu():
 	var action_menu = get_node("/root/VitaChrome/UIRoot/ActionSelectMenu")
 	if action_menu and action_menu.has_method("update_menu_visibility"):
@@ -1791,29 +1868,14 @@ func execute_push_movement(pusher_cryptid, target_cryptid, pusher_pos: Vector2i,
 	# Valid push - execute it
 	print("Pushing", target_cryptid.cryptid.name, "from", target_pos, "to", push_destination)
 	
-	# First, update grid state for the push
-	var pusher_point = a_star_hex_grid.get_closest_point(pusher_pos, true)
-	var target_point = a_star_hex_grid.get_closest_point(target_pos, true)
-	
-	# Free the pusher's current position
-	a_star_hex_grid.set_point_disabled(pusher_point, false)
-	if grid_manager:
-		grid_manager.occupied_positions.erase(pusher_pos)
-	
 	# Animate the push
 	await visual_effects.animate_push(pusher_cryptid, target_cryptid, target_pos, push_destination)
 	
 	# Update target's position
 	update_cryptid_position(target_cryptid, push_destination)
 	
-	# Move pusher to target's old position
-	var path_points = [pusher_point, target_point]
-	await animate_movement(pusher_cryptid, path_points)
-	
-	# Update pusher's position
-	a_star_hex_grid.set_point_disabled(target_point, true)
-	if grid_manager:
-		grid_manager.occupied_positions[target_pos] = pusher_cryptid
+	# Pusher stays in their current position - push costs movement but doesn't move the pusher
+	print("Push complete - pusher remains at", pusher_pos)
 	
 	print("Push complete")
 
